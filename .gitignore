@@ -1,0 +1,37 @@
+# Gradle and IDE
+.gradle/
+build/
+.idea/
+*.iml
+
+# Measurement output. Every run appends here and skips a match whose log already
+# exists, which is how an interrupted night resumes; do not let it into history.
+arena-logs/
+STOP
+
+# Generated training data. A night of it is gigabytes.
+belief-data/
+belief-data-probe/
+
+# The model directory is scratch by default -- whatever was last trained lands
+# here and must not drift into the history. The four files a clone actually
+# needs are named back in, and they are the whole of what is published:
+#
+#   belief.bin         the weights, as the shipped BeliefNet reads them
+#   belief-parity.bin  the trainer's own answers, replayed before they play
+#   model.json         the shape and the encoding version the loaders check
+#   fixtures.npz       the same parity cases in the arena's own format
+#
+# Deliberately not named back in: belief.pt (the trainer's checkpoint) and
+# belief.onnx (a fallback runtime). Three megabytes each, and neither is needed
+# to run or to verify anything -- train_belief.py reproduces the first, and
+# nothing but a second opinion needs the second.
+belief-model/*
+!belief-model/belief.bin
+!belief-model/belief-parity.bin
+!belief-model/model.json
+!belief-model/fixtures.npz
+
+# Native build output
+native/build/
+__pycache__/

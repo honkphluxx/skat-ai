@@ -1,0 +1,16 @@
+{
+  "encoding_version": 2,
+  "inputs": 306,
+  "cards": 32,
+  "classes": [
+    "left",
+    "right",
+    "skat"
+  ],
+  "hidden": 512,
+  "layers": 3,
+  "val_accuracy": 0.6460901960784313,
+  "val_nll": 0.6666505629595588,
+  "baseline_accuracy": 0.4664686274509804,
+  "baseline_nll": 0.8968088472867722
+}

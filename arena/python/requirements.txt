@@ -1,0 +1,38 @@
+# Deliberately without torch. See below -- listing it here is what breaks the
+# install, and it broke it here once already.
+numpy>=1.26
+onnx>=1.16
+# torch's ONNX exporter goes through onnxscript now, and does not declare it.
+# Without it the export raises at the very end of a run that has otherwise
+# succeeded, which is why the trainer treats that failure as recoverable and
+# keeps the weights.
+onnxscript>=0.1
+
+# torch is installed on its own, from the CUDA index and from nothing else:
+#
+#   .venv/Scripts/python -m pip install torch \
+#       --index-url https://download.pytorch.org/whl/cu128
+#   .venv/Scripts/python -m pip install -r arena/python/requirements.txt
+#   .venv/Scripts/python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+#
+# Never with --extra-index-url alongside it. pip merges the indexes and takes the
+# highest version it finds anywhere, and PyPI's Windows torch is the CPU build --
+# so the install succeeds, prints nothing alarming, and leaves you with a wheel
+# that says +cpu and a 4090 doing nothing. The version string is the tell: a
+# working install reads 2.x.y+cu128, a broken one 2.x.y+cpu.
+#
+# Two more things that cost an evening between them:
+#
+#   * Python 3.14 has no CUDA wheels at all. Only CPU builds are published for
+#     cp314 and the tracking issue is closed as not planned. Use 3.12.
+#   * The CUDA index moves. cu124 is gone; cu118, cu126 and cu128 are current,
+#     and an RTX 4090 on a recent driver wants cu128.
+#
+# From Git Bash, in the repository root. `py` works from the MINGW prompt even
+# though `py -0p` failed from one shell; if it is missing, the interpreters are
+# under "$LOCALAPPDATA"/Programs/Python/PythonNNN/python.exe.
+#
+#   py -0p                                     # what is installed
+#   py -3.12 -m venv .venv
+#
+# check_data.py needs numpy and nothing else, so it runs under any of them.

@@ -1,0 +1,18 @@
+/* Only the JNI entry points leave this library. Everything else -- the search,
+   the tables, the C API the test binary links statically -- stays internal.
+   That is not tidiness: a library loaded into a JVM shares its symbol namespace
+   with everything else in the process.
+
+   Both patterns are wildcards on purpose. The NDK links with
+   --no-undefined-version --fatal-warnings, which turns naming a symbol the
+   library does not define into an error, and this one does not define
+   JNI_OnLoad: the entry points are registered by their names, the classic way,
+   so there is nothing for it to do. A wildcard that matches nothing is not an
+   error, so the pattern can stand ready for the day one is added. */
+{
+    global:
+        Java_dev_skatklar_demo_solve_NativeSolver_*;
+        JNI_On*;
+    local:
+        *;
+};
