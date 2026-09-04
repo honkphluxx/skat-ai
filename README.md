@@ -216,17 +216,39 @@ either.
 
 ## JSkat
 
-[JSkat](https://github.com/jskat/jskat) is a submodule under
-`third_party/jskat`, and it is the only outside opponent this project can measure
-itself against. It is used for exactly that: `jskat-ai/` adapts its players to
-this engine's table so the arena can seat them. Nothing derived from it is part
-of the engine or of anything that ships.
+[JSkat](https://github.com/b0n541/jskat-multimodule) is the only outside opponent this
+project can measure itself against, and `jskat-ai/` adapts its players to this
+engine's table so the arena can seat them. Nothing derived from it is part of the
+engine or of anything that ships.
+
+The submodule under `third_party/jskat` points at a **modified fork**,
+[honkphluxx/jskat](https://github.com/honkphluxx/jskat), branch `skatklar`. The five changes are
+listed in that repository's `CHANGES.md`, which is where the Apache licence asks
+for them. Two are the reason a fork exists at all rather than a matter of taste:
+the arena cannot run duplicate deals against players whose shared random
+generators cannot be seeded, and upstream's `getSuitMultiplier` loops forever on
+a holding with no trumps -- it froze a 1500-board run for 31 minutes at 100% of a
+core. Those two are upstream defects and belong back there as pull requests.
 
 If you cloned without submodules:
 
 ```bash
 git submodule update --init third_party/jskat
 ```
+
+One more step is needed for the *learned* JSkat players, and it is easy to miss:
+`jskat-ml-pro` and `jskat-ml` load ONNX models that are **not in JSkat's
+repository** -- they are downloaded from
+[skat-ml-models](https://github.com/avaskys/skat-ml-models) releases, about
+113 MB of them, into `third_party/jskat/.jskat/models`.
+
+```bash
+cd third_party/jskat && ./gradlew :jskat-base:downloadMlModels
+```
+
+Without them those two contestants are absent, exactly as if the submodule were
+missing: the registry finds no adapter and says so once. `jskat-new`, the
+algorithmic player, needs no download.
 
 ## Contributing, and the one house rule
 
