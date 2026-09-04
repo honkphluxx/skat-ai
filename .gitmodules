@@ -1,3 +1,4 @@
 [submodule "third_party/jskat"]
 	path = third_party/jskat
-	url = https://github.com/b0n541/jskat-multimodule
+	url = https://github.com/honkphluxx/jskat.git
+	branch = skatklar
