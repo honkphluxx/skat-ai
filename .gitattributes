@@ -2,3 +2,6 @@
 # return as part of every command and fails with "command not found" on line one.
 *.sh text eol=lf
 gradlew text eol=lf
+
+# Normalise line endings in the repository.
+* text=auto
