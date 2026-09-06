@@ -218,6 +218,13 @@ public final class BeliefEncoding {
      * there; forehand's and middlehand's may be pushed onward again.
      * {@code received} is a fact about the neighbour on the right: whatever those
      * cards are, that seat has them no longer.
+     *
+     * <p>TODO: both halves assume the seat looked. A leg pushed on unopened —
+     * see {@link dev.skatklar.demo.ai.SkatAi.RamschTakeUpContext} — breaks them
+     * in opposite directions: what was pushed on says nothing about the pusher's
+     * hand, and the pusher's own ten are still the dealt ten. Two more bits
+     * would say so, and both of them widen the feature vector, so no model
+     * trained before them can read one written after.
      */
     public record Schieben(List<Card> pushedOn, boolean toSkat,
                            List<Card> received, boolean fromSkat) {}

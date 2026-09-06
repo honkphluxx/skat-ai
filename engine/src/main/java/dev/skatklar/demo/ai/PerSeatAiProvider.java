@@ -98,6 +98,10 @@ public final class PerSeatAiProvider implements SkatAiProvider {
             return bound().announceContract(context);
         }
 
+        @Override public boolean takeUpPush(SkatAi.RamschTakeUpContext context) {
+            return bound().takeUpPush(context);
+        }
+
         @Override public Set<Card> pushCards(SkatAi.RamschPushContext context) {
             return bound().pushCards(context);
         }

@@ -195,6 +195,15 @@ public final class BeliefExporter implements SkatAiProvider, TableObserver {
         }
 
         /**
+         * Forwarded, not answered. A wrapper that swallowed this would record
+         * the inner player's Schieben while quietly overruling its decision
+         * about whether it ever had one.
+         */
+        @Override public boolean takeUpPush(SkatAi.RamschTakeUpContext context) {
+            return inner.takeUpPush(context);
+        }
+
+        /**
          * The seat's own leg of the Schieben, kept as evidence.
          *
          * <p>Four of the twenty hidden cards are located exactly by this exchange,

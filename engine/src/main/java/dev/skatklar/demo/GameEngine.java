@@ -120,6 +120,22 @@ public final class GameEngine {
     /** False in auto-bidding, where the person's seat is played for them anyway. */
     private boolean schiebenInteractive;
     private SkatAi.RoundPosition schiebenRound;
+    /**
+     * The two cards are lying in front of a person who has not yet said whether
+     * they want to see them. They are not in that seat's hand and may never get
+     * there — {@link #passPushOn()} sends them on untouched.
+     */
+    private boolean pushTakeUpPending;
+    /** How many legs of this Schieben travelled unopened. */
+    private int blindPushes;
+    /**
+     * Whether a person is asked at all. Off by default, and deliberately: the
+     * wire protocol has no word for the answer yet, so a server-driven seat is
+     * handed the cards exactly as it always was.
+     *
+     * <p>TODO: a protocol action for it, and then this goes away.
+     */
+    private boolean blindPushOffered;
 
     private SkatAi.ContraLevel contra = SkatAi.ContraLevel.NONE;
     private SkatAi.Seat contraSeat;
@@ -867,6 +883,8 @@ public final class GameEngine {
         pushFrom = null;
         pushReceived = Collections.emptyList();
         pushLeg = 0;
+        pushTakeUpPending = false;
+        blindPushes = 0;
     }
 
     private void initializeTrickPlay() {
@@ -1200,6 +1218,8 @@ public final class GameEngine {
         pushSeat = round.forehand;
         pushFrom = null;
         pushReceived = List.copyOf(dealtSkat.isEmpty() ? skat : dealtSkat);
+        pushTakeUpPending = false;
+        blindPushes = 0;
         pendingDiscards.clear();
         advanceSchieben();
     }
@@ -1211,14 +1231,29 @@ public final class GameEngine {
     private void advanceSchieben() {
         while (pushSeat != null) {
             notifySchieben(pushFrom, pushSeat, pushReceived.size());
-            hands[pushSeat.ordinal()].addAll(pushReceived);
-            hands[pushSeat.ordinal()].sort(CardOrder.GRAND);
+            SkatAiSession session = schiebenSessions.get(pushSeat);
             if (schiebenInteractive && humanSeats.contains(pushSeat)) {
+                if (blindPushOffered) {
+                    // Stopped one step earlier than it used to be: the cards are
+                    // in front of the seat and not yet in its hand, because a
+                    // seat that pushes them on unopened never held them.
+                    pushTakeUpPending = true;
+                    phase = Phase.PUSH;
+                    cachedSnapshot = null;
+                    return;
+                }
+                takeReceivedIntoHand();
                 phase = Phase.PUSH;
                 cachedSnapshot = null;
                 return;
             }
-            SkatAiSession session = schiebenSessions.get(pushSeat);
+            if (session != null && !takesUp(session)) {
+                // Untouched, and untouchable: the same two cards travel on, and
+                // this seat is never asked which two it would rather send.
+                completeLeg(new LinkedHashSet<>(pushReceived), true);
+                continue;
+            }
+            takeReceivedIntoHand();
             Set<Card> pushed = null;
             if (session != null) {
                 try {
@@ -1234,17 +1269,50 @@ public final class GameEngine {
                 if (session != null) recordViolation(pushSeat, ViolationPhase.PUSH);
                 pushed = SkatRules.defaultRamschPush(hands[pushSeat.ordinal()]);
             }
-            completeLeg(pushed);
+            completeLeg(pushed, false);
         }
     }
 
-    /** Applies one finished leg and moves the Schieben on, or ends it. */
-    private void completeLeg(Set<Card> pushed) {
+    /** The two cards on offer join the hand, which is now a hand of twelve. */
+    private void takeReceivedIntoHand() {
+        hands[pushSeat.ordinal()].addAll(pushReceived);
+        hands[pushSeat.ordinal()].sort(CardOrder.GRAND);
+        cachedSnapshot = null;
+    }
+
+    /**
+     * Asks a seat whether it wants to see what it was handed.
+     *
+     * <p>A player that throws is taken to have said yes: taking up is what every
+     * player did before the question existed, and it is the answer that cannot
+     * surprise anybody watching.
+     */
+    private boolean takesUp(SkatAiSession session) {
+        try {
+            return session.takeUpPush(new SkatAi.RamschTakeUpContext(
+                    schiebenRound(), pushSeat,
+                    new LinkedHashSet<>(hands[pushSeat.ordinal()]),
+                    pushReceived.size(), pushFrom, receiverOf(pushLeg)));
+        } catch (RuntimeException invalid) {
+            recordViolation(pushSeat, ViolationPhase.PUSH);
+            return true;
+        }
+    }
+
+    /**
+     * Applies one finished leg and moves the Schieben on, or ends it.
+     *
+     * @param blind the pair was never opened, so it is not coming out of the
+     *              pusher's hand — it never went in
+     */
+    private void completeLeg(Set<Card> pushed, boolean blind) {
         SkatAi.Seat pusher = pushSeat;
         SkatAi.Seat receiver = receiverOf(pushLeg);
-        hands[pusher.ordinal()].removeAll(pushed);
+        if (blind) blindPushes++;
+        else hands[pusher.ordinal()].removeAll(pushed);
         List<Card> carried = List.copyOf(pushed);
-        SkatAi.RamschPushEvent event = new SkatAi.RamschPushEvent(pusher, receiver, carried.size());
+        SkatAi.RamschPushEvent event =
+                new SkatAi.RamschPushEvent(pusher, receiver, carried.size(), blind);
         for (SkatAiSession listener : schiebenSessions.values()) {
             try { listener.ramschPushObserved(event); } catch (RuntimeException ignored) {}
         }
@@ -1278,6 +1346,70 @@ public final class GameEngine {
     /** True while a person owes the table two pushed cards. */
     public synchronized boolean awaitingPush() { return phase == Phase.PUSH; }
 
+    /**
+     * True while a person has two cards lying in front of them and has said
+     * nothing about them yet. The pair is not in their hand, and
+     * {@link #receivedCards()} is what is lying there.
+     */
+    public synchronized boolean awaitingTakeUp() {
+        return phase == Phase.PUSH && pushTakeUpPending;
+    }
+
+    /** How many legs of this Schieben were pushed on unopened. */
+    public synchronized int blindPushes() { return blindPushes; }
+
+    /**
+     * Whether a person at this table is asked to take the two cards up, or has
+     * them handed over as they always were.
+     *
+     * <p>Off unless it is switched on, because the answer has nowhere to travel
+     * in a server game — see the field.
+     */
+    public synchronized void setBlindPushOffered(boolean offered) {
+        this.blindPushOffered = offered;
+    }
+
+    public synchronized boolean blindPushOffered() { return blindPushOffered; }
+
+    /**
+     * Takes the two cards up. The hand becomes twelve and the seat now owes the
+     * table two of its own — the Schieben as it has always been played from
+     * here on.
+     *
+     * @return false when nothing was on offer
+     */
+    public synchronized boolean takeUpPush() {
+        if (!pushTakeUpPending || !humanSeats.contains(pushSeat)) return false;
+        pushTakeUpPending = false;
+        takeReceivedIntoHand();
+        return true;
+    }
+
+    /**
+     * Pushes the two cards on without opening them, and carries the Schieben as
+     * far as it goes.
+     *
+     * <p>It doubles the Ramsch: see {@link SkatRules#scoreRamsch(List, Iterable,
+     * int)}, which reads {@link #blindPushes()} at the settlement.
+     *
+     * @return the phase now waiting: {@link Phase#PUSH} for the next person, or
+     *         {@link Phase#PLAY} once the skat is settled
+     */
+    public synchronized Phase passPushOn() {
+        if (!pushTakeUpPending || !humanSeats.contains(pushSeat)) {
+            throw new IllegalStateException("No cards are on offer");
+        }
+        pushTakeUpPending = false;
+        completeLeg(new LinkedHashSet<>(pushReceived), true);
+        advanceSchieben();
+        if (pushSeat == null) {
+            closeAuctionSessions();
+            initializeTrickPlay();
+        }
+        cachedSnapshot = null;
+        return phase;
+    }
+
     /** The seat being asked to push, or null when nobody is. */
     public synchronized SkatAi.Seat pushingSeat() {
         return phase == Phase.PUSH ? pushSeat : null;
@@ -1304,7 +1436,10 @@ public final class GameEngine {
      * @return false for a jack, a card not in the hand, or a third card
      */
     public synchronized boolean pushOne(Card card) {
-        if (phase != Phase.PUSH || card == null || pendingDiscards.size() >= 2) return false;
+        if (phase != Phase.PUSH || pushTakeUpPending
+                || card == null || pendingDiscards.size() >= 2) {
+            return false;
+        }
         // Only the seat that is being asked may push, which matters the moment
         // more than one person is at the table: without it any client could
         // empty another seat's hand once the Schieben reached them.
@@ -1334,11 +1469,11 @@ public final class GameEngine {
      *         {@link Phase#PLAY} once the skat is settled
      */
     public synchronized Phase confirmPush() {
-        if (phase != Phase.PUSH || pendingDiscards.size() != 2
+        if (phase != Phase.PUSH || pushTakeUpPending || pendingDiscards.size() != 2
                 || !humanSeats.contains(pushSeat)) {
             throw new IllegalStateException("Two cards must be chosen first");
         }
-        completeLeg(new LinkedHashSet<>(pendingDiscards));
+        completeLeg(new LinkedHashSet<>(pendingDiscards), false);
         advanceSchieben();
         if (pushSeat == null) {
             closeAuctionSessions();
@@ -1621,11 +1756,14 @@ public final class GameEngine {
      */
     private void finishRamsch() {
         int skatPoints = SkatRules.cardPoints(skat);
-        SkatRules.RamschScore score = SkatRules.scoreRamsch(history, skat);
+        // The Schieben's own doubling belongs to the settlement rather than to
+        // this method: it is a rule about what a Ramsch is worth, and the value
+        // it produces has to be the same one a replay of the same deal would.
+        SkatRules.RamschScore score = SkatRules.scoreRamsch(history, skat, blindPushes);
         result = new SkatAi.GameResult(definition, score.durchmarsch(), score.cardPoints(),
                 120 - score.cardPoints(), skatPoints, score.value(), false,
                 capturedPoints, tricksWon, score.scoredSeat(), SkatAi.ContraLevel.NONE,
-                score.jungfrau(), score.durchmarsch());
+                score.jungfrau(), score.durchmarsch(), score.doublings());
         for (SkatAiSession session : aiSessions.values()) session.endGame(result);
     }
 

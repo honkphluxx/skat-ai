@@ -227,8 +227,14 @@ public final class SkatRules {
      * @param value        signed, and already doubled by a jungfrau
      * @param cardPoints   what that seat took, the skat included
      */
+    /**
+     * @param doublings how many times the Ramsch doubled, all causes together:
+     *                  one for each leg of the Schieben that travelled unopened,
+     *                  and one for a jungfrau. {@link #value} already includes
+     *                  them; the count is here so a screen can say why.
+     */
     public record RamschScore(SkatAi.Seat scoredSeat, int value, int cardPoints,
-                              boolean jungfrau, boolean durchmarsch) {}
+                              boolean jungfrau, boolean durchmarsch, int doublings) {}
 
     /**
      * Settles a Ramsch from the tricks as they fell.
@@ -245,6 +251,26 @@ public final class SkatRules {
      */
     public static RamschScore scoreRamsch(List<SkatAi.CompletedTrick> tricks,
                                           Iterable<Card> skat) {
+        return scoreRamsch(tricks, skat, 0);
+    }
+
+    /**
+     * As above, for a Schieben that was not all opened.
+     *
+     * <p>Every leg pushed on unopened doubles the Ramsch, and so does a
+     * jungfrau: one ladder, not two multiplications, so three blind legs and a
+     * jungfrau is sixteen times the card points and nothing has to be said about
+     * which doubling came first. Three legs is the whole Schieben, so the
+     * ladder stops at sixteen.
+     *
+     * <p>A durchmarsch doubles with them. It is what the Ramsch turned out to be
+     * worth, and a table that pushed the skat around blind three times has
+     * raised the stakes for whoever ends up with them, marched through or not.
+     *
+     * @param blindPushes legs that travelled unopened, 0 to 3
+     */
+    public static RamschScore scoreRamsch(List<SkatAi.CompletedTrick> tricks,
+                                          Iterable<Card> skat, int blindPushes) {
         Map<SkatAi.Seat, Integer> points = new java.util.EnumMap<>(SkatAi.Seat.class);
         Map<SkatAi.Seat, Integer> won = new java.util.EnumMap<>(SkatAi.Seat.class);
         Map<SkatAi.Seat, Integer> lastTrick = new java.util.EnumMap<>(SkatAi.Seat.class);
@@ -261,9 +287,12 @@ public final class SkatRules {
 
         for (SkatAi.Seat seat : SkatAi.Seat.values()) {
             if (tricks.size() == 10 && won.get(seat) == 10) {
-                // A durchmarsch breaks the Ramsch: it is won, at a flat 120, and
-                // the skat is not added to it because nobody lost it.
-                return new RamschScore(seat, 120, points.get(seat), false, true);
+                // A durchmarsch breaks the Ramsch: it is won, at 120 before the
+                // Schieben's own doubling, and the skat is not added to it
+                // because nobody lost it.
+                int blind = Math.max(0, Math.min(3, blindPushes));
+                return new RamschScore(seat, 120 << blind, points.get(seat),
+                        false, true, blind);
             }
         }
 
@@ -282,7 +311,9 @@ public final class SkatRules {
         }
         boolean jungfrau = jungfrauen == 1;
         int total = points.get(loser) + cardPoints(skat);
-        return new RamschScore(loser, -(jungfrau ? 2 * total : total), total, jungfrau, false);
+        int doublings = Math.max(0, Math.min(3, blindPushes)) + (jungfrau ? 1 : 0);
+        return new RamschScore(loser, -(total << doublings), total,
+                jungfrau, false, doublings);
     }
 
     /**

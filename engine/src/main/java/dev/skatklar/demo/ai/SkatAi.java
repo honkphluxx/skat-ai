@@ -262,6 +262,54 @@ public final class SkatAi {
         }
     }
 
+    /**
+     * The question that comes before {@link RamschPushContext}: pick the two
+     * cards up, or push them on without ever seeing them.
+     *
+     * <p>Pushing on unopened is the other half of the Schieberamsch, and it is a
+     * real decision rather than a formality — a seat that never looks keeps its
+     * ten cards exactly as they were dealt, which is worth having when the ten
+     * are already harmless, and it hands the next seat two cards nobody at the
+     * table has seen.
+     *
+     * <p>The two cards on offer are deliberately <b>not</b> in this context.
+     * They are the thing being decided about: a player weighing them up has
+     * looked at them already, and an implementation that received them here
+     * would be answering a question it has no business being able to answer.
+     * All that is known is that there are {@link #offered} of them, who they
+     * came from, and where they go next.
+     *
+     * <p>TODO: nothing decides this yet. A seat that pushes on unopened changes
+     * what every other seat may conclude — the two cards it sent on are
+     * unrelated to its hand, and its own ten are still the dealt ten — and none
+     * of that reaches {@link dev.skatklar.demo.belief.BeliefEncoding}, whose
+     * Schieben fields assume the pusher chose what to send. Until the belief
+     * model and the Ramsch player have both been taught it, every seat here
+     * takes the cards up.
+     */
+    public static final class RamschTakeUpContext {
+        public final RoundPosition round;
+        public final Seat mySeat;
+        /** The ten as dealt. The cards on offer are not among them, and must not be. */
+        public final Set<Card> hand;
+        /** How many cards are lying there. Two, in every Ramsch this project plays. */
+        public final int offered;
+        /** Who pushed them here; null for forehand, who is offered the skat itself. */
+        public final Seat from;
+        /** Who they go to if they are pushed on; null for rearhand, whose push is the skat. */
+        public final Seat to;
+
+        public RamschTakeUpContext(RoundPosition round, Seat mySeat, Set<Card> hand,
+                                   int offered, Seat from, Seat to) {
+            this.round = Objects.requireNonNull(round);
+            this.mySeat = Objects.requireNonNull(mySeat);
+            this.hand = immutableSet(hand);
+            this.offered = offered;
+            this.from = from;
+            this.to = to;
+        }
+    }
+
     /** Two cards moved from one seat to the next, as everyone at the table saw it. */
     public static final class RamschPushEvent {
         public final Seat from;
@@ -269,11 +317,24 @@ public final class SkatAi {
         public final Seat to;
         /** Only the seats that held them ever learn which cards they were. */
         public final int count;
+        /**
+         * The pusher never opened them: the same two cards it was handed went
+         * straight on. Said out loud, because it is the one thing about a push
+         * that everybody may know — and it changes what the push means as
+         * evidence, since the cards say nothing about the hand they passed
+         * through.
+         */
+        public final boolean blind;
 
         public RamschPushEvent(Seat from, Seat to, int count) {
+            this(from, to, count, false);
+        }
+
+        public RamschPushEvent(Seat from, Seat to, int count, boolean blind) {
             this.from = Objects.requireNonNull(from);
             this.to = to;
             this.count = count;
+            this.blind = blind;
         }
     }
 
@@ -552,6 +613,13 @@ public final class SkatAi {
         public final boolean jungfrau;
         /** Ramsch only: one seat took all ten tricks and won it outright. */
         public final boolean durchmarsch;
+        /**
+         * Ramsch only: how many times it doubled — one per leg of the Schieben
+         * that travelled unopened, plus one for {@link #jungfrau}.
+         * {@link #gameValue} already includes them, so this is for saying why a
+         * Ramsch cost what it did and for nothing else.
+         */
+        public final int ramschDoublings;
 
         public GameResult(GameDefinition game, boolean declarerWon, int declarerPoints,
                           int defenderPoints, int skatPoints, int gameValue,
@@ -573,6 +641,16 @@ public final class SkatAi {
                           Map<Seat, Integer> capturedPoints, Map<Seat, Integer> tricksWon,
                           Seat scoredSeat, ContraLevel contra,
                           boolean jungfrau, boolean durchmarsch) {
+            this(game, declarerWon, declarerPoints, defenderPoints, skatPoints, gameValue,
+                    overbid, capturedPoints, tricksWon, scoredSeat, contra,
+                    jungfrau, durchmarsch, jungfrau ? 1 : 0);
+        }
+
+        public GameResult(GameDefinition game, boolean declarerWon, int declarerPoints,
+                          int defenderPoints, int skatPoints, int gameValue, boolean overbid,
+                          Map<Seat, Integer> capturedPoints, Map<Seat, Integer> tricksWon,
+                          Seat scoredSeat, ContraLevel contra,
+                          boolean jungfrau, boolean durchmarsch, int ramschDoublings) {
             this.game = Objects.requireNonNull(game);
             this.declarerWon = declarerWon;
             this.declarerPoints = declarerPoints;
@@ -586,6 +664,7 @@ public final class SkatAi {
             this.contra = contra == null ? ContraLevel.NONE : contra;
             this.jungfrau = jungfrau;
             this.durchmarsch = durchmarsch;
+            this.ramschDoublings = Math.max(0, ramschDoublings);
         }
     }
 

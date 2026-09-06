@@ -457,6 +457,23 @@ public final class SearchAiProvider implements SkatAiProvider {
             blind.bidObserved(event);
         }
 
+        /**
+         * Always takes the two cards up.
+         *
+         * <p>Spelled out rather than inherited, because this is the strongest
+         * player here and the gap is worth seeing: nothing in this class can
+         * price pushing on unopened. It would mean comparing the hand it has
+         * against the distribution of hands it might be handed, and then telling
+         * {@link dev.skatklar.demo.belief.BeliefEncoding} that two of the cards
+         * it is about to reason about passed through a seat that never saw them.
+         *
+         * <p>TODO: both halves of that, together. Until then, taking up is the
+         * line every book recommends anyway.
+         */
+        @Override public boolean takeUpPush(SkatAi.RamschTakeUpContext context) {
+            return true;
+        }
+
         @Override public Set<Card> pushCards(SkatAi.RamschPushContext context) {
             Set<Card> pushed = SkatRules.defaultRamschPush(context.hand);
             schieben = new BeliefEncoding.Schieben(List.copyOf(pushed), context.to == null,

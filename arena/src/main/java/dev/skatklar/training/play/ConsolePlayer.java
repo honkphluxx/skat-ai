@@ -113,6 +113,18 @@ public final class ConsolePlayer implements SkatAiProvider {
             return new SkatAi.ContractAnnouncement(type, hand, false, false, false);
         }
 
+        /**
+         * The one seat here that may sensibly push on unopened, because there is
+         * a person behind it. The cards are not printed: that is the point of
+         * the question.
+         */
+        @Override public boolean takeUpPush(SkatAi.RamschTakeUpContext context) {
+            console.say("  Schieberamsch: " + (context.from == null ? "the skat"
+                    : Console.seat(context.from) + "'s two cards")
+                    + " are in front of you, face down.");
+            return console.confirm("  Take them up?", true);
+        }
+
         @Override public Set<Card> pushCards(SkatAi.RamschPushContext context) {
             console.say("  Schieberamsch: push two cards to "
                     + Console.seat(context.to) + ". Jacks may not go.");

@@ -20,6 +20,21 @@ public interface SkatAiSession extends AutoCloseable {
         throw new UnsupportedOperationException("Contract announcement is not supported");
     }
     /**
+     * Look at the two cards, or push them on unopened.
+     *
+     * <p>Asked once per leg, before {@link #pushCards}, and the two cards are
+     * not shown while it is being asked — see {@link SkatAi.RamschTakeUpContext}
+     * for why. Answering false ends this seat's leg then and there: the pair it
+     * was handed travels on untouched and {@link #pushCards} is never asked.
+     *
+     * <p>TODO: every player in this project answers true. Pushing on unopened is
+     * a live option in the Schieberamsch and there is no reasoning behind it
+     * here yet, in the players or in the belief model; the default keeps the
+     * game as it has always been played until there is.
+     */
+    default boolean takeUpPush(SkatAi.RamschTakeUpContext context) { return true; }
+
+    /**
      * One leg of the Schieberamsch: the two cards to push on. Jacks may never be
      * pushed, and the engine substitutes a legal pair for anything else.
      *
