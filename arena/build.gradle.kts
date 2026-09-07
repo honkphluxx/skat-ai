@@ -35,11 +35,15 @@ dependencies {
     implementation(project(jskatAiPath))
     implementation(files(ai.layout.projectDirectory.file(
             "third_party/jskat/jskat-base/build/libs/jskat-base.jar")))
-    // Only here, never in :jskat-ai: that module is on the Android app's compile
-    // path in the SkatKlar build, and ONNX Runtime would pull its native
-    // libraries into the APK for a player the app does not use. The shipped
-    // belief runs through dev.skatklar.demo.belief.BeliefNet, which is plain
-    // Java; this runtime is the fallback and the second opinion.
+    // Only here, never in :jskat-ai. That module is the adapter that seats
+    // JSkat's players, and the algorithmic ones need nothing but jskat-base.jar;
+    // ONNX Runtime is hundreds of megabytes of native libraries across the
+    // platforms it ships for, and only the two ML players ever touch it. Declaring
+    // it one level up keeps the adapter a plain-jar dependency for anyone who
+    // wants the algorithmic baselines and not the transformer.
+    //
+    // The shipped belief runs through dev.skatklar.demo.belief.BeliefNet, which is
+    // plain Java; this runtime is the fallback and the second opinion.
     //
     // Not the 1.28.0 jskat-base pins: that release's native library fails to load
     // on Windows with "DLL initialization routine failed", while 1.19.2 and 1.17.3

@@ -12,10 +12,12 @@ import org.jskat.player.AbstractJSkatPlayer;
 /**
  * Wires JSkat's ONNX-based players into the arena.
  *
- * <p>They live here rather than in {@code :jskat-ai} on purpose: that module is a
- * dependency of the Android app, and ONNX Runtime would drag its native
- * libraries into the APK for a player the app does not use. Only the training
- * module declares the dependency.
+ * <p>They live here rather than in {@code :jskat-ai} on purpose. That module is
+ * the adapter that seats JSkat's players, and the algorithmic ones need nothing
+ * beyond {@code jskat-base.jar}; ONNX Runtime is hundreds of megabytes of native
+ * libraries for the two players below alone. Only this module declares it, so the
+ * adapter stays cheap for anyone who wants the algorithmic baselines and not the
+ * transformer.
  *
  * <p>Both need two things the ordinary build does not provide, and the arena task
  * arranges both: ONNX Runtime on the classpath, and {@code jskat.models.dir}

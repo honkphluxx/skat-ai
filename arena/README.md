@@ -53,8 +53,9 @@ arena with no arguments to see which resolved.
 player" keeps working when the default moves; it is currently the same player as
 `jskat-new`. `jskat-algorithmic` is the superseded one, kept so the change stays
 measurable. The two ML players need ONNX Runtime
-(declared by this module, deliberately not by `:jskat-ai`, so it stays out of the
-APK) and the model files: run `gradlew :jskat-base:downloadMlModels` inside
+(declared by this module, deliberately not by `:jskat-ai`, so the adapter stays a
+plain-jar dependency for anyone who only wants the algorithmic baselines) and the
+model files: run `gradlew :jskat-base:downloadMlModels` inside
 `third_party/jskat` once, or pass `-Djskat.models.dir=<path>`.
 
 ## Measured so far
