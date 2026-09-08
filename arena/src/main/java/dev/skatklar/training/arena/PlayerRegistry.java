@@ -106,6 +106,10 @@ public final class PlayerRegistry {
         // Runtime, and whether there is a model on disk is a question only that
         // class can answer. No model, no contestant, no noise.
         registry.registerHook("dev.skatklar.training.belief.BeliefPlayers");
+        // The outside engines that run as helper processes -- XSkat and go-skat.
+        // A hook rather than registerIfPresent because availability is a question
+        // about built binaries under third_party, not about the classpath.
+        registry.registerHook("dev.skatklar.training.players.ExternalBots");
         return registry;
     }
 

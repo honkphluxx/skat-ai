@@ -48,6 +48,16 @@ arena with no arguments to see which resolved.
 | `jskat-algorithmic` | `algorithmic.AlgorithmicAIPlayer`, superseded |
 | `jskat-ml` | `ml.MLPlayer`, dense ONNX nets trained on ISS |
 | `jskat-ml-pro` | `ml.MLPlayerPro`, transformer ONNX nets |
+| `xskat` | XSkat 4.0, as a helper process -- the field's weak-but-fast reference |
+| `xskat-blind` | the same, dealt a world consistent with what its seat knows |
+| `go-skat` | go-skat, heuristics plus sampled alpha-beta, as a helper process |
+| `go-skat-blind` | the same, blind |
+
+The last four appear only when their helper binaries have been built --
+`./gradlew :skat-ai:buildExternalBots` after putting the engines under
+`third_party/`. `-Dskat.probe=<n>` runs the honesty control over them and prints
+what it found at exit. Both are documented in
+[`../docs/external-bots.md`](../docs/external-bots.md).
 
 `jskat` deliberately tracks the app's default so that "measure the shipped
 player" keeps working when the default moves; it is currently the same player as

@@ -46,6 +46,27 @@ tasks.register<Exec>("buildJskatBase") {
     }
 }
 
+// The two outside engines that run as helper processes. Deliberately not wired
+// into anything: a missing engine, a missing compiler or a failed build must
+// cost the arena a contestant and never a run, and the arena finds the binaries
+// for itself. Run it by name -- `./gradlew :skat-ai:buildExternalBots` -- after
+// putting XSkat and go-skat under third_party/. See docs/external-bots.md.
+tasks.register<Exec>("buildExternalBots") {
+    group = "build"
+    description = "Builds the XSkat and go-skat helper binaries the arena can seat"
+    workingDir(layout.projectDirectory)
+    val script = "tools/build-external-bots.sh"
+    val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+    if (isWindows) {
+        // Git for Windows ships sh; if it is not on PATH the task says so
+        // rather than failing the build.
+        commandLine("sh", script)
+    } else {
+        commandLine("sh", script)
+    }
+    isIgnoreExitValue = true
+}
+
 tasks.register("checkEverything") {
     group = "verification"
     description = "Compiles and tests every module of the training ground"
