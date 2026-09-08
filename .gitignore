@@ -32,6 +32,14 @@ belief-model/*
 !belief-model/model.json
 !belief-model/fixtures.npz
 
+# The outside engines. Fetched, built in place, never redistributed from here --
+# see docs/xskat.md for why that is the arrangement and not merely tidiness.
+# third_party/jskat is a submodule and unaffected by these lines; these two are
+# ordinary directories a clone fills in itself, and a stray `git add third_party`
+# would otherwise commit somebody else's program into this repository.
+third_party/xskat/
+third_party/go-skat/
+
 # Native build output
 native/build/
 __pycache__/

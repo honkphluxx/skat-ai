@@ -66,8 +66,13 @@ Game records XSkat produces are its output, not a derivative of its source, and
 carry no obligation. (This is a reading of the text, not legal advice; the point
 of the arrangement above is that it does not depend on the reading.)
 
-Take the pristine 4.0 tarball from xskat.de rather than the GitHub mirror, which
-is a renamed modified version.
+Take the pristine 4.0 tarball from Debian's pool —
+`deb.debian.org/debian/pool/main/x/xskat/xskat_4.0.orig.tar.gz` — rather than
+the GitHub mirror, which is a renamed modified version. **xskat.de itself is
+gone as of 2026-09-08**, which is worth stating plainly: the licence's whole
+premise is that the program may be passed on freely, and Debian passing it on
+for twenty years is that premise working. See
+[`external-bots.md`](external-bots.md) for the fetch and the Windows toolchain.
 
 ## 2. What XSkat is, and where it sits
 
@@ -447,7 +452,9 @@ fd 1 for the protocol and the null device for the engine.
 
 ## Sources
 
-- XSkat: http://www.xskat.de/ — source, and the licence text quoted above.
+- XSkat: `deb.debian.org/debian/pool/main/x/xskat/` — the pristine 4.0 source
+  and the licence text quoted above. (http://www.xskat.de/ was the home and is
+  dead as of 2026-09-08.)
 - Debian copyright for `xskat` 4.0-8, which ships it in `main` under that text.
 - Mirror used for this exploration: https://github.com/mfrasca/xskat (4.0.mfrasca).
 - Buro's Skat page and the SkatGame app page: https://skatgame.net/mburo/ ,

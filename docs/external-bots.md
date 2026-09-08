@@ -125,6 +125,66 @@ Schieberamsch and the arena's canon are not the same game, and a contestant that
 played a different Ramsch would poison the only measurement it exists to make.
 That is what the `delegated games` count in the control's summary is.
 
+## Getting the engines, and building them on Windows
+
+**xskat.de is gone** (checked 2026-09-08). The source survives in two places
+that are not going anywhere:
+
+- **Debian's pool**, which is the pristine 4.0 upstream tarball as Gerhardt
+  released it: `http://deb.debian.org/debian/pool/main/x/xskat/xskat_4.0.orig.tar.gz`
+  (Debian 13 still ships `xskat 4.0-9`; `snapshot.debian.org` has every older
+  one). Unpack it straight into `third_party/xskat`.
+- **`github.com/mfrasca/xskat`**, which is what this project was developed
+  against. It is a *renamed modified version* in the sense clause 2.b of the
+  licence means — its version string reads `4.0.mfrasca` — and the only change
+  is that string. Functionally identical for our purposes.
+
+go-skat is `git clone https://github.com/dranidis/go-skat third_party/go-skat`.
+Its build fetches two dependencies from the Go module proxy, so it wants a
+working network the first time.
+
+### The compiler
+
+Only four of XSkat's files are compiled here — `skat.c`, `null.c`, `ramsch.c`,
+`text.c` — and between them they include `stdio`, `stdlib`, `string`, `ctype`
+and `time` and nothing else. **There is no X11 and no POSIX in the build**: the
+driver replaces the two files that had them, and its own two platform calls
+(`dup`, `/dev/null`) are `#ifdef`-ed to `_dup` and `NUL`. So any C compiler
+that accepts K&R function definitions will do it.
+
+In order of least trouble on Windows:
+
+1. **[w64devkit](https://github.com/skeeto/w64devkit/releases)** — one zip, no
+   installer, no registry. Unpack it anywhere, run `w64devkit.exe` for a shell
+   with `gcc` on PATH (or add its `bin\` to PATH and use Git Bash), then
+   `./tools/build-external-bots.sh` as usual. This is the recommended route.
+2. **MSYS2**: `pacman -S mingw-w64-ucrt-x86_64-gcc`, then build from the UCRT64
+   shell.
+3. **Cross-built from Linux**, which is how the first Windows binary was made:
+   ```bash
+   CC=x86_64-w64-mingw32-gcc
+   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -Dmain=xskat_main_unused -c skat.c -o w_skat.o
+   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c null.c   -o w_null.o
+   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c ramsch.c -o w_ramsch.o
+   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c text.c   -o w_text.o
+   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c skatklar_driver.c -o w_driver.o
+   $CC w_*.o -static -o skatklar-xskat.exe
+   ```
+   `-static` matters: without it the binary wants `libwinpthread-1.dll` beside
+   it. With it, the only imports are `KERNEL32` and `msvcrt`.
+
+**Not MSVC.** `cl.exe` is the one toolchain worth warning about: XSkat is K&R C
+throughout and calls a dozen functions that are never declared, which recent
+MSVC treats as an error rather than a warning in its C modes. Fighting that
+means editing Gerhardt's sources, which is the one thing this arrangement is
+built to avoid.
+
+The Go helper needs `-o skatklar-goskat.exe` on Windows — `go build -o <name>`
+does not add the suffix the way MinGW's `gcc -o <name>` does, and a file
+without it is not something `CreateProcess` will start. The build script
+handles that from `uname -s`; it is written down here because a helper that
+builds and cannot be launched looks exactly like a helper that did not build.
+
 ## Adding a third engine
 
 Nothing in the Java side is XSkat- or go-skat-specific. Write a driver that

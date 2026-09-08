@@ -12,6 +12,20 @@ xskat="$root/third_party/xskat"
 goskat="$root/third_party/go-skat"
 status=0
 
+# Windows needs the suffix spelled out for Go. MinGW's gcc adds .exe to a -o
+# without an extension all by itself; `go build -o name` does not, and a file
+# with no extension is not something CreateProcess will start -- so the arena
+# would build a helper it could never launch.
+EXE=""
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) EXE=".exe" ;;
+esac
+
+# Reports a built helper whichever name it ended up with.
+built() {
+    [ -x "$1" ] || [ -x "$1.exe" ]
+}
+
 say() { printf '%s\n' "$*"; }
 
 if [ ! -f "$xskat/skat.c" ]; then
@@ -19,6 +33,8 @@ if [ ! -f "$xskat/skat.c" ]; then
     say "  and unpack it there to measure against it. Building without it."
 elif ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
     say "No C compiler on PATH; skipping the XSkat helper."
+    say "  On Windows, w64devkit is the least trouble: unpack it and run its"
+    say "  w64devkit.exe shell, or put its bin/ on PATH. See docs/external-bots.md."
 else
     CC=${CC:-$(command -v cc || command -v gcc)}
     say "Building the XSkat helper with $CC"
@@ -36,7 +52,7 @@ else
       && $CC skatklar_skat.o skatklar_null.o skatklar_ramsch.o skatklar_text.o \
              skatklar_driver.o -o skatklar-xskat ) \
       || { say "  XSkat helper failed to build."; status=1; }
-    [ -x "$xskat/skatklar-xskat" ] && say "  -> third_party/xskat/skatklar-xskat"
+    built "$xskat/skatklar-xskat" && say "  -> third_party/xskat/skatklar-xskat$EXE"
 fi
 
 if [ ! -f "$goskat/go.mod" ]; then
@@ -48,9 +64,9 @@ else
     say "Building the go-skat helper"
     ( cd "$goskat" \
       && cp "$root/external/go-skat/skatklar_driver.go" . \
-      && go build -o skatklar-goskat . ) \
+      && go build -o "skatklar-goskat$EXE" . ) \
       || { say "  go-skat helper failed to build."; status=1; }
-    [ -x "$goskat/skatklar-goskat" ] && say "  -> third_party/go-skat/skatklar-goskat"
+    built "$goskat/skatklar-goskat" && say "  -> third_party/go-skat/skatklar-goskat$EXE"
 fi
 
 exit $status
