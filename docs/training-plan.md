@@ -1,0 +1,241 @@
+# Training plan, September 2026
+
+How to make the strongest player this ground can make, given what it has now:
+a working arena, a solver, a search player at parity with the best outside
+program, a belief model that is worth a fraction of what a belief could be
+worth, two new outside opponents, and two findings that invalidate part of the
+record. Every number here is from `arena/README.md` or `docs/xskat.md` unless
+it says otherwise.
+
+## 1. Where we stand, in numbers
+
+| what | measured | where |
+| --- | --- | --- |
+| our best (`belief-32` = `ANALYST`) vs `jskat-ml-pro`, oracle contracts | **+0.19** [−0.95, +1.33] — parity | README, 2026-08-24 |
+| the same player vs `jskat-new`, full game | **+12.6** | README |
+| what the learned belief buys, 16 worlds, fixed contracts | **+2.37** [+1.03, +3.71] | sharpness sweep |
+| what doubling the worlds buys on top of it | **+2.64** [+1.40, +3.88], "not done paying" | 2026-08-24 |
+| what a belief that gets **one world in four right** buys | **+25.2** [+20.6, +29.7], and flat from there | belief sweep |
+| room left in declaring vs par at fixed contracts | about **8 game points** (solver +2.91, `belief` −5.19) | "why defence is not the place" |
+| the discard's share of that | about **a tenth of declared games** | "the ten percent" |
+| `xskat` / `go-skat` vs `greedy` | +27.8 / +21.8; tied with each other | xskat.md §9 |
+| αµ over plain voting | **nothing**, resolved | README |
+| defence as a place to gain | **not**, measured | README |
+
+Read the third and fifth rows together. They are the whole plan. A belief
+sampled uniformly is 23 to 27 points below one that is right a quarter of the
+time, and ours has closed about **two and a half** of those points. Nothing else
+on this list is within an order of magnitude of that gap.
+
+## 2. Two findings, and what each one invalidates
+
+### 2.1 No player of ours ever declared Null (fixed in 09a81fa, 2026-08-28)
+
+`HandEvaluator.promise` paid for matadors it did not hold and ranked Null on the
+wrong scale, so `SearchAiProvider` never had Null among its candidates. Every
+auction our players took part in before that commit was an auction in which
+Null did not exist. What that reaches:
+
+| artefact | status | why |
+| --- | --- | --- |
+| **the belief corpus, `belief-data/`** | **must be regenerated** | 0 Null decision points in 89,438 sampled. Worse than a gap: every *low* bid and every pass in the corpus was made by a bidder that could not say Null, so what the model learned about what "18" or a pass implies about jacks and aces is the wrong population. The guard that keeps the model off Null contracts kept it *usable*; it did not keep it *right*. |
+| **the belief weights** | **retrain** | follows from the above |
+| auction-mode ladders and the aggression sweep | **invalidated**, need a night | the bidder changed |
+| `tools/challenge-seeds.tsv` | `--purge` and regenerate | old bidder's judgement |
+| fixed-contract and oracle-contract results | **survive** | they bypass the auction |
+
+The last row is why the parity result stands: it was measured at oracle
+contracts.
+
+### 2.2 The Ramsch is not the official game, and nobody else plays ours
+
+The canon (`rules.md` §3) plays a Schieberamsch when all three pass; the
+Skatordnung passes the deal in. Every auction-mode match therefore has 10–16% of
+its boards in a game that **no outside engine plays**: XSkat has a Ramsch of its
+own with different options, go-skat has none, JSkat's is a different variant
+again — and the arena already hands all three to `RamschPolicy` on those
+boards. Three consequences:
+
+- An auction-mode match against an outside engine is, on one board in eight, a
+  match against our own greedy Ramsch heuristic wearing its name. The
+  `delegated games` count in the external-bots summary is that number.
+- The Ramsch policy can only ever be trained by self-play and measured against
+  ourselves. That is fine — it is a product feature, not a strength claim — but
+  it must not leak into strength claims.
+- The belief encoding carries Schieben fields that no outside population will
+  ever produce, and a corpus mixing Ramsch and non-Ramsch boards trains one
+  model on two games.
+
+**Decision: the measurement canon is the official rule; the product canon is
+the Schieberamsch.** The arena grows `--passed-in=void` — a board on which all
+three pass scores zero, counts as no game, and carries no signal in the paired
+difference, exactly as the pairing already treats an equal-scored board. Every
+cross-engine measurement, every calibration, and the belief corpus are taken in
+that mode. Ramsch stays in the app, gets its own self-play loop (§4, phase M)
+and its own arena mode, and its numbers are reported as its own column.
+
+## 3. The levers, ranked
+
+1. **The belief model.** +2.4 delivered against +25 available. Before training
+   anything, find out *why*: the design named the diagnostic — the share of
+   sampled worlds that are the true world, by trick — and never printed it. That
+   one number places us on the oracle's curve and tells us whether the ceiling
+   is the corpus, the encoding, the network, or how the sampler uses it.
+2. **Effort.** Worlds are still paying (+2.6 for the last doubling), and the
+   native solver makes them cheap on the workstation. The reference player is
+   not bound by the phone's budget, and that separation should be explicit.
+3. **Declaring.** Eight points to par, a tenth of it in the discard. A
+   belief-weighted discard search is the obvious first bite; the line choice is
+   the rest, and it is where a better belief pays twice (the 2026-08-24 note that
+   sharper priors and more samples look like complements).
+4. **The auction.** Redo the aggression calibration on the Null-capable bidder;
+   compare our Null rate (3.7% of auditioned deals) with the oracle's (one board
+   in sixteen makeable); a learned bidder is a later question.
+5. **Defence.** Measured as not the place. Leave it.
+
+## 4. The phases, each with the measurement that decides it
+
+Every phase ends in a number the arena prints. A phase whose gate does not
+resolve is not passed by argument.
+
+### Phase R — re-baseline (two nights, no code)
+
+- `tools/challenge-seeds` `--purge` and regenerate.
+- `overnight-arena.sh --redo=` on every auction-mode ladder entry and the
+  aggression sweep, with the Null-capable bidder.
+- Add `xskat`, `xskat-blind`, `go-skat` to the ladder in both modes.
+
+**Gate:** ladder v3 published in the README, and the contract mix per player
+printed beside it — the Null column is the check that the fix reached the
+auction.
+
+### Phase V — the void-board mode (a day)
+
+- `--passed-in=void` in `DuplicateMatch`/`GameRunner`; the report keeps the
+  Ramsch column and adds a passed-in column.
+- The exporter takes the same flag.
+
+**Gate:** in that mode, `delegated games` from the external-bots summary is 0
+and the Ramsch rate is 0; the fixed-contract numbers are byte-identical to
+before (the flag must not touch them).
+
+### Phase B2 — belief v2 (the week that matters)
+
+1. **Diagnose before training.** Print the true-world share per trick for the
+   current model against the uniform sampler, in `train_belief.py`'s eval and
+   as an arena-side probe on real games. Expected: low single digits at trick
+   one, rising. That number is the baseline everything below is measured
+   against, and it decides where to look: a corpus problem shows as a model that
+   fits its held-out set and still samples the truth rarely in play; an
+   encoding problem shows in `check_data.py` (is the bidding block populated at
+   the rate the auction should populate it? after the fix, a Null bid is a
+   thing the block must be able to say).
+2. **A new corpus, in void-board mode**, from a population that can say Null
+   and does not all play alike: `greedy, search-4, club, expert, jskat-new,
+   xskat-blind, go-skat`. The two outside engines are there for style
+   diversity and because they are licence-clean; `xskat-blind` rather than
+   `xskat` so that no decision in the corpus was made with a card the seat
+   could not see. 200k boards, `--threads=8`; the exporter already takes
+   `--players=`. `check_data.py` before the night, as its README says.
+3. **Null in the model**: shared network with the game-type input that already
+   exists at offset 264, not a separate model — Null decision points will be
+   about one in twenty and a separate head would starve. Verify the count is
+   non-zero this time; it is the one-line check that would have caught 2.1.
+4. Train. Same recipe, same interpreter warning.
+
+**Gates, all three:**
+- true-world share at tricks 1–3 clears the point where the oracle curve
+  starts paying — the sweep's lowest registered rungs, `belief-5` to
+  `belief-15`, are exactly the yardstick, and they cost one match each;
+- `belief-v2` − `belief` at fixed contracts, resolved and positive;
+- `belief-v2` − `belief-25` closes rather than holds.
+
+If gate one fails while held-out accuracy is fine, the fault is in how the
+sampler uses the model, not in the model — look at `BeliefWorldSource` before
+touching the network.
+
+### Phase D — declaring (after B2, because it pays twice with a better belief)
+
+- Belief-weighted discard: for each of the 66 discards, the vote over sampled
+  worlds, native solver, budgeted. Measured at **oracle contracts against
+  par's 90.1%** — the tenth that is the discard is the target.
+- Then the line choice, measured as declaring-column distance to par at fixed
+  contracts, currently 8.
+
+**Gate:** each change resolved positive at fixed contracts; the declaring column
+moves.
+
+### Phase A — the auction
+
+- Aggression sweep redone (Phase R gives the baseline).
+- Null rate versus the oracle's: if we say Null on 3.7% where 6% are makeable,
+  the promise scale is still too shy; the fix is in `HandEvaluator`, measured
+  by `--contracts=solver`'s verdict on what we bid.
+
+**Gate:** auction-mode result against `jskat-new` and against the outside
+engines in void-board mode, all resolved positive.
+
+### Phase P — population self-play, the loop (repeat until it stops paying)
+
+Generation *n*: population = the fixed outsiders (`greedy, jskat-new,
+xskat-blind, go-skat`) + the best of generations *n−1* and *n−2* → corpus →
+train → `belief-n`.
+
+**Gate per generation:** beats generation *n−1* at fixed contracts, resolved;
+non-negative against every outsider in void-board auction mode. Two consecutive
+failures end the loop. The outsiders never leave the population — a model
+trained only on its own lineage is confidently wrong about everyone else, and
+the humans who buy the app are everyone else.
+
+### Phase M — the Ramsch, separately
+
+Self-play only, its own arena mode (`--ramsch-only`), its own policy under
+`RamschPolicy`, measured against `greedy`'s Ramsch and its own previous version.
+Never in a strength claim; always its own column. The Schieben fields in the
+encoding are masked in every non-Ramsch corpus.
+
+### Phase C — calibration, once
+
+When Phase P has produced something worth calibrating: one session on ISS
+against the Muppets through go-skat's `client_iss.go`, and the ISS archive as a
+contract oracle offline if permission ever arrives. Days of wall clock for one
+interval, no pairing, no common random numbers — a number to write down, not a
+loop to run.
+
+### Phase S — shipping the effort
+
+The reference player runs at whatever worlds the workstation affords (64, 128 —
+measure where it stops paying, the curve is not flat yet). The phone runs at 32.
+The belief already ships as plain arrays; the gap between the two is a stated
+number in the README, not a surprise.
+
+## 5. What not to do
+
+- Do not retrain on `belief-data/` as it is. Every record in it was made by a
+  bidder that could not say Null.
+- Do not quote any auction-mode number from before 09a81fa.
+- Do not put ISS on the critical path. Nothing here needs it.
+- Do not revisit αµ, the sharpness exponent, or defence — all three are
+  measured and closed.
+- Do not compare against kermit locally; there is no such thing.
+- Do not let a Ramsch board into a cross-engine or calibration measurement.
+
+## 6. Order and cost
+
+R (2 nights) → V (1 day) → B2 (1 week: a day of diagnosis, a night of export,
+a night of training, two nights of gates) → D (1 week) → A (2 nights) → P
+(a generation a week, as long as it pays) → M in parallel with P → C once →
+S last. Nights are the arena's: `--threads=4` with ML players, 8 without; XSkat
+costs nothing, go-skat about 8 games a second.
+
+## 7. Done means
+
+- `belief-vN` − `jskat-ml-pro` at oracle contracts resolved **positive** (from
+  +0.19, not resolved).
+- Declaring column within **4 game points of par** at fixed contracts (from 8).
+- Non-negative, resolved, against `xskat`, `go-skat` and `jskat-new` in
+  void-board auction mode.
+- Null declared at roughly the oracle's rate, and Null decision points in the
+  corpus at roughly that share.
+- The true-world share printed in every training log, so 2.1 cannot happen
+  again without being seen.
