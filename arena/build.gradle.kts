@@ -77,8 +77,10 @@ fun JavaExec.forwardProperties() {
             .dir("third_party/jskat/.jskat/models").asFile.absolutePath)
     System.getProperties().forEach { key, value ->
         val name = key.toString()
+        // skat.* is the arena's own namespace: skat.probe turns on the honesty
+        // control for the outside engines (docs/external-bots.md).
         if (name.startsWith("jskat.") || name.startsWith("onnxruntime.")
-                || name.startsWith("belief.")) {
+                || name.startsWith("belief.") || name.startsWith("skat.")) {
             systemProperty(name, value.toString())
         }
     }

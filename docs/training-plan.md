@@ -100,10 +100,20 @@ resolve is not passed by argument.
 
 ### Phase R — re-baseline (two nights, no code)
 
-- `tools/challenge-seeds` `--purge` and regenerate.
-- `overnight-arena.sh --redo=` on every auction-mode ladder entry and the
-  aggression sweep, with the Null-capable bidder.
-- Add `xskat`, `xskat-blind`, `go-skat` to the ladder in both modes.
+One command: `./tools/overnight-phase-r.sh`. It builds the helpers, moves
+every auction-mode log from before the fix aside (once), and runs
+`overnight-arena.sh`, which now carries the outside engines and the honesty
+probe as part of the standard night. Stop it with a `STOP` file or Ctrl-C —
+the running match is killed within seconds and repeated next time — and
+re-run the same command to carry on; two evenings are one run.
+
+- `--seeds` also purges and regenerates `tools/challenge-seeds.tsv` (off by
+  default: it rewrites files under `core/` and is a product change to commit
+  on its own).
+- Every auction-mode ladder entry and the aggression sweep, with the
+  Null-capable bidder.
+- `xskat`, `xskat-blind`, `go-skat` on the ladder in both modes, our best
+  against each at oracle contracts, the leak priced over three seeds.
 
 **Gate:** ladder v3 published in the README, and the contract mix per player
 printed beside it — the Null column is the check that the fix reached the

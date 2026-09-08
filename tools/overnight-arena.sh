@@ -20,8 +20,12 @@
 #   * It is resumable. A match whose log already exists is skipped, so if the
 #     machine reboots at three in the morning you re-run the same command and it
 #     carries on. Delete a log to force that one match to run again.
-#   * It stops on request. Create a file called STOP in the repository root and
-#     the current match finishes, then it exits.
+#   * It stops on request, within seconds. Create a file called STOP in the
+#     repository root (or press Ctrl-C) and the match that is running is killed,
+#     its half-written log is moved aside as .interrupted.txt, and the script
+#     exits. Re-run the same command later and that match is the first thing it
+#     does again; nothing else is repeated. A match is never worth more than a
+#     night's sleep, and a kill costs at most the minutes it had run.
 #   * A failed match does not kill the run. It is recorded as FAILED in the
 #     summary and the next match starts. Only a failing test suite stops a seed,
 #     because measuring on a broken tree is worse than not measuring.
@@ -66,6 +70,11 @@ THREADS=$(nproc 2>/dev/null || echo 4)
 # rather than deleted: the superseded numbers are the before half of a
 # before-and-after.
 REDO=""
+# Extra JVM system properties for the arena's own process, forwarded through
+# arena/build.gradle.kts. -Dskat.probe=<n> is the honesty control on the
+# outside engines (docs/external-bots.md); it is expensive and is only ever
+# asked for by the probe block below, never for a whole night.
+PROPS=""
 # Who picks the contracts in --fixed-contract mode. Empty means the arena's
 # default, which is greedy.
 #
@@ -84,6 +93,7 @@ BIDDER=""
 for arg in "$@"; do
     case "$arg" in
         --quick)      SEEDS="11"; SCALE=0.2 ;;
+        --props=*)    PROPS="${arg#*=}" ;;
         --seeds=*)    SEEDS="${arg#*=}" ;;
         --scale=*)    SCALE="${arg#*=}" ;;
         --threads=*)  THREADS="${arg#*=}" ;;
@@ -152,6 +162,10 @@ match() {
         *--bidder=*) mode="$mode-$(printf '%s' "${extra##*--bidder=}" | cut -d' ' -f1)" ;;
     esac
     local tag="$a-vs-$b-$mode-s$SEED"
+    # A probed match is not the same match: the control adds a summary to the
+    # report and costs several times as much, so it gets its own name and never
+    # shadows an unprobed log.
+    case "$PROPS" in *skat.probe=*) tag="$tag-probe" ;; esac
     local report="$LOG/$tag.txt"
 
     if [ -f "$report" ]; then
@@ -161,10 +175,29 @@ match() {
     [ -f STOP ] && return 0
 
     say "  [$(date '+%H:%M:%S')] $tag ($count boards)"
-    # shellcheck disable=SC2086 -- $extra is deliberately word-split into flags
-    if ! ./gradlew --console=plain -q :arena:arena \
+    # In the background, so the STOP file is noticed while the match runs and
+    # not only between matches. --no-daemon is what makes the kill reach the
+    # arena: with a daemon the arena's JVM is the daemon's child and outlives
+    # the client, and a match that keeps running after "stop" is the one thing
+    # this script must never do. It costs a few seconds of JVM start per match.
+    # shellcheck disable=SC2086 -- $extra and $PROPS are deliberately word-split
+    ./gradlew --console=plain -q --no-daemon $PROPS :arena:arena \
             --args="--a=$a --b=$b --boards=$count --seed=$SEED --threads=$THREADS $extra --quiet --csv=$ROOT/$LOG/$tag.csv" \
-            > "$report" 2>&1; then
+            > "$report" 2>&1 &
+    RUNNING=$!
+    RUNNING_REPORT="$report"
+    RUNNING_TAG="$tag"
+    while kill -0 "$RUNNING" 2>/dev/null; do
+        if [ -f STOP ]; then
+            interrupt_running
+            return 0
+        fi
+        sleep 10
+    done
+    wait "$RUNNING"
+    local rc=$?
+    RUNNING=""
+    if [ "$rc" -ne 0 ]; then
         # Moved aside rather than left in place, so that re-running the script
         # retries this match instead of skipping it as already done.
         mv "$report" "$LOG/$tag.failed.txt"
@@ -176,8 +209,61 @@ match() {
     # is the half of that report worth reading -- the count alone says a
     # violation happened but not in which decision.
     grep -E "^  in: | = .*game pts/game|^Resolved|^Not resolved" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
+    # The honesty control's verdict on an outside engine, when it was asked for.
+    grep -E "^Honesty control|^  as declarer|^  rule divergences|^  A non-zero" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
     return 0
 }
+
+# Kills the match that is running and moves its half-written log aside, so the
+# next run does it again from the start. Called for the STOP file and for
+# Ctrl-C alike.
+RUNNING=""
+RUNNING_REPORT=""
+RUNNING_TAG=""
+interrupt_running() {
+    [ -n "$RUNNING" ] || return 0
+    local pid="$RUNNING"
+    RUNNING=""
+    # On Windows the bash pid is not the Windows pid, and only a Windows kill of
+    # the whole tree reaches the JVM that gradlew started. ps -W maps one to the
+    # other; elsewhere a plain kill of the group is enough.
+    if command -v taskkill >/dev/null 2>&1; then
+        local winpid
+        winpid=$(ps -W -p "$pid" 2>/dev/null | awk 'NR==2 { print $4 }')
+        [ -n "$winpid" ] && taskkill //T //F //PID "$winpid" >/dev/null 2>&1
+    fi
+    pkill -TERM -P "$pid" 2>/dev/null
+    kill -TERM "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+    # A match that finished in the moment between the last check and the kill
+    # has its result line already; keep it rather than pay for it twice.
+    if [ -f "$RUNNING_REPORT" ] && grep -q " = .*game pts/game" "$RUNNING_REPORT"; then
+        say "      (finished just before the stop; kept)"
+        return 0
+    fi
+    if [ -f "$RUNNING_REPORT" ]; then
+        mv "$RUNNING_REPORT" "$LOG/$RUNNING_TAG.interrupted.txt"
+    fi
+    rm -f "$LOG/$RUNNING_TAG.csv"
+    say "      INTERRUPTED at $(date '+%H:%M:%S') -- $RUNNING_TAG will run again next time"
+}
+
+# Ctrl-C is the STOP file without the file.
+on_signal() {
+    say ""
+    say "Interrupted -- stopping."
+    interrupt_running
+    say "Stopped $(date '+%Y-%m-%d %H:%M:%S'). Re-run the same command to carry on."
+    exit 130
+}
+trap on_signal INT TERM
+
+# A STOP file left over from last time would end this run before it starts.
+# Starting the script is the clearest possible statement that it should run.
+if [ -f STOP ]; then
+    rm -f STOP
+    echo "Removed a STOP file left over from an earlier run."
+fi
 
 say "============================================================"
 say "Started $(date '+%Y-%m-%d %H:%M:%S')   seeds: $SEEDS   scale: $SCALE   threads: $THREADS"
@@ -305,10 +391,60 @@ for SEED in $SEEDS; do
         # deserve an hour a night. If the question is reopened, measure them
         # against `belief` on the same boards rather than each against `search`.
     fi
+
+    # The outside engines, when this checkout has built them
+    # (tools/build-external-bots.sh; docs/external-bots.md). Each is placed
+    # against the field in both modes, and our best is placed against each at
+    # oracle contracts, which is the only line where "stronger than XSkat" means
+    # card play rather than taste in games. Nothing here runs on a checkout
+    # without the binaries, and nothing fails because of it.
+    XSKAT=false; GOSKAT=false
+    [ -x third_party/xskat/skatklar-xskat ] || [ -x third_party/xskat/skatklar-xskat.exe ] && XSKAT=true
+    [ -x third_party/go-skat/skatklar-goskat ] || [ -x third_party/go-skat/skatklar-goskat.exe ] && GOSKAT=true
+    if $XSKAT; then
+        match xskat greedy    "$(boards 300)" ""
+        match xskat greedy    "$(boards 300)" "--fixed-contract $BIDDER"
+        match xskat jskat-new "$(boards 250)" ""
+        # The leak, priced: xskat is told the skat, xskat-blind is dealt a
+        # sampled one. Measured in the container at +0.40 [-0.55, +1.35] over
+        # 150 boards; three seeds of this is what settles whether it is zero.
+        match xskat xskat-blind "$(boards 300)" ""
+        if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
+            match belief-32 xskat "$(boards 300)" "--fixed-contract --contracts=solver"
+            match belief-32 xskat "$(boards 300)" ""
+        fi
+    fi
+    if $GOSKAT; then
+        match go-skat greedy "$(boards 200)" ""
+        match go-skat greedy "$(boards 200)" "--fixed-contract $BIDDER"
+        if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
+            match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=solver"
+            match belief-32 go-skat "$(boards 200)" ""
+        fi
+    fi
+    if $XSKAT && $GOSKAT; then
+        match xskat go-skat "$(boards 300)" ""
+    fi
+    # The honesty control, once a seed and small: every card re-asked under
+    # eight reshuffles of what the seat cannot see. Zero is the expected answer
+    # for go-skat and a handful as declarer for xskat; anything else means the
+    # engine's score above is not an honest player's. Small because it costs
+    # nine searches a card, and its verdict does not sharpen with boards.
+    if $XSKAT || $GOSKAT; then
+        SAVED_PROPS="$PROPS"
+        PROPS="$PROPS -Dskat.probe=8"
+        $XSKAT  && match xskat   greedy "$(boards 60)" ""
+        $GOSKAT && match go-skat greedy "$(boards 60)" ""
+        PROPS="$SAVED_PROPS"
+    fi
 done
 
 say ""
-say "Finished $(date '+%Y-%m-%d %H:%M:%S')"
+if [ -f STOP ]; then
+    say "Stopped $(date '+%Y-%m-%d %H:%M:%S') -- re-run the same command to carry on."
+else
+    say "Finished $(date '+%Y-%m-%d %H:%M:%S')"
+fi
 say ""
 say "Read arena-logs/summary.txt. The line that decides a match is the one with"
 say "'game pts/game' and a confidence interval; 'ramsch' is how often that side"
