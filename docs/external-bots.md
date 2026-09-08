@@ -152,6 +152,17 @@ driver replaces the two files that had them, and its own two platform calls
 (`dup`, `/dev/null`) are `#ifdef`-ed to `_dup` and `NUL`. So any C compiler
 that accepts K&R function definitions will do it.
 
+**One flag is not optional on a modern compiler.** Through GCC 14, `int f();`
+meant "takes unspecified arguments" and XSkat's empty-parenthesis declarations
+matched their K&R definitions. GCC 15 defaults to `-std=gnu23`, where it means
+"takes nothing", and every function in `defs.h` collides with its own
+definition — forty copies of *number of arguments doesn't match prototype*.
+w64devkit ships a GCC new enough to do this. `-std=gnu89` is the answer, and
+the build script detects it rather than assuming it: it compiles the two-line
+program that has the problem and keeps the first dialect that builds it, so a
+compiler nobody here has tried gets the right answer rather than the one that
+suited the compiler that was.
+
 In order of least trouble on Windows:
 
 1. **[w64devkit](https://github.com/skeeto/w64devkit/releases)** — one zip, no
@@ -162,13 +173,13 @@ In order of least trouble on Windows:
    shell.
 3. **Cross-built from Linux**, which is how the first Windows binary was made:
    ```bash
-   CC=x86_64-w64-mingw32-gcc
-   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -Dmain=xskat_main_unused -c skat.c -o w_skat.o
-   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c null.c   -o w_null.o
-   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c ramsch.c -o w_ramsch.o
-   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c text.c   -o w_text.o
-   $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c skatklar_driver.c -o w_driver.o
-   $CC w_*.o -static -o skatklar-xskat.exe
+   CC="x86_64-w64-mingw32-gcc -std=gnu89 -O2 -w -DDEFAULT_LANGUAGE=\"english\""
+   $CC -Dmain=xskat_main_unused -c skat.c -o w_skat.o
+   $CC -c null.c   -o w_null.o
+   $CC -c ramsch.c -o w_ramsch.o
+   $CC -c text.c   -o w_text.o
+   $CC -c skatklar_driver.c -o w_driver.o
+   x86_64-w64-mingw32-gcc w_*.o -static -o skatklar-xskat.exe
    ```
    `-static` matters: without it the binary wants `libwinpthread-1.dll` beside
    it. With it, the only imports are `KERNEL32` and `msvcrt`.

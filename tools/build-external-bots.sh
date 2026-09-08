@@ -38,17 +38,50 @@ elif ! command -v cc >/dev/null 2>&1 && ! command -v gcc >/dev/null 2>&1; then
 else
     CC=${CC:-$(command -v cc || command -v gcc)}
     say "Building the XSkat helper with $CC"
+    # Which C dialect this compiler has to be told to speak.
+    #
+    # XSkat is K&R C throughout and declares its functions with empty
+    # parentheses. Through GCC 14 that meant "takes unspecified arguments" and
+    # everything matched; GCC 15 defaults to -std=gnu23, where it means "takes
+    # nothing", and every definition in the file collides with its own
+    # prototype -- "number of arguments doesn't match prototype", forty times.
+    # w64devkit ships a GCC new enough to do this, which is how it was found.
+    #
+    # Detected rather than hard-coded: compile the smallest program that has
+    # the problem and keep the first dialect that builds it. That way a
+    # compiler nobody here has tried gets the right answer instead of the
+    # answer that suited the one that was.
+    probe=$(mktemp -d 2>/dev/null || echo "${TMPDIR:-/tmp}/skatklar-probe.$$")
+    mkdir -p "$probe"
+    printf 'int f();\nint f(a) int a; { return a; }\n' > "$probe/knr.c"
+    CSTD=""
+    for candidate in "-std=gnu89" "-std=gnu89 -fpermissive" "-std=gnu17" ""; do
+        # shellcheck disable=SC2086 -- $candidate is deliberately word-split
+        if $CC $candidate -w -c "$probe/knr.c" -o "$probe/knr.o" 2>/dev/null; then
+            CSTD="$candidate"
+            break
+        fi
+    done
+    rm -rf "$probe"
+    # Not "${CSTD:-...}" with an apostrophe in the default: inside double
+    # quotes bash reads that apostrophe as opening a quote, and the script
+    # dies at end of file complaining about a line forty lines further down.
+    if [ -n "$CSTD" ]; then
+        say "  K&R dialect: $CSTD"
+    else
+        say "  K&R dialect: whatever this compiler does by default"
+    fi
     # skat.c is compiled unmodified; -Dmain= only moves its main() out of the
     # way so the driver can provide one. No X11: the driver replaces xio.c and
     # xdial.c, which are the only files that ever included it.
     ( cd "$xskat" \
       && cp "$root/external/xskat/skatklar_driver.c" . \
-      && $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -Dmain=xskat_main_unused \
+      && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -Dmain=xskat_main_unused \
              -c skat.c -o skatklar_skat.o \
-      && $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c null.c -o skatklar_null.o \
-      && $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c ramsch.c -o skatklar_ramsch.o \
-      && $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c text.c -o skatklar_text.o \
-      && $CC -O2 -w -DDEFAULT_LANGUAGE='"english"' -c skatklar_driver.c -o skatklar_driver.o \
+      && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -c null.c -o skatklar_null.o \
+      && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -c ramsch.c -o skatklar_ramsch.o \
+      && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -c text.c -o skatklar_text.o \
+      && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -c skatklar_driver.c -o skatklar_driver.o \
       && $CC skatklar_skat.o skatklar_null.o skatklar_ramsch.o skatklar_text.o \
              skatklar_driver.o -o skatklar-xskat ) \
       || { say "  XSkat helper failed to build."; status=1; }
