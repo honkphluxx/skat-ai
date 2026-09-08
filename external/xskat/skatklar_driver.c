@@ -514,8 +514,18 @@ int main(int argc, char *argv[])
     oldrules = 0;
     fastdeal = 1;
     for (i=0;i<3;i++) { strateg[i] = 0; hints[i] = 0; lang[i] = 0; alist[i] = 0; }
+#ifdef HAVE_SPWERT_TEXT
+    /*
+     * Only the mfrasca fork has this: it adds a human-readable game value and
+     * a buffer for it, which calc_result sprintf()s into unconditionally.
+     * Pristine 4.0 has neither the variable nor the printf, so the build
+     * script defines this only when skat.h declares it -- both sources build,
+     * and the one that needs the buffer gets it before anything can write to
+     * a null pointer.
+     */
     spwert_text = malloc(256);
     if (spwert_text) spwert_text[0] = 0;
+#endif
     init_text();
     setrnd(&seed[0], savseed = 1);
     setrnd(&seed[1], seed[0]);

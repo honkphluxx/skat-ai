@@ -444,11 +444,16 @@ XSkat is told the skat, which as a hand-game declarer it should not know -- and
 Two things about the instrument are worth keeping. It has to leave the game it
 runs inside untouched, and `make_best` writes to six globals while choosing, so
 "probed match and unprobed match print the same number" is the acceptance test
-rather than a nicety. And both engines print commentary to stdout in the middle
-of a reply -- XSkat the game value, go-skat its grand evaluation -- which put
-the pipe one reply out of step and shows up as nothing but a weaker player.
-Sequence numbers on every reply are what caught it; the fix is a duplicate of
-fd 1 for the protocol and the null device for the engine.
+rather than a nicety. And an engine that prints commentary to stdout in the
+middle of a reply -- go-skat its grand evaluation, and the mfrasca fork of
+XSkat its game value -- puts the pipe one reply out of step and shows up as
+nothing but a weaker player. Sequence numbers on every reply are what caught
+it; the fix is a duplicate of fd 1 for the protocol and the null device for the
+engine.
+
+These numbers were taken on the mfrasca fork and hold for pristine 4.0: the
+same match produces byte-identical reports from both builds, which is the only
+way that claim is worth making. See [`external-bots.md`](external-bots.md).
 
 ## Sources
 

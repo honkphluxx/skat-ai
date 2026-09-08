@@ -93,8 +93,13 @@ a sequence number and every reply repeats it: a pipe one reply out of step is
 otherwise invisible — the helper keeps answering, the answers are just all one
 command late, and the only symptom is a player that measures weaker than it is.
 That happened during development, twice, both times because the engine printed
-its own commentary to stdout. Both drivers now keep the protocol on a duplicate
-of fd 1 and point the engine's stdout at the null device.
+its own commentary to stdout: go-skat its grand evaluation, and the mfrasca
+fork of XSkat its game value. Pristine XSkat prints nothing on this path — its
+one `printf` is the auto-mode score line, which the driver never reaches — so
+for that source the separation is insurance. Both drivers keep the protocol on
+a duplicate of fd 1 and point the engine's stdout at the null device anyway,
+because "this build happens not to print" is not a property worth depending
+on.
 
 Cards are two characters: suit `C S H D`, rank `A T K Q J 9 8 7`. Seats are
 `0 1 2`, matching `SkatAi.Seat` ordinals. Contracts are `C S H D` for the suit
@@ -134,10 +139,21 @@ that are not going anywhere:
   released it: `http://deb.debian.org/debian/pool/main/x/xskat/xskat_4.0.orig.tar.gz`
   (Debian 13 still ships `xskat 4.0-9`; `snapshot.debian.org` has every older
   one). Unpack it straight into `third_party/xskat`.
-- **`github.com/mfrasca/xskat`**, which is what this project was developed
-  against. It is a *renamed modified version* in the sense clause 2.b of the
-  licence means — its version string reads `4.0.mfrasca` — and the only change
-  is that string. Functionally identical for our purposes.
+- **`github.com/mfrasca/xskat`**, which is what this project was first
+  developed against. It is a *renamed modified version* in the sense clause 2.b
+  of the licence means, and it changes more than the version string: it adds a
+  formatted, human-readable game value (`spwert_text`), three text entries for
+  it, and a `printf` of it at the end of `calc_result`.
+
+**The two are the same player**, and that is measured rather than assumed: the
+same match against `greedy` — 40 boards, seed 1 — produces byte-identical
+reports from both, down to the declarer win rate and the confidence interval.
+The fork's arithmetic for `spwert` is a refactor of the same increments; only
+the explanation string is new. So every number in these docs stands whichever
+source you build, and the build script supports both — it asks `skat.h` whether
+`spwert_text` is declared and defines `HAVE_SPWERT_TEXT` when it is, because
+`calc_result` writes into that buffer unconditionally and the driver has to
+allocate it before anything can reach a null pointer.
 
 go-skat is `git clone https://github.com/dranidis/go-skat third_party/go-skat`.
 Its build fetches two dependencies from the Go module proxy, so it wants a

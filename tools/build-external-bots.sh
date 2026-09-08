@@ -71,6 +71,17 @@ else
     else
         say "  K&R dialect: whatever this compiler does by default"
     fi
+    # Which XSkat this is. The mfrasca fork adds a formatted game value and a
+    # buffer for it that calc_result writes into unconditionally; pristine 4.0
+    # has neither. Asking the header is better than asking the version string,
+    # because it is the declaration the driver actually needs.
+    CDEFS=""
+    if grep -q "spwert_text" "$xskat/skat.h" 2>/dev/null; then
+        CDEFS="-DHAVE_SPWERT_TEXT"
+        say "  source: the mfrasca fork (has spwert_text)"
+    else
+        say "  source: pristine 4.0"
+    fi
     # skat.c is compiled unmodified; -Dmain= only moves its main() out of the
     # way so the driver can provide one. No X11: the driver replaces xio.c and
     # xdial.c, which are the only files that ever included it.
@@ -81,7 +92,7 @@ else
       && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -c null.c -o skatklar_null.o \
       && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -c ramsch.c -o skatklar_ramsch.o \
       && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -c text.c -o skatklar_text.o \
-      && $CC $CSTD -O2 -w -DDEFAULT_LANGUAGE='"english"' -c skatklar_driver.c -o skatklar_driver.o \
+      && $CC $CSTD $CDEFS -O2 -w -DDEFAULT_LANGUAGE='"english"' -c skatklar_driver.c -o skatklar_driver.o \
       && $CC skatklar_skat.o skatklar_null.o skatklar_ramsch.o skatklar_text.o \
              skatklar_driver.o -o skatklar-xskat ) \
       || { say "  XSkat helper failed to build."; status=1; }
