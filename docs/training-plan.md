@@ -263,6 +263,18 @@ moves.
    defence punishes Null far harder than a trump game**: beating a Null needs
    one forcing line and a defender who sees everything always finds it.
 
+   **One correction to the numbers above, 2026-09-09.** The audit's 0.45% is an
+   **upper bound**, not an estimate. Its auction model asks every seat as though
+   it opened, and an opening seat carries a Ramsch discount (`ramschRisk` is
+   zero once `currentBid > 0`) that a holding seat does not — correctly, since a
+   Ramsch needs all three to pass. So marginal hands look biddable to the model
+   that would not be to the real auction, which is why the arena declared no
+   Null at all across 51 reports while the model said 0.45%. The bidder is
+   right; the model of it was wrong, and the report now prints the caveat. None
+   of the conclusions move: the ceiling was cleared against these same inflated
+   ceilings, and the arithmetic finding is per seat and never touches the
+   auction model.
+
    **The question is now "are we right to decline", and the arena answers it.**
    The contract table prints declared *and won*, so one oracle-contract run says
    whether we make the Nulls we are handed. Make most of them and the repair is

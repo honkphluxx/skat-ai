@@ -55,9 +55,29 @@ import java.util.concurrent.Future;
  * <p>The auction here is modelled rather than played, because playing it needs a
  * whole engine per board to answer a question about one number. The model is the
  * ladder rule: the highest ceiling wins, and a tie goes to whoever was holding —
- * forehand over middlehand, and the survivor of those two over rearhand. That is
- * exact for players whose bidding is a ceiling, which is what every player here
- * has; a player that bid adaptively would need the real auction.
+ * forehand over middlehand, and the survivor of those two over rearhand.
+ *
+ * <p><b>That model over-declares, and by a known mechanism.</b> An earlier
+ * version of this comment claimed it was exact "for a player whose bidding is a
+ * ceiling, which is what every player here has". That is false.
+ * {@code SearchAiProvider.bid} weighs declaring against the Ramsch it would
+ * otherwise sit in — and {@code ramschRisk} returns zero the moment
+ * {@code currentBid > 0}. So a seat opening at 18 may bid a hand whose expected
+ * value is negative, because a Ramsch is worse, while the same seat <em>holding
+ * against</em> 18 has no such discount and needs a positive expectation
+ * outright. The ceiling is therefore not one number: it depends on whether the
+ * seat opened or answered.
+ *
+ * <p>That zero is correct Skat, not a bug: a Ramsch happens only when all three
+ * seats pass, so once anyone has bid there is no Ramsch left to discount
+ * against. The fault is here. This model asks every seat as though it opened,
+ * so every marginal hand looks biddable and the "declared" line below is an
+ * upper bound. It reads about 0.45% Null where the arena's real auction
+ * produced none at all across 51 reports.
+ *
+ * <p>That bias does not touch what the tool was built to settle. Being outbid
+ * is measured against the same inflated ceilings, so if anything the ceiling
+ * looks <em>more</em> guilty here than it is, and it was cleared anyway.
  *
  * <pre>
  *   ./gradlew :arena:nullAudit --args="--player=belief-32 --boards=2000 --threads=8"
@@ -467,7 +487,9 @@ public final class NullAuditMain {
         intentions.forEach((name, count) -> System.out.printf(Locale.ROOT,
                 "  %-18s %6d  %6.2f%%%n", name, count, 100.0 * count / seats));
         System.out.println();
-        System.out.println("What the modelled auction declared");
+        System.out.println("What the modelled auction declared -- an UPPER BOUND: every");
+        System.out.println("seat is asked as though it opened, and opening carries a Ramsch");
+        System.out.println("discount that holding does not. See the class comment.");
         System.out.printf(Locale.ROOT, "  %-18s %6d  %6.2f%%%n",
                 "(passed in)", passedIn, 100.0 * passedIn / boards);
         declared.forEach((name, count) -> System.out.printf(Locale.ROOT,

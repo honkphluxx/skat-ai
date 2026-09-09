@@ -1609,3 +1609,52 @@ modelling a game nobody here plays, so the audit now does the exchange
 unconditionally and reports what the seat asked for separately. It also means
 the Null Hand and Null Ouvert announcements are doubly moot: not merely
 unreachable in the auction, but unplayable in this engine.
+
+### 2026-09-09, fourth: the audit's own auction over-declares, and I said the opposite
+
+The re-run with the twelve closed the skat question properly — **9 of 9 hands
+that intended Null still announced Null after the exchange**, so the skat is not
+where Nulls die. That left one number unexplained: the audit's modelled auction
+declares Null on **0.45%** of boards while the arena's real auction produced
+**zero across 51 reports**. Not a large gap in absolute terms, but the two
+should agree, and they do not.
+
+The cause is in the audit, not in the bidder and not in Null. It starts here,
+in `SearchAiProvider`:
+
+```java
+public static double ramschRisk(int currentBid, int opponentsOut) {
+    if (currentBid > 0) return 0;
+    ...
+}
+```
+
+Bidding weighs the contract against the Ramsch the seat would otherwise sit in —
+but that discount **vanishes the moment anyone has bid**. So a seat *opening* at
+18 may take a hand whose own expected value is negative, because Ramsch is
+worse; the same seat *holding against* 18 gets no discount and needs a positive
+expectation outright. **The ceiling is not one number** — it depends on whether
+the seat opened or answered.
+
+**And that zero is correct Skat.** A Ramsch happens only when all three seats
+pass; once anyone has bid, passing hands the game to that bidder and no Ramsch
+follows. So there is nothing to repair in `ramschRisk` — the discount belongs to
+the opening seat and to no one else. The bidder is right; the audit's model of
+it was wrong.
+
+The audit's ladder model asks every seat as though it opened. So every marginal
+hand looks biddable, and the declared line is an **upper bound**, not an
+estimate. The class comment previously asserted the opposite in as many words:
+*"That is exact for players whose bidding is a ceiling, which is what every
+player here has."* That claim was mine and it was wrong; it is now replaced with
+the mechanism above, and the report prints the caveat next to the number.
+
+**What this does not change:** the ceiling refutation stands. Being outbid is
+measured against the same inflated ceilings, so the ceiling looks *more* guilty
+in this model than it is — and it was cleared anyway. The arithmetic finding
+(max P(null) 0.34 against a 0.67 threshold) is computed per seat and never
+touches the auction model at all.
+
+**Still outstanding, and unchanged:** the oracle-contract run against `4ae717e`,
+which prints declared *and* won per contract. That is the measurement that says
+whether declining these Nulls is timidity or judgement.
