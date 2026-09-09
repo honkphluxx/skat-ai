@@ -182,9 +182,23 @@ does the same thing with `RamschPolicy`, so `jskat-new` was affected too and
 its auction-mode matches now run void as well.
 
 Unit-verified at six seeds: every Ramsch becomes exactly one passed-in board,
-the ramsch count goes to zero and the game count is unchanged. **The gate
-above still has to be run on the machine** -- what is checked so far is the
-identity, not a match against a real outsider.
+the ramsch count goes to zero and the game count is unchanged.
+
+**GATE PASSED 2026-09-09**, xskat - greedy, 100 boards, seed 11:
+```
+ramsch 0.00% / 0.00%   passed in 12.67% / 14.33%
+External bots: 776 games, 0 delegated (0.00%), 0 rule divergences
+```
+Two bugs were found on the way and are worth reading before Phase A, both in
+[`../arena/README.md`](../arena/README.md): a passed-in board was paying every
+seat a 40-point defender bonus, and the delegation counter was counting the
+decision to delegate rather than the stand-in ever playing.
+
+**Phase A is blocked on one decision, not on code.** The bidder weighs
+declaring against the Ramsch that passing buys -- but in void mode passing buys
+nothing, so under `--passed-in=void` it discounts against a penalty the mode
+has removed. Three ways out are set out at the end of the README; the choice
+changes what the sweep measures.
 
 ### Phase B2 — belief v2 (the week that matters)
 

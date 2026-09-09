@@ -1897,3 +1897,64 @@ bidder is now rewarded for selectivity more than before. That is the official
 game and not a bug — but it means the Phase A threshold sweep is being run in
 the mode that most favours declining, which is worth remembering when reading
 what the sweep says the threshold should be.
+
+### 2026-09-09, eighth: Phase V gate passed, and what it means for Phase A
+
+```
+ramsch                        0.00%        0.00%
+passed in                    12.67%       14.33%
+External bots: 776 games, 0 delegated (0.00%), 0 rule divergences
+```
+
+**Gate passed.** And the two counts reconcile exactly: the false alarm said 900
+games and 124 delegated, this says 776 played and 0 delegated, and 900 - 124 =
+776. Those 124 are the seat-games that were voided before a card was played --
+the same number seen from both sides of the fix, which is a better check than
+either number alone.
+
+**Now the thing Phase A has to answer first.** The bidder decides by
+
+```java
+double declaring = declaringIsWorth(maxBid, intendedChance);
+double passing   = ramschRisk(request.currentBid, opponentsOut) * ramschValue;
+return declaring > passing ? request.requestedBid : 0;
+```
+
+with `declaringIsWorth(v, c) = v*c - 2*v*(1-c)*lossWeight` and
+`lossWeight = 1.5 - aggression`. At the reference aggression of 0.5 the loss
+weight is exactly 1.0, so the break-even chance is **2/3** -- which is not a
+taste, it is the score sheet: a lost game is charged at twice its value, so
+c = 2(1-c) is the arithmetic of the game itself. **The reference bidder is
+already calibrated correctly.** That is the same 0.667 the Null thread ran into
+three entries ago, and for the same reason.
+
+So the sweep is not really about risk appetite. If a threshold above the
+arithmetic one wins, what it is correcting is a **biased estimate of `chance`**,
+not a wrong threshold -- and the Null measurement is direct evidence of exactly
+that bias: 0.34 estimated against 0.65 achieved. Phase A should be read as
+measuring how pessimistic `makeChance` is, and a win for a bolder dial is a
+reason to go and fix the estimator, not to ship the dial.
+
+**And a mode mismatch that has to be decided before the sweep runs.** `passing`
+prices the Ramsch that passing buys. **In void-board mode passing buys nothing
+-- the board scores zero.** So under `--passed-in=void` the bidder is
+discounting against a penalty the mode has removed, and declares more at the
+margin than the mode rewards. That is the same species of error as the
+delegation this phase was built to remove: a player calibrated for a game it is
+not being scored in. It is not wrong for the app, which ships the canon and
+should keep the discount. It is wrong for the measurement.
+
+Three ways out, and the choice belongs to whoever runs the sweep:
+
+1. **Tell the bidder which game it is in** -- a rule-variant flag reaching
+   `SearchAiProvider`, `ramschValue = 0` in void mode. Correct, and the only one
+   that makes a void-mode auction number mean what it says. Costs plumbing
+   through the provider boundary.
+2. **Sweep in canon mode against our own players, void only against outsiders.**
+   The dial is then measured in the game the app plays, and the outsider runs
+   stay honest about who played them. Cheapest, and the two numbers answer
+   different questions.
+3. **Accept the bias and note it.** The discount is a constant offset in one
+   direction, so a sweep still orders the dials correctly even if every one of
+   them declares slightly too much. Cheapest of all, and the one that leaves a
+   footnote for someone to trip over later.
