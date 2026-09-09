@@ -2037,3 +2037,85 @@ place.
 **None of this is measured yet at a size worth acting on.** 120 hands, from a
 2-core container, with `search` rather than `belief-32`. The run that decides it
 is `--player=belief-32 --boards=600` on the machine.
+
+### 2026-09-09, tenth: the real run, and a retraction
+
+`belief-32`, 600 boards, 1,800 hands, 1,777 s -- with the native solver loading
+correctly (`skatsolve-1-windows-x86-64-76495f2719eb391c.dll`, the
+content-addressed name from this morning's fix, doing its job).
+
+**First, the retraction.** The previous entry led with a container run of 120
+hands saying the bidder throws away its best marginal bucket, worth 1.28 game
+points a hand. **It does not replicate.** At 1,800 hands the level-0.667 bucket
+wins **61.9%**, below the 66.7% break-even, so refusing it is correct and adding
+it *costs* **0.72 points a hand**. The 120-hand result was noise in a bucket of
+nine hands, and it was published with a number attached.
+
+**And the pessimism hypothesis did not survive either.**
+
+```
+predicted   hands   actual      gap          contract  hands  predicted  actual     gap
+    0.000     555    0.155   +0.155          Diamonds    291      0.430   0.481   +0.052
+    0.167     280    0.293   +0.126          Hearts      293      0.432   0.522   +0.090
+    0.333     261    0.414   +0.080          Spades      285      0.495   0.491   -0.004
+    0.500     212    0.533   +0.033          Clubs       255      0.608   0.600   -0.008
+    0.667     168    0.619   -0.048          Grand        66      0.939   0.879   -0.061
+    0.833     148    0.784   -0.050          Null        610      0.067   0.200   +0.133
+    1.000     176    0.892   -0.108
+```
+
+`HandEvaluator` predicts a *uniform* upward gap: a defence model that is too
+harsh moves every bucket the same way. What the data shows is **positive at the
+bottom and negative at the top**, which is the signature of a six-sample
+estimate regressing to the mean. **41% of hands land on 0.000 or 1.000**,
+because six worlds saturate easily, and conditioning on a saturated count bends
+both ends inward. The double-dummy pessimism is presumably still in there; it is
+simply not the largest error.
+
+**The conclusion that matters, and it is sharper than the one the tool was built
+to find.** Apply the measured map -- each level to what it was actually worth --
+and re-test against break-even:
+
+| level | actual | calibrated verdict | today's verdict |
+| --- | --- | --- | --- |
+| 0.500 | 0.533 | refuse | refuse |
+| 0.667 | 0.619 | refuse | refuse |
+| 0.833 | 0.784 | **declare** | **declare** |
+| 1.000 | 0.892 | **declare** | **declare** |
+
+**Identical. Monotone recalibration cannot change a single bid.** It reorders
+nothing, and the cut falls between the same two representable levels either way.
+With a quantised estimate, calibration is a no-op for the decision -- it would
+sharpen what the number *means* without changing what the player *does*. That
+removes the calibration repair as a way to move the auction.
+
+**So resolution is the only lever left**, and the cut sits at a real optimum with
+steep walls on both sides:
+
+```
+adding level 0.833 (148 hands):  +0.99 points/hand
+adding level 0.667 (168 hands):  -0.72 points/hand
+```
+
+The ideal cut is somewhere *inside* that gap. The 0.667 bucket wins 61.9%
+overall, so it holds hands above break-even mixed with hands below and six
+worlds cannot tell them apart. **Raising the bidding world cap is the one change
+that could.** `SearchAiProvider.biddingWorlds()` is `clamp(worlds/3, 2, 6)`; the
+cap bounds bidding time on a phone and has never been measured against what the
+rounding costs it.
+
+**The run that decides Phase A:**
+
+```
+./gradlew :arena:calibration --args="--player=belief-32 --boards=300 --bidding-worlds=24 --threads=8"
+```
+
+If the best cut at 24 worlds pays meaningfully more than **3.76** points a hand,
+the cap is costing us and the repair is the cap. If it pays the same, the
+auction gap is not in the estimator at all and Phase A should look elsewhere.
+
+**One thing the run confirms independently.** Null is intended on 610 of 1,800
+hands -- a third of them, because on a weak hand every trump game prices worse
+-- and made **20.0%** of the time against a predicted 6.7%. Three times the
+estimate, and still nowhere near the 66.7% it would need. The Null thread stays
+closed, now on a second and much larger sample than the one that closed it.

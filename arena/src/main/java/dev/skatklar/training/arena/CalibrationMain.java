@@ -37,10 +37,20 @@ import java.util.concurrent.Future;
  * double-dummy probability has been going straight into a real-payoff
  * comparison. This is the arena doing the converting.
  *
- * <p>The Null thread already measured one point on that curve the hard way: the
- * bidder scored those hands at most 0.34 while the same hands, played out, were
- * made 65% of the time. If that gap holds across contracts, the bidder is not
- * timid — it is reading a pessimistic instrument against an honest ruler.
+ * <p><b>Measured, and the pessimism hypothesis did not survive it.</b> Over
+ * 1,800 hands the gap is positive at the bottom and <em>negative</em> at the
+ * top: 0.000 predicted is made 15.5% of the time, 1.000 predicted is made 89.2%
+ * of the time. That is not a defence model that is too harsh, which would move
+ * every bucket the same way. It is a six-sample estimate regressing to the mean
+ * -- 41% of hands land on 0.000 or 1.000, because six worlds saturate easily,
+ * and conditioning on a saturated count is what bends both ends inward.
+ *
+ * <p>Which leaves a sharper conclusion than the one this tool was built to
+ * find. <b>Monotone recalibration cannot change a single decision here.</b> Map
+ * each level to what it was worth and re-test against break-even and the
+ * declared set is identical, because the cut falls between the same two
+ * representable levels either way. With a quantised estimate, calibration is a
+ * no-op for the bid; only resolution is a lever.
  *
  * <p>Method, per seat per board: ask the evaluator for the contract this hand
  * would intend and what it thinks the chance is, then <b>play the board at that
