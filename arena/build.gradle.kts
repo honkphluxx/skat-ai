@@ -107,6 +107,22 @@ tasks.register<JavaExec>("play") {
     forwardProperties()
 }
 
+/**
+ * Why a player that can declare Null never does, and what lifting the 23-point
+ * ceiling could buy. See NullAuditMain; the finding it exists for is in
+ * arena/README.md under 2026-09-09.
+ *
+ * ./gradlew :arena:nullAudit --args="--player=belief-32 --boards=2000 --threads=8"
+ */
+tasks.register<JavaExec>("nullAudit") {
+    group = "verification"
+    description = "Asks every seat how high it would bid and what it would announce"
+    mainClass.set("dev.skatklar.training.arena.NullAuditMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:export --args="--boards=50000 --threads=4" */
 tasks.register<JavaExec>("export") {
     group = "verification"

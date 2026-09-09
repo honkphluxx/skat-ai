@@ -202,9 +202,20 @@ moves.
 
 ### Phase A — the auction *(now before Phase D)*
 
-1. **Count first, fix second.** Instrument the seats whose `intended` is Null
-   and that then lose the auction. If that is roughly the oracle's 3%, the
-   23-point cap is the whole story and the rest of this phase is arithmetic.
+1. **Count first, fix second.** `./gradlew :arena:nullAudit
+   --args="--player=belief-32 --boards=2000 --threads=8"` asks every seat how
+   high it will go and what it would announce, settles the auction between the
+   three, and reports how often Null is intended, how often it survives, what
+   beat it, and — as an explicit upper bound — how many would have survived at
+   35, 46 or 59. Add `--oracle` on a few hundred boards for the rate a bidder
+   could approach.
+
+   **It answers two different questions and they lead different ways.** If Null
+   is intended at roughly the oracle's 3% and never survives, the 23-point cap
+   is the whole story and step 2 is arithmetic. If almost nothing intends Null
+   at all, the ceiling is innocent and the fault is upstream — in
+   `HandEvaluator.makeChance` or in which contracts `SearchAiProvider.candidates`
+   offers — and step 2 would have been the wrong fix.
 2. **The Null variants.** `nullValue(hand, ouvert)` already exists in
    `SkatRules`; the bidder asks only for `nullValue(false, false)`. Offer 35,
    46 and 59 where the make chance supports them, so a Null hand can survive a
