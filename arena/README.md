@@ -1799,3 +1799,21 @@ never passes out.
 
 The report prints a `passed in` row always, reading 0.00% in canon mode, so two
 reports stay diffable.
+
+**And the test caught a real bug in the first version, which I had shipped.**
+`Scoring.tournamentPoints` ends with `return outcome.declarerWon() ? 0 :
+DEFENDER_BONUS` -- correct for a real game, and wrong the moment there is no
+declarer, because "the declarer did not win" is trivially true when nobody
+declared. **Every seat at a board nobody played was collecting a 40-point
+defender bonus, three times a board.** Precisely the failure the test's own
+comment predicted; both scoring methods now return 0 on a passed-in board
+before anything else.
+
+It was found late, and the reason is worth recording. The cloud container this
+work was written in cannot reach Maven Central, so the tests were type-checked
+against a hand-written stand-in for JUnit's `Assert` -- whose methods returned
+void and did nothing. Every test "passed" locally while one of them was failing
+for real, and the bug surfaced only on the machine that has JUnit. The stub now
+throws, and there is a reflective runner beside it that executes the `@Test`
+methods without JUnit on the classpath; all 20 pass there now. A stub that
+cannot fail is not a weaker test, it is the absence of one wearing its clothes.

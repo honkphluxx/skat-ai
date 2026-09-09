@@ -30,6 +30,9 @@ public final class Scoring {
     /**
      * Seeger-Fabian tournament points for one seat in one game.
      *
+     * <p>A board that was passed in scores nobody anything: no cards were
+     * played, so there is nothing to pay and nobody to pay it to.
+     *
      * <p>A Ramsch has no Seeger-Fabian value -- no declarer to bonus, no
      * defenders to reward -- so its card points are carried through as they
      * stand. That is a stitch between two scoring systems, and it is visible on
@@ -37,6 +40,12 @@ public final class Scoring {
      * this arena's headline metric follows it, the stitch goes away with it.
      */
     public static int tournamentPoints(GameOutcome outcome, SkatAi.Seat seat) {
+        // First, and not merely for tidiness. A passed-in board has no declarer,
+        // so without this it falls through to the defender branch below -- and
+        // that branch pays 40 whenever the declarer did not win, which is
+        // trivially true when there is no declarer. Every seat at a board
+        // nobody played would collect a defender bonus, three times a board.
+        if (outcome.passedIn()) return 0;
         if (outcome.ramsch()) return outcome.isScored(seat) ? outcome.gameValue() : 0;
         if (outcome.isDeclarer(seat)) {
             return outcome.gameValue() + (outcome.declarerWon() ? DECLARER_BONUS : -DECLARER_BONUS);
@@ -50,6 +59,11 @@ public final class Scoring {
      * actually plays for.
      */
     public static int gamePoints(GameOutcome outcome, SkatAi.Seat seat) {
+        // Already 0 by the declarer test below, since there is no declarer.
+        // Stated anyway: the two methods are read side by side, and a reader
+        // who finds the guard in one and not the other has to work out whether
+        // that is a decision or an oversight.
+        if (outcome.passedIn()) return 0;
         if (outcome.ramsch()) return outcome.isScored(seat) ? outcome.gameValue() : 0;
         return outcome.isDeclarer(seat) ? outcome.gameValue() : 0;
     }
