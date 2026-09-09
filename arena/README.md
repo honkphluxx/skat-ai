@@ -1843,6 +1843,33 @@ External bots: 600 games, 0 delegated (0.00%), 0 rule divergences
 and a sentence naming the cause and the cure when the count is not zero. A gate
 whose evidence prints only in a mode nobody runs is not a gate.
 
+**And on its first honest run it said the opposite of the truth.**
+
+
+
+A delegation rate of 13.78% in a match whose Ramsch rate is 0.00% is a
+contradiction on its face, and read at speed it says the void mode does not
+work. It does.  arrives from inside the engine's
+, which runs the auction *and* opens trick play in one call --
+so in void mode the seat is told a Ramsch has begun a moment before the arena
+voids the board, and **not one card is played by the stand-in.** The counter
+was counting the decision to delegate, at a point where the decision had no
+consequence.
+
+Both counters now increment at the **first card** instead: games the seat
+actually played, and of those, the ones the stand-in answered for -- once per
+game however many cards it plays. That is what the label always claimed. The
+alternative, moving the void check before , would mean teaching the
+engine a rule the app does not play, which is the thing this arena exists not
+to do.
+
+Two smaller things from the same three lines.  -- the comma is a German
+locale, and every other number this arena prints goes through 
+precisely so two logs stay diffable; this line and the honesty control above it
+had both missed it, the latter simply never having been read on such a machine.
+And  for a 600-game match is right, not a bug: a seat is counted, and
+XSkat sits in nine of the eighteen seats a board is played from.
+
 **What the delegation was worth, same pair and same seed.** The canon run is
 300 boards and the void run 100, so this is indicative rather than paired:
 

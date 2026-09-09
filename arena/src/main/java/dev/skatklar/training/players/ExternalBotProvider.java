@@ -83,7 +83,13 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
             long games = GAMES.get();
             if (games > 0) {
                 long delegated = FALLBACKS.get();
-                System.out.printf("%nExternal bots: %,d games, %,d delegated (%.2f%%),"
+                // Locale.ROOT, like every other number this arena prints: the
+                // first run of this line reported "13,78%" on a German machine,
+                // which is unusable in a diff between two logs and ambiguous to
+                // anyone reading one. The honesty control below had the same
+                // omission and had simply never been read on such a machine.
+                System.out.printf(java.util.Locale.ROOT,
+                        "%nExternal bots: %,d games, %,d delegated (%.2f%%),"
                         + " %d rule divergences%n",
                         games, delegated, 100.0 * delegated / games, DIVERGENCES.get());
                 if (delegated > 0) {
@@ -95,7 +101,8 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
             long decisions = PROBE_DECISIONS.get();
             if (decisions == 0) return;
             long mismatches = PROBE_MISMATCHES.get();
-            System.out.printf("%nHonesty control: %d of %d decisions changed under "
+            System.out.printf(java.util.Locale.ROOT,
+                    "%nHonesty control: %d of %d decisions changed under "
                     + "reshuffles of the cards the seat cannot see (%.2f%%)"
                     + "%n  as declarer %d, as defender %d, by trick %s%n",
                     mismatches, decisions, 100.0 * mismatches / decisions,
@@ -215,6 +222,24 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
         private boolean chosenHand;
         /** True once this deal is the delegate's: a Ramsch, or a helper we could not use. */
         private boolean delegated;
+        /**
+         * Whether this seat has played a card in this game, and whether the
+         * stand-in was the one that played it.
+         *
+         * <p>Both are counted at the first card rather than when the game
+         * starts, and the reason is a false alarm this counter raised on its
+         * first honest run. {@code startGame} arrives from inside the engine's
+         * {@code restartWithDeal}, which runs the auction and opens trick play
+         * in one call -- so in {@code --passed-in=void} mode the seat is told a
+         * Ramsch has begun a moment before the arena voids the board and no
+         * card is ever played. Counting the delegation there reported 124
+         * delegated games in a run whose Ramsch rate was 0.00%, which is a
+         * contradiction on its face and would have been read as the mode not
+         * working. Counting at the first card makes the number mean what its
+         * label says: games the stand-in actually played.
+         */
+        private boolean gameCounted;
+        private boolean fallbackCounted;
 
         private ExternalBot bot() {
             if (bot == null) bot = ExternalBot.borrow(command);
@@ -231,6 +256,8 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
             forehand = round.forehand.ordinal();
             maxBid = -1;
             delegated = false;
+            gameCounted = false;
+            fallbackCounted = false;
             long dealSeed = seed * 1_000_003L + round.roundNumber * 31L;
             bot().ask("SEED " + Math.floorMod(dealSeed, 2_000_000_000L));
             if (probeWorlds > 1) bot().ask("PROBE " + probeWorlds);
@@ -301,11 +328,9 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
         @Override public void startGame(SkatAi.GameStartContext context) {
             blind.startGame(context);
             if (mySeat == null) begin(context.mySeat, context.round);
-            GAMES.incrementAndGet();
             SkatAi.GameDefinition game = context.game;
             if (game.isRamsch() || engine == null) {
                 delegated = true;
-                FALLBACKS.incrementAndGet();
                 return;
             }
             GameEngine.Snapshot snapshot = engine.snapshot();
@@ -324,7 +349,6 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
             }
             if (delegated || snapshot.skat.size() != 2) {
                 delegated = true;
-                FALLBACKS.incrementAndGet();
                 return;
             }
             line.append(' ').append(cards(snapshot.skat));
@@ -332,15 +356,21 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
         }
 
         @Override public Card chooseCard(SkatAi.DecisionContext context) {
-            if (delegated) return blind.chooseCard(context);
+            if (!gameCounted) { gameCounted = true; GAMES.incrementAndGet(); }
+            if (delegated) return standIn(context);
             String reply = bot().ask("PLAY");
             Card card = reply.startsWith("CARD ") ? decode(reply.substring(5).trim()) : null;
             if (card == null || !context.legalCards.contains(card)) {
-                FALLBACKS.incrementAndGet();
                 delegated = true;          // its game state and ours have parted company
-                return blind.chooseCard(context);
+                return standIn(context);
             }
             return card;
+        }
+
+        /** The stand-in's card, counted once per game however many it plays. */
+        private Card standIn(SkatAi.DecisionContext context) {
+            if (!fallbackCounted) { fallbackCounted = true; FALLBACKS.incrementAndGet(); }
+            return blind.chooseCard(context);
         }
 
         @Override public void cardPlayed(SkatAi.CardPlayedEvent event) {
