@@ -1579,3 +1579,33 @@ One small gap left in the tool: the single Null intent that won its auction came
 back as `(not asked)` after the skat, which is `followSkat` swallowing an
 exception rather than reporting it. One sample decides nothing, but the tool
 should not lose the answer it was built to fetch.
+
+### 2026-09-09, third: the swallowed answer was the tool's own bug, twice over
+
+The `(not asked)` in the previous entry was `followSkat` catching an exception
+and dropping it. Fixing that meant first knowing what threw, and the obvious
+suspect was wrong.
+
+The suspicion was call order: the tool read a seat's intent by calling
+`announceContract`, then asked `pickUpSkat` and announced again, which is not a
+sequence `GameEngine` ever puts to a player. Plausible, and false. Both orders
+were run against a hand that announces Null and **both threw identically** —
+`IndexOutOfBoundsException: toIndex = 12`. The fault was that
+`SkatExchangeContext.hand` must carry the **twelve**, hand plus skat, which is
+what the engine passes and what `Discards.buried` indexes. The tool passed the
+ten. Guessing the cause and shipping the reordering would have left the bug in
+place and lost the answer a second time.
+
+With the twelve, the same Null hand picks the skat up, buries the Ace and King
+it was handed, and **still announces Null**. So the skat step is not obviously
+where Nulls die, and that thread is thinner than it looked — one hand is not a
+measurement, but it is enough to stop the search there.
+
+**Two facts about the engine came out of it, and the second is worth keeping.**
+`GameEngine` calls `pickUpSkat`, throws the answer away and picks up regardless:
+*"The demo variant excludes hand games."* So in the arena **no player ever plays
+a hand game**, whatever it asks for. A tool that honoured the request would be
+modelling a game nobody here plays, so the audit now does the exchange
+unconditionally and reports what the seat asked for separately. It also means
+the Null Hand and Null Ouvert announcements are doubly moot: not merely
+unreachable in the auction, but unplayable in this engine.

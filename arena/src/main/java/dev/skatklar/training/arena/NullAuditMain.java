@@ -77,6 +77,7 @@ public final class NullAuditMain {
      */
     private record Opinion(int ceiling, SkatAi.ContractType intends,
                            SkatAi.ContractType afterSkat, boolean tookSkat,
+                           String skatNote,
                            double nullChance, Contract rival, double rivalChance,
                            int rivalValue) {}
 
@@ -166,9 +167,9 @@ public final class NullAuditMain {
                 // when Null was on the table: that is the step the model cannot
                 // see and the real matches apparently lose the contract at.
                 if (winner >= 0 && opinions.get(winner).intends() == SkatAi.ContractType.NULL) {
-                    opinions.set(winner, followSkat(sessions.get(winner), board,
+                    opinions.set(winner, followSkat(contestant, board,
                             SkatAi.Seat.values()[winner], hands.get(winner),
-                            opinions.get(winner), winningBid));
+                            opinions.get(winner), winningBid, seed));
                 }
                 Contract oracle = null;
                 if (oracleSource != null) {
@@ -204,31 +205,95 @@ public final class NullAuditMain {
      * dealt ten, wins, picks up two cards that are probably high, and gets to
      * change its mind.
      */
-    private static Opinion followSkat(SkatAiSession session, Board board, SkatAi.Seat seat,
-                                      List<Card> hand, Opinion opinion, int winningBid) {
-        try {
-            boolean takes = session.pickUpSkat(
-                    new SkatAi.SkatChoiceContext(board.round(), seat, winningBid));
-            LinkedHashSet<Card> remaining = new LinkedHashSet<>(hand);
-            if (takes) {
-                List<Card> skat = board.deal().skat;
-                LinkedHashSet<Card> twelve = new LinkedHashSet<>(hand);
-                twelve.addAll(skat);
-                java.util.Set<Card> away = session.discardSkat(new SkatAi.SkatExchangeContext(
-                        board.round(), seat, new LinkedHashSet<>(hand), skat));
+    private static Opinion followSkat(Contestant contestant, Board board, SkatAi.Seat seat,
+                                      List<Card> hand, Opinion opinion, int winningBid,
+                                      long seed) {
+        // A session of its own, seeded identically, rather than the one the
+        // intent was read from: the engine asks prepareDeal, bid, pickUpSkat,
+        // discardSkat, announceContract in that order and never announces
+        // twice, so this asks the question the way the engine asks it.
+        //
+        // That ordering was *not* what broke the first version, though it was
+        // the obvious suspect. Both orders were tried against a hand that
+        // announces Null, and both threw identically: the fault was that
+        // SkatExchangeContext.hand must carry the **twelve**, hand plus skat,
+        // which is what GameEngine passes and what Discards.buried indexes.
+        // Ten cards go in and an IndexOutOfBounds comes out, which the old
+        // catch then swallowed into "(not asked)". Guessing the cause and
+        // fixing that instead would have left the bug and lost the answer
+        // again.
+        SkatAiProvider provider = contestant.newProvider(
+                Seeds.mix(seed, board.index(), seat.ordinal()));
+        String note = null;
+        boolean takes = false;
+        SkatAi.ContractType announcedType = null;
+        try (SkatAiSession fresh = provider.createSession()) {
+            LinkedHashSet<Card> dealt = new LinkedHashSet<>(hand);
+            try {
+                fresh.prepareDeal(new SkatAi.DealContext(
+                        board.round(), seat, dealt, GameEngine.FULL_CONTRACTS));
+            } catch (RuntimeException failed) {
+                return withNote(opinion, false, null, "prepareDeal: " + brief(failed));
+            }
+            try {
+                takes = fresh.pickUpSkat(
+                        new SkatAi.SkatChoiceContext(board.round(), seat, winningBid));
+            } catch (RuntimeException failed) {
+                return withNote(opinion, false, null, "pickUpSkat: " + brief(failed));
+            }
+            // The exchange happens whatever pickUpSkat answered, because that
+            // is what the arena does: GameEngine's variant calls it, discards
+            // the answer and picks up anyway ("the demo variant excludes hand
+            // games"). A player that asked for a hand game is overruled there,
+            // so a tool that honoured the request would be modelling a game
+            // nobody plays. What it said is still worth reporting.
+            List<Card> skat = board.deal().skat;
+            LinkedHashSet<Card> twelve = new LinkedHashSet<>(hand);
+            twelve.addAll(skat);
+            LinkedHashSet<Card> remaining;
+            try {
+                // The twelve, not the ten. See above.
+                java.util.Set<Card> away = fresh.discardSkat(new SkatAi.SkatExchangeContext(
+                        board.round(), seat, new LinkedHashSet<>(twelve), skat));
                 remaining = new LinkedHashSet<>(twelve);
                 remaining.removeAll(away);
+            } catch (RuntimeException failed) {
+                return withNote(opinion, takes, null, "discardSkat: " + brief(failed));
             }
-            SkatAi.ContractAnnouncement announced = session.announceContract(
-                    new SkatAi.ContractContext(board.round(), seat, remaining,
-                            winningBid, takes, GameEngine.FULL_CONTRACTS));
-            return new Opinion(opinion.ceiling(), opinion.intends(),
-                    announced == null ? null : announced.type, takes,
-                    opinion.nullChance(), opinion.rival(), opinion.rivalChance(),
-                    opinion.rivalValue());
-        } catch (RuntimeException refused) {
-            return opinion;
+            try {
+                SkatAi.ContractAnnouncement announced = fresh.announceContract(
+                        new SkatAi.ContractContext(board.round(), seat, remaining,
+                                winningBid, true, GameEngine.FULL_CONTRACTS));
+                if (announced == null) note = "announceContract returned nothing";
+                else announcedType = announced.type;
+            } catch (RuntimeException failed) {
+                note = "announceContract: " + brief(failed);
+            }
+        } catch (RuntimeException closing) {
+            if (note == null) note = "close: " + brief(closing);
         }
+        return withNote(opinion, takes, announcedType, note);
+    }
+
+    private static Opinion withNote(Opinion opinion, boolean takes,
+                                    SkatAi.ContractType announced, String note) {
+        return new Opinion(opinion.ceiling(), opinion.intends(), announced, takes, note,
+                opinion.nullChance(), opinion.rival(), opinion.rivalChance(),
+                opinion.rivalValue());
+    }
+
+    /** Enough of a throwable to act on, on one line. */
+    private static String brief(RuntimeException failure) {
+        String message = failure.getMessage();
+        String where = "";
+        StackTraceElement[] trace = failure.getStackTrace();
+        if (trace.length > 0) {
+            where = " at " + trace[0].getClassName().substring(
+                    trace[0].getClassName().lastIndexOf('.') + 1)
+                    + "." + trace[0].getMethodName() + ":" + trace[0].getLineNumber();
+        }
+        return failure.getClass().getSimpleName()
+                + (message == null ? "" : " " + message) + where;
     }
 
     /**
@@ -255,7 +320,8 @@ public final class NullAuditMain {
             int rivalValue = rival == null ? 0
                     : dev.skatklar.demo.SkatRules.guaranteedValue(rival, hand);
             return new Opinion(opinion.ceiling(), opinion.intends(), opinion.afterSkat(),
-                    opinion.tookSkat(), nullChance, rival, rivalChance, rivalValue);
+                    opinion.tookSkat(), opinion.skatNote(), nullChance, rival, rivalChance,
+                    rivalValue);
         } catch (RuntimeException failed) {
             return opinion;
         }
@@ -284,7 +350,7 @@ public final class NullAuditMain {
             if (answer != value) break;
             ceiling = value;
         }
-        if (ceiling == 0) return new Opinion(0, null, null, false, Double.NaN, null,
+        if (ceiling == 0) return new Opinion(0, null, null, false, null, Double.NaN, null,
                 Double.NaN, 0);
 
         SkatAi.ContractType intends = null;
@@ -297,7 +363,8 @@ public final class NullAuditMain {
             // A player that will bid but not announce from the dealt ten says
             // nothing here rather than being counted as intending something.
         }
-        return new Opinion(ceiling, intends, null, false, Double.NaN, null, Double.NaN, 0);
+        return new Opinion(ceiling, intends, null, false, null, Double.NaN, null,
+                Double.NaN, 0);
     }
 
     /**
@@ -372,7 +439,9 @@ public final class NullAuditMain {
                     for (int c = 0; c < ceilings.length; c++) wouldWinAt[c]++;
                     if (opinion.tookSkat()) nullWonTookSkat++;
                     SkatAi.ContractType kept = opinion.afterSkat();
-                    afterSkat.merge(kept == null ? "(not asked)" : kept.name(), 1, Integer::sum);
+                    afterSkat.merge(kept != null ? kept.name()
+                            : opinion.skatNote() != null ? opinion.skatNote()
+                            : "(not asked)", 1, Integer::sum);
                     if (kept == SkatAi.ContractType.NULL) nullWonAndKept++;
                     continue;
                 }
@@ -420,8 +489,9 @@ public final class NullAuditMain {
             System.out.printf(Locale.ROOT,
                     "  ... and still announced Null after the skat  %5d of %d%n",
                     nullWonAndKept, nullWon);
-            System.out.printf(Locale.ROOT, "        (%d of them picked the skat up)%n",
-                    nullWonTookSkat);
+            System.out.printf(Locale.ROOT,
+                    "        (%d of %d asked to pick the skat up; the engine picks up%n"
+                    + "         regardless, so all of them did)%n", nullWonTookSkat, nullWon);
             if (!afterSkat.isEmpty()) {
                 System.out.println("        what they announced once they had seen it:");
                 afterSkat.forEach((name, count) -> System.out.printf(Locale.ROOT,
