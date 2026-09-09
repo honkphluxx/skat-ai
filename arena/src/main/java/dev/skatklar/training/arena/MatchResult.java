@@ -63,6 +63,13 @@ public final class MatchResult {
     public double[] perBoardDiff() { return perBoardDiff.clone(); }
 
     /** Mean advantage of A over B, in game points per game. */
+    /** "12 of 15, 80%" -- or a dash when nothing was declared there. */
+    private static String wonOf(int won, int declared) {
+        if (declared == 0) return "-";
+        return String.format(Locale.ROOT, "%d of %d, %.0f%%", won, declared,
+                100.0 * won / declared);
+    }
+
     public double meanDiffPerGame() {
         double sum = 0;
         for (double diff : perBoardDiff) sum += diff;
@@ -149,13 +156,21 @@ public final class MatchResult {
                     a.overbidsDespitePoints(), b.overbidsDespitePoints()));
         }
 
-        out.append('\n').append("Contracts declared\n");
-        out.append(String.format(Locale.ROOT, "  %-20s %12s %12s%n", "", a.contestant(), b.contestant()));
+        // Declared and won, per contract. The count alone says what a player
+        // likes; the pair says whether it was right to. A bidder that declines a
+        // contract is only wrong if that contract would have been made, and at
+        // oracle contracts -- where the same game is handed to both sides -- this
+        // is the row that prices the decline.
+        out.append('\n').append("Contracts declared, and won\n");
+        out.append(String.format(Locale.ROOT, "  %-20s %18s %18s%n", "",
+                a.contestant(), b.contestant()));
         for (dev.skatklar.demo.Contract contract : dev.skatklar.demo.Contract.DECLARED_GAMES) {
             int left = a.declaredContracts().getOrDefault(contract, 0);
             int right = b.declaredContracts().getOrDefault(contract, 0);
             if (left == 0 && right == 0) continue;
-            out.append(String.format(Locale.ROOT, "  %-20s %12d %12d%n", contract.label, left, right));
+            out.append(String.format(Locale.ROOT, "  %-20s %18s %18s%n", contract.label,
+                    wonOf(a.contractWins().getOrDefault(contract, 0), left),
+                    wonOf(b.contractWins().getOrDefault(contract, 0), right)));
         }
 
         double mean = meanDiffPerGame();

@@ -249,7 +249,29 @@ moves.
    ./gradlew :arena:nullAudit --args="--player=belief-32 --boards=400 --threads=8 --explain=null"
    ```
 
-   **Read it beside a second run at `--bidding-worlds=32`.** The bidder decides
+   **Both ran, 2026-09-09, and the thread has moved.** More worlds changes
+   nothing (mean P(null) 0.04 → 0.06, largest 0.33 → 0.34) and the routing is
+   correct — `NullSolver`, not the points solver. And the "ten times too rare"
+   framing was partly wrong: those boards are *selected* by the oracle for
+   having a favourable layout, so a low mean sampled chance on them is what
+   selection produces. The oracle's 4.34% needs hindsight and is not a target.
+
+   What is left is sharper. Losing a Null costs 46 and winning gains 23, so the
+   threshold is about **0.67**, and the largest Null chance on any seat on any
+   of those boards is **0.34** — half of it. Null is unreachable by arithmetic.
+   On the same boards trump games score up to 0.81, because **double-dummy
+   defence punishes Null far harder than a trump game**: beating a Null needs
+   one forcing line and a defender who sees everything always finds it.
+
+   **The question is now "are we right to decline", and the arena answers it.**
+   The contract table prints declared *and won*, so one oracle-contract run says
+   whether we make the Nulls we are handed. Make most of them and the repair is
+   a contract-specific correction — Null judged against the defence it will
+   actually meet, or a threshold that knows double-dummy treats the two
+   contracts differently. Lose most of them and the bidder is right and this
+   thread closes.
+
+   **Read the older advice beside a second run at `--bidding-worlds=32`.** The bidder decides
    Null on `clamp(worlds/3, 2, 6)` sampled worlds — six of them for `belief-32`
    — so its Null chance is quantised in sixths, and a Null has to survive nearly
    every world to look sound. If the chance rises sharply with more worlds, the

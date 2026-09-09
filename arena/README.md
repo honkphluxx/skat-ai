@@ -1525,3 +1525,57 @@ what was its ceiling, what did it intend, and what was its measured Null chance?
 That separates "makeChance is too harsh" from "the value comparison loses", and
 those two have different fixes. Second, whether a Null intent survives the skat
 pick-up, which is one call further down the same path.
+
+### 2026-09-09, later: Null is unreachable by arithmetic, and one of my numbers was wrong
+
+`--explain=null` over the 400 oracle-priced boards, twice: once at the six
+bidding worlds `belief-32` actually uses, once at 32.
+
+**More worlds changes nothing.** Mean P(null) among seats that meant something
+else moved 0.04 → 0.06; the largest Null chance anywhere in 45 seat-evaluations
+moved 0.33 → 0.34. The harshness is not sampling noise. Nor is it a bug:
+`HandEvaluator.sample` routes Null to `NullSolver.declarerSurvives`, which is
+the right solver asking the right question.
+
+**Correcting the previous entry.** It said 0.45% against the oracle's 4.34% was
+"ten times too rare", and that comparison is partly invalid. The oracle asks
+whether Null makes against perfect defence *given the actual layout*; the bidder
+asks whether it makes *over sampled layouts*. Those fifteen boards are selected
+precisely because the actual layout was favourable, so a low mean sampled chance
+on them is what selection produces, not evidence of pessimism. **The oracle's
+4.34% is reachable only with hindsight and is not a target a blind bidder can
+be held to.**
+
+**What the dump does show, and it is sharper than the rate ever was.** Losing a
+Null costs 46 and winning gains 23, so a bidder that maximises expected game
+points needs about **0.67** before it may declare one. The highest Null chance
+on any seat on any of these boards is **0.34** — half the threshold. Null is not
+being outbid, and it is not being narrowly beaten in the comparison. It is
+**unreachable by arithmetic**.
+
+And the asymmetry that makes it so is visible in the same table: on the very
+same boards, trump games are scored at up to **0.81**, while Null never once
+exceeds 0.34. That is not a coincidence of these hands. **Double-dummy defence
+is far more punishing to Null than to a trump game** — beating a Null requires
+exactly one forcing line, and defenders who can see every card always find it,
+whereas a trump game survives a good deal of imperfect defence. The estimator
+measures both against a defence our player will never actually face, and then
+applies the same 2-to-1 threshold to both.
+
+**So the open question is no longer "why so few" but "are we right to decline".**
+A bidder that passes on a contract is only wrong if that contract would have
+been made. The oracle mode already hands those Nulls to both sides; what the
+report could not say was who made them. It can now: **the contract table prints
+declared *and won*.** One oracle-contract run answers it.
+
+- If we make most of the Nulls we are handed, the estimator's Null pessimism is
+  costing real points, and the repair is a contract-specific correction — Null
+  judged against a defence like the one it will meet, or a threshold that knows
+  double-dummy treats the two contracts differently.
+- If we lose most of them, the bidder is right, the oracle's rate is simply not
+  reachable blind, and the Null thread closes.
+
+One small gap left in the tool: the single Null intent that won its auction came
+back as `(not asked)` after the skat, which is `followSkat` swallowing an
+exception rather than reporting it. One sample decides nothing, but the tool
+should not lose the answer it was built to fetch.

@@ -24,6 +24,19 @@ public final class Tally {
     private final Map<GameEngine.ViolationPhase, Integer> violationPhases =
             new EnumMap<>(GameEngine.ViolationPhase.class);
     private final Map<Contract, Integer> declaredContracts = new EnumMap<>(Contract.class);
+    /**
+     * Games won, by the contract they were played at.
+     *
+     * <p>Beside {@link #declaredContracts} rather than folded into it, because
+     * the two answer different questions and the second one is now load-bearing:
+     * a bidder that declines a contract is only wrong if the contract would have
+     * been made, and the aggregate win rate cannot say which contract carried
+     * it. It exists because Null could not be settled without it -- the oracle
+     * makes Null the best game on 4.3% of boards and our bidder declares it on
+     * 0.45%, and whether that is timidity or good judgement is exactly "do we
+     * win the ones we are handed".
+     */
+    private final Map<Contract, Integer> contractWins = new EnumMap<>(Contract.class);
 
     public Tally(String contestant) { this.contestant = contestant; }
 
@@ -45,6 +58,7 @@ public final class Tally {
             if (outcome.overbid()) overbids++;
             if (outcome.overbidDespiteCardPoints()) overbidsDespitePoints++;
             declaredContracts.merge(outcome.contract(), 1, Integer::sum);
+            if (outcome.declarerWon()) contractWins.merge(outcome.contract(), 1, Integer::sum);
         }
     }
 
@@ -65,6 +79,8 @@ public final class Tally {
                 violationPhases.merge(phase, count, Integer::sum));
         other.declaredContracts.forEach((contract, count) ->
                 declaredContracts.merge(contract, count, Integer::sum));
+        other.contractWins.forEach((contract, count) ->
+                contractWins.merge(contract, count, Integer::sum));
     }
 
     public String contestant() { return contestant; }
@@ -83,6 +99,8 @@ public final class Tally {
     /** Which decision the violations happened in; empty when there were none. */
     public Map<GameEngine.ViolationPhase, Integer> violationPhases() { return violationPhases; }
     public Map<Contract, Integer> declaredContracts() { return declaredContracts; }
+    /** Games won at each contract; read beside {@link #declaredContracts()}. */
+    public Map<Contract, Integer> contractWins() { return contractWins; }
 
     public double tournamentPointsPerGame() { return games == 0 ? 0 : (double) tournamentPoints / games; }
     /**
