@@ -63,50 +63,73 @@ final class NativeSolver {
 
     // ------------------------------------------------------------------ loading
 
+    /**
+     * Loads the library that belongs to <em>this</em> build, in that order.
+     *
+     * <p>The jar's own copy is tried first and a library installed on the
+     * system only when the jar carries none. The order used to be the other
+     * way round, and it cost an oracle-mode arena run: a library that answers
+     * to the name but not to this build's symbols would load from the path,
+     * fail the version query, and disable the solver for the whole process --
+     * while the right library sat unopened inside the jar. Preferring the jar
+     * also means one library, never two, is ever loaded into the process, so
+     * no call can bind half its symbols to a stranger.
+     */
     private static boolean load() {
         String requested = System.getProperty(PROPERTY, "").trim();
         if (requested.equalsIgnoreCase("java")) {
             report("The Java solver was requested with -D" + PROPERTY + "=java.");
             return false;
         }
-        Throwable fromPath;
-        try {
-            System.loadLibrary(LIBRARY);
-            return verify();
-        } catch (Throwable notOnThePath) {
-            fromPath = notOnThePath;
-        }
+        Throwable jarCopyUnusable = null;
         try {
             Path unpacked = unpack();
-            if (unpacked == null) {
-                report("No native solver for " + platform() + "; using the Java search."
-                        + " (" + fromPath + ")");
-                return false;
+            if (unpacked != null) {
+                System.load(unpacked.toAbsolutePath().toString());
+                // The jar's copy is this build's copy, so its verdict is final.
+                // Reaching past it to the path would be reaching for a library
+                // we have already established is not the one we ship.
+                return verify(unpacked.toString());
             }
-            System.load(unpacked.toAbsolutePath().toString());
-            return verify();
         } catch (Throwable unusable) {
-            report("The native solver could not be loaded (" + unusable
-                    + "); using the Java search.");
+            // Nothing is loaded when System.load throws, so the path is still
+            // safe to try -- a platform we ship no library for and a jar copy
+            // that will not open both end up in the same place.
+            jarCopyUnusable = unusable;
+        }
+        try {
+            System.loadLibrary(LIBRARY);
+            return verify("java.library.path");
+        } catch (Throwable notOnThePath) {
+            report("No native solver for " + platform() + "; using the Java search. ("
+                    + (jarCopyUnusable != null ? jarCopyUnusable : notOnThePath) + ")");
             return false;
         }
     }
 
-    private static boolean verify() {
+    /**
+     * @param origin where the library came from, named in every message this
+     *               writes. A wrong library is diagnosed by knowing which file
+     *               was opened, and that used to be the one thing the log did
+     *               not say.
+     */
+    private static boolean verify(String origin) {
         try {
             String version = version();
             if (!EXPECTED_VERSION.equals(version)) {
-                report("The native solver reports version " + version + " where this build"
-                        + " expects " + EXPECTED_VERSION + "; using the Java search.");
+                report("The native solver at " + origin + " reports version " + version
+                        + " where this build expects " + EXPECTED_VERSION
+                        + "; using the Java search.");
                 return false;
             }
+            report("Using the native solver at " + origin + ".");
             return true;
         } catch (Throwable wrongShape) {
             // A library that loaded but has no version symbol is not this
             // library. Anything built against a different header would fail
             // here rather than at the first search.
-            report("The native solver did not answer a version query (" + wrongShape
-                    + "); using the Java search.");
+            report("The native solver at " + origin + " did not answer a version query ("
+                    + wrongShape + "); using the Java search.");
             return false;
         }
     }
@@ -116,9 +139,10 @@ final class NativeSolver {
      *
      * <p>The server ships as a single jar and is installed by copying that one
      * file, so the library has to travel inside it. Unpacking is idempotent:
-     * the name carries the version, so a second process finds the file already
-     * there and loads it, and an upgrade writes a different name rather than
-     * fighting over the same one.
+     * the name carries a hash of the library's own bytes, so a second process
+     * finds the file already there and loads it, and any rebuild writes a
+     * different name rather than fighting over the same one. See
+     * {@link #digest} for why the name is the bytes and not the version.
      *
      * @return where it was written, or null when the jar carries none for this
      *         platform
@@ -126,28 +150,30 @@ final class NativeSolver {
     private static Path unpack() throws IOException {
         String platform = platform();
         String resource = "/dev/skatklar/native/" + platform + "/" + fileName();
+        byte[] library;
         try (InputStream in = NativeSolver.class.getResourceAsStream(resource)) {
             if (in == null) return null;
-            Path directory = unpackDirectory();
-            Path target = directory.resolve(
-                    "skatsolve-" + EXPECTED_VERSION + "-" + platform + suffix());
-            if (Files.isReadable(target)) return target;
-            Path partial = Files.createTempFile(directory, "skatsolve", suffix());
-            try (OutputStream out = Files.newOutputStream(partial)) {
-                in.transferTo(out);
-            }
-            try {
-                // Two processes starting together both write, and one of them
-                // wins the rename. Both then load the same finished file rather
-                // than one of them loading a half-written one.
-                Files.move(partial, target, StandardCopyOption.ATOMIC_MOVE,
-                        StandardCopyOption.REPLACE_EXISTING);
-            } catch (IOException raced) {
-                Files.deleteIfExists(partial);
-                if (!Files.isReadable(target)) throw raced;
-            }
-            return target;
+            library = in.readAllBytes();
         }
+        Path directory = unpackDirectory();
+        Path target = directory.resolve("skatsolve-" + EXPECTED_VERSION + "-"
+                + platform + "-" + digest(library) + suffix());
+        if (Files.isReadable(target)) return target;
+        Path partial = Files.createTempFile(directory, "skatsolve", suffix());
+        try (OutputStream out = Files.newOutputStream(partial)) {
+            out.write(library);
+        }
+        try {
+            // Two processes starting together both write, and one of them
+            // wins the rename. Both then load the same finished file rather
+            // than one of them loading a half-written one.
+            Files.move(partial, target, StandardCopyOption.ATOMIC_MOVE,
+                    StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException raced) {
+            Files.deleteIfExists(partial);
+            if (!Files.isReadable(target)) throw raced;
+        }
+        return target;
     }
 
     private static Path unpackDirectory() throws IOException {
@@ -160,6 +186,38 @@ final class NativeSolver {
         // The unit's PrivateTmp gives the server its own /tmp, which is where
         // this lands and where it is cleaned up when the core exits.
         return Path.of(System.getProperty("java.io.tmpdir", "."));
+    }
+
+    /**
+     * What the unpacked file is named after: the library's own bytes.
+     *
+     * <p>The name used to carry {@link #EXPECTED_VERSION} and nothing else, and
+     * that made a stale unpacked copy permanent. Rebuild the library without
+     * bumping the version -- which is the normal case, since the version marks
+     * a change a *caller* could notice, not every change -- and the new bytes
+     * are written under the name the old bytes already hold, so
+     * {@code Files.isReadable(target)} finds the old file and loads it forever.
+     * A copy from before a symbol existed then produces exactly the failure
+     * this class was written to prevent: it loads, and the first call to it
+     * throws {@code UnsatisfiedLinkError}.
+     *
+     * <p>Naming the file after its contents removes the question. Different
+     * bytes cannot collide on a name, so a rebuild is picked up with no version
+     * bump and no cleanup; the stale files simply stop being consulted. They
+     * are left where they are on purpose -- deleting files out of a shared
+     * temporary directory is how one process breaks another that is mid-load.
+     */
+    private static String digest(byte[] library) {
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(library);
+            StringBuilder text = new StringBuilder(16);
+            for (int i = 0; i < 8; i++) text.append(String.format("%02x", hash[i]));
+            return text.toString();
+        } catch (java.security.NoSuchAlgorithmException noSha) {
+            // Every JRE has SHA-256. If this one does not, a name that changes
+            // with the length is still better than a name that never changes.
+            return "len" + library.length;
+        }
     }
 
     /** The platform key the jar's resource directories are named after. */

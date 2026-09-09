@@ -1730,3 +1730,27 @@ the list.
 **One practical note from the run.** The native solver did not load —
 `UnsatisfiedLinkError: NativeSolver.version()` — so all 1,548 s ran on the Java
 search. Any future oracle-mode run is worth taking only after that is fixed.
+
+**Postscript, the same day: the solver was fixed and it was a caching bug.**
+The `UnsatisfiedLinkError` above meant a library *had* loaded and then had no
+`version` symbol — so it was not ours. The DLL we ship is fine (self-contained,
+exports all twelve entry points). Two things let a stranger win:
+
+1. **The unpacked file was named after `EXPECTED_VERSION` and nothing else.**
+   That constant marks a change a *caller* could notice, not every rebuild, so
+   rebuilding the library without bumping it wrote new bytes under a name the
+   old bytes already held — and `Files.isReadable(target)` then found the old
+   file and loaded it forever. A copy from before a symbol existed produces
+   exactly this error. The name is now a hash of the library's own bytes, so a
+   rebuild cannot collide with its predecessor and no cleanup is needed.
+2. **`System.loadLibrary` was tried before the jar's own copy.** A library that
+   answers to the name but not to this build could load from the path, fail the
+   version query, and disable the solver for the whole process while the right
+   one sat unopened inside the jar. The jar is now tried first, and the path
+   only when we ship none for the platform — which also guarantees one library,
+   never two, is loaded, so no call can bind half its symbols to a stranger.
+
+And the log now names the file it opened, which is the one thing it did not say.
+Verified on Linux: cold cache loads and reports the path, warm cache reuses it,
+a decoy on `java.library.path` no longer wins, and a one-byte change to the
+library unpacks under a new name.
