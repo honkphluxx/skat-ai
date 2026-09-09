@@ -317,10 +317,15 @@ moves.
    85% against its 77%. Sweep the threshold and measure; the aggression dials
    already exist and their sweep is redone on the Null-capable bidder.
 
-**Gate:** Null declared at roughly the oracle's rate; auction-mode result
-against `jskat-new`, `xskat` and `go-skat` in void-board mode, all resolved
-positive; and `belief-32` − `xskat` in the full game resolved positive, which
-it is not today.
+**Gate:** auction-mode result against `jskat-new`, `xskat` and `go-skat` in
+void-board mode, all resolved positive; and `belief-32` − `xskat` in the full
+game resolved positive, which it is not today.
+
+~~Null declared at roughly the oracle's rate.~~ **Dropped 2026-09-09**, and it
+was never a gate worth passing: the oracle's rate needs hindsight, and the
+oracle-contract run showed the whole contract is worth between -0.17 and +0.09
+game points per game. A gate is a thing a build can fail on, and this one could
+only ever have been failed on noise.
 
 ### Phase P — population self-play, the loop (repeat until it stops paying)
 
@@ -369,10 +374,15 @@ number in the README, not a surprise.
 
 ## 6. Order and cost
 
-R (2 nights) → V (1 day) → B2 (1 week: a day of diagnosis, a night of export,
-a night of training, two nights of gates) → D (1 week) → A (2 nights) → P
+R (2 nights) → V (1 day) → **A (2 nights)** → B2 (1 week: a day of diagnosis, a
+night of export, a night of training, two nights of gates) → D (1 week) → P
 (a generation a week, as long as it pays) → M in parallel with P → C once →
-S last. Nights are the arena's: `--threads=4` with ML players, 8 without; XSkat
+S last. **A moved ahead of B2 as well as D, 2026-09-09**: the oracle-contract
+run put our card play clearly ahead of XSkat's (93.96% to 85.66% at identical
+contracts) and left the auction as the only place we are behind, so two nights
+of threshold sweep now outrank a week of belief work. V stays in front of A
+because A is measured in auction mode, and auction mode is not yet honest
+against outsiders -- see Phase V. Nights are the arena's: `--threads=4` with ML players, 8 without; XSkat
 costs nothing, go-skat about 8 games a second.
 
 ## 7. Done means
@@ -382,7 +392,10 @@ costs nothing, go-skat about 8 games a second.
 - Declaring column within **4 game points of par** at fixed contracts (from 8).
 - Non-negative, resolved, against `xskat`, `go-skat` and `jskat-new` in
   void-board auction mode.
-- Null declared at roughly the oracle's rate, and Null decision points in the
-  corpus at roughly that share.
+- Null decision points present in the corpus at all, which they were not before
+  09a81fa. ~~Null declared at roughly the oracle's rate.~~ Dropped 2026-09-09:
+  measured at break-even and two orders of magnitude below the noise floor. A
+  bidder that never announces Null may still be a product question; it is not a
+  strength question.
 - The true-world share printed in every training log, so 2.1 cannot happen
   again without being seen.
