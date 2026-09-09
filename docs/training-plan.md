@@ -74,6 +74,30 @@ cross-engine measurement, every calibration, and the belief corpus are taken in
 that mode. Ramsch stays in the app, gets its own self-play loop (§4, phase M)
 and its own arena mode, and its numbers are reported as its own column.
 
+## 2.3 What Phase R measured, 2026-09-09 — and why the auction moves up the list
+
+Phase R ran and its gate **failed, informatively**. Full account in
+[`../arena/README.md`](../arena/README.md); the two numbers that change this
+plan:
+
+- **Zero Nulls in ~1,800 declared games**, three seeds, while the oracle prices
+  Null as makeable on about 3% of the same boards. The player announces Null
+  correctly when it wins an auction; it cannot win one, because
+  `guaranteedValue(NULL)` is a flat 23 and the bidder never offers Null Hand
+  (35), Null Ouvert (46) or Null Ouvert Hand (59). A hand shaped like a Null
+  sits opposite two hands holding every jack, one of which bids 24.
+- **`belief-32` beats `xskat` at oracle contracts on all three seeds (+2.6,
+  +4.3, +3.2) and is level with it in the full game** (+1.6, −2.7, −0.2). We
+  declare 24–26% of boards and win 85% of them; XSkat declares 33% and wins
+  77%. The nine boards a hundred we decline and it takes are the entire
+  difference.
+
+So the auction is not the fourth lever, it is the second, and it is cheaper
+than the belief: the card play is already ahead of a program we are level with
+overall. **Phase A moves ahead of Phase D**, and the Null variants are the first
+thing in it — a Null that can only ever be bid to 23 is a contract we own on
+paper and never play.
+
 ## 3. The levers, ranked
 
 1. **The belief model.** +2.4 delivered against +25 available. Before training
@@ -88,9 +112,10 @@ and its own arena mode, and its numbers are reported as its own column.
    belief-weighted discard search is the obvious first bite; the line choice is
    the rest, and it is where a better belief pays twice (the 2026-08-24 note that
    sharper priors and more samples look like complements).
-4. **The auction.** Redo the aggression calibration on the Null-capable bidder;
-   compare our Null rate (3.7% of auditioned deals) with the oracle's (one board
-   in sixteen makeable); a learned bidder is a later question.
+4. **The auction** — *promoted above declaring by Phase R, see §2.3*. The Null
+   variants first (35/46/59, so a Null hand can outbid a mediocre suit game),
+   then the declining threshold: nine boards a hundred that XSkat takes and
+   makes, we pass. A learned bidder is a later question.
 5. **Defence.** Measured as not the place. Leave it.
 
 ## 4. The phases, each with the measurement that decides it
@@ -175,15 +200,23 @@ touching the network.
 **Gate:** each change resolved positive at fixed contracts; the declaring column
 moves.
 
-### Phase A — the auction
+### Phase A — the auction *(now before Phase D)*
 
-- Aggression sweep redone (Phase R gives the baseline).
-- Null rate versus the oracle's: if we say Null on 3.7% where 6% are makeable,
-  the promise scale is still too shy; the fix is in `HandEvaluator`, measured
-  by `--contracts=solver`'s verdict on what we bid.
+1. **Count first, fix second.** Instrument the seats whose `intended` is Null
+   and that then lose the auction. If that is roughly the oracle's 3%, the
+   23-point cap is the whole story and the rest of this phase is arithmetic.
+2. **The Null variants.** `nullValue(hand, ouvert)` already exists in
+   `SkatRules`; the bidder asks only for `nullValue(false, false)`. Offer 35,
+   46 and 59 where the make chance supports them, so a Null hand can survive a
+   contested auction. Measured by the Null rate against the oracle's.
+3. **The declining threshold.** We declare 24–26% against XSkat's 33% and win
+   85% against its 77%. Sweep the threshold and measure; the aggression dials
+   already exist and their sweep is redone on the Null-capable bidder.
 
-**Gate:** auction-mode result against `jskat-new` and against the outside
-engines in void-board mode, all resolved positive.
+**Gate:** Null declared at roughly the oracle's rate; auction-mode result
+against `jskat-new`, `xskat` and `go-skat` in void-board mode, all resolved
+positive; and `belief-32` − `xskat` in the full game resolved positive, which
+it is not today.
 
 ### Phase P — population self-play, the loop (repeat until it stops paying)
 

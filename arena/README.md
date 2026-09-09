@@ -1395,3 +1395,76 @@ be worth less after the exchange than the auction assumed. The `overbid (lost)`
 row exists to keep that visible: a contestant showing a high rate there has a
 hand-evaluation problem, not a card-play problem, and the report separates the
 games lost with 61 or more card points for exactly that reason.
+
+### 2026-09-09: Phase R. The auction gives back everything the card play wins
+
+Three seeds, 21:32 to 06:12, 60 matches run and 66 skipped — the fixed-contract
+and oracle logs survived the Null fix and did not need redoing, which is why one
+night was enough for what was budgeted as two. No failures, no interruptions,
+tests green on every seed.
+
+**The headline is a pair of numbers about the same two players.**
+
+| `belief-32` − `xskat` | s11 | s12 | s13 |
+|---|---|---|---|
+| oracle contracts | **+2.57** [+0.46, +4.67] | **+4.34** [+1.23, +7.45] | **+3.21** [+0.95, +5.47] |
+| full auction | +1.63 [−1.05, +4.31] | −2.66 [−5.37, +0.05] | −0.24 [−2.96, +2.48] |
+
+At a contract both sides are handed, we win 94% of the games we declare against
+XSkat's 82–86%, and the difference resolves positive on all three seeds. Play
+the whole game and it collapses to nothing, with one seed on the wrong side.
+
+The declaring columns say where it goes. **We declare 24–26% of boards; XSkat
+declares 33% and wins 77% of them.** Nine boards in a hundred that XSkat takes
+and mostly makes, we pass. A game won as declarer is worth far more than the
+defender bonuses collected by passing, and that arithmetic is the whole gap:
+our card play is measurably the better of the two and our auction hands the
+advantage straight back.
+
+**Zero Nulls. Not one, in about 1,800 declared games across three seeds.**
+
+The contract table is capable of showing them — it iterates `DECLARED_GAMES`
+and only hides all-zero rows — and the oracle, pricing the same boards, finds
+Null makeable on **5, 5 and 8 boards of 180**, and 10 of 265 against
+`jskat-ml-pro`. So the boards have Nulls in them and our bidder never says one.
+
+That is not the defect fixed in 09a81fa coming back. The player is capable: on
+the best Null holding in the pack — four 7s, four 8s, two 9s — it bids 18, holds
+23, passes at 24 and announces Null. What it cannot do is *win an auction* with
+it. `SkatRules.guaranteedValue(NULL)` is `nullValue(false, false)`, a flat 23,
+so a Null hand caps at 23 — and a hand shaped like a Null is a hand whose jacks
+and aces are all sitting with the other two, at least one of whom will bid 24.
+The bidder never offers Null Hand (35), Null Ouvert (46) or Null Ouvert Hand
+(59), which are precisely the announcements that let a Null hand outbid a
+mediocre suit game. **A Null is bid, not merely valued, and ours can only be
+bid to the floor.**
+
+Leading hypothesis, not a proven cause. The measurement that would settle it is
+cheap and is the next thing to run: count the seats whose `intended` is Null and
+that then lose the auction. If that number is roughly the oracle's 3%, the cap
+is the whole story.
+
+**What the leak in XSkat is worth, now over three seeds.** `xskat` −
+`xskat-blind` came out +0.503 [+0.005, +1.002], +0.238 [−0.185, +0.660] and
+−0.137 [−0.528, +0.254]. Pooled it is about two tenths of a point, and seed 11
+alone would have "resolved" it at the very edge of the interval — a tidy
+illustration of why the honesty control is run on three seeds and not on one.
+The probe itself agreed with the container to two decimal places: 7 of 5,040
+decisions for XSkat (0.14%, all as declarer), 5 of 4,720 for go-skat.
+
+**The ladder is much flatter in the full game than card play suggests.**
+`beginner` − `club` is −2.70 and −1.45; `club` − `expert` −4.29 and −7.74;
+`expert` − `analyst` −2.10 and −1.77, neither resolved. The fixed-contract
+ladder has those steps at −17.0, −13.6 and −8.8. Bidding is most of what the
+levels share, so holding it constant exaggerates them; a player choosing its own
+games is closer to the next level than the card-play numbers promise. That is a
+product finding, not an instrument one, and it belongs in any claim about how
+far apart the difficulty settings feel.
+
+**Where the outside engines landed.** `xskat` − `greedy` +22.1/+22.0/+22.3 in
+the auction and +14.3/+13.0/+17.8 at fixed contracts; `go-skat` − `greedy`
++17.6/+15.6/+18.3 and +12.5/+12.6/+11.8. `xskat` − `go-skat` +2.95/+6.82/+2.89,
+resolved on all three — so XSkat is the stronger of the two after all, which
+sixty boards in the container could not separate. Against `jskat-new`, XSkat is
++12.7/+13.2/+13.7. The ladder that Phase R was for now reads
+`greedy` → `go-skat` → `xskat` ≈ `jskat-new` → ours.
