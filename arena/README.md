@@ -1468,3 +1468,60 @@ resolved on all three — so XSkat is the stronger of the two after all, which
 sixty boards in the container could not separate. Against `jskat-new`, XSkat is
 +12.7/+13.2/+13.7. The ladder that Phase R was for now reads
 `greedy` → `go-skat` → `xskat` ≈ `jskat-new` → ours.
+
+### 2026-09-09: the Null ceiling was innocent, and the tool said so
+
+`nullAudit` was written to test one hypothesis — that our player never declares
+Null because `guaranteedValue(NULL)` caps it at 23 and a Null-shaped hand sits
+opposite two hands holding every jack. **The hypothesis is wrong**, and the
+measurement that shows it took twenty minutes.
+
+`belief-32`, 2,000 boards, seed 1, all three seats asked:
+
+| | |
+| --- | --- |
+| seats intending Null | **13 of 6,000 — 0.22%** |
+| of those, winning the auction | **9 — 69%** |
+| outbid | 4, at 30, 36, 48, 48 |
+| boards where the modelled auction declares Null | **9 of 2,000 — 0.45%** |
+| boards where the oracle makes Null the best contract | **15 of 346 — 4.34%** |
+
+**Null already survives the auction most of the time it is intended.** Lifting
+the ceiling to 59 — Null Ouvert Hand, the strongest claim in the game — would
+rescue at most the four that were outbid: **plus 0.2 percentage points against
+a gap of about 3.9.** The ceiling is worth roughly a twentieth of the problem
+and the Null variants are not the fix. That is the whole value of having asked
+before building: the fix that was about to be written would have moved almost
+nothing and would have looked, afterwards, like the fix that failed.
+
+**The gap is upstream, in whether Null is ever intended at all.** Every hand
+gets Null offered — `candidates()` appends it unconditionally — so the loss is
+in the comparison that follows: `declaringIsWorth(23, makeChance(NULL))` against
+the same for two trump games. Either `makeChance` is far more pessimistic about
+Null than the oracle, or the value comparison loses on hands where it should
+win.
+
+There is a real reason to expect *some* gap, and it should be priced before it
+is called a defect. **The oracle has hindsight and the bidder does not.** The
+oracle asks "does Null make against perfect defence, given the actual layout";
+the bidder asks "does Null survive the worlds I can imagine", and Null safety is
+unusually sensitive to exactly which low cards sit where. A hand that is a
+comfortable Null against the true layout can fail in half the sampled ones. So
+4.34% is not a target a blind bidder should reach — but it is not ten times what
+a blind bidder should reach either.
+
+**And a second discrepancy worth keeping in view.** The modelled auction
+declares Null on 0.45% of boards; Phase R's real matches declared it on
+**none** of about 1,800 declared games. The model is the optimistic one, which
+means something downstream of winning the auction is losing the rest. The
+obvious suspect is the skat: a seat that intends Null from its dealt ten then
+picks it up, re-evaluates twelve cards two of which are probably high, and
+announces something else. `nullAudit` deliberately asks before the skat, so it
+cannot see that step.
+
+**Next measurement, and it is a decomposition rather than a fix.** On the boards
+where the oracle says Null is best, what did the seat holding that hand think —
+what was its ceiling, what did it intend, and what was its measured Null chance?
+That separates "makeChance is too harsh" from "the value comparison loses", and
+those two have different fixes. Second, whether a Null intent survives the skat
+pick-up, which is one call further down the same path.

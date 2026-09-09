@@ -216,10 +216,26 @@ moves.
    at all, the ceiling is innocent and the fault is upstream — in
    `HandEvaluator.makeChance` or in which contracts `SearchAiProvider.candidates`
    offers — and step 2 would have been the wrong fix.
-2. **The Null variants.** `nullValue(hand, ouvert)` already exists in
-   `SkatRules`; the bidder asks only for `nullValue(false, false)`. Offer 35,
-   46 and 59 where the make chance supports them, so a Null hand can survive a
-   contested auction. Measured by the Null rate against the oracle's.
+2. ~~**The Null variants.**~~ **Answered and dropped, 2026-09-09.** The audit
+   ran: Null is intended on 13 of 6,000 seats and **9 of those already win the
+   auction**. Lifting the ceiling to 59 would rescue the four that did not —
+   plus 0.2 percentage points against a gap of 3.9. The ceiling was innocent.
+   Full numbers in [`../arena/README.md`](../arena/README.md).
+
+   **The gap is that Null is almost never intended**: 0.45% of boards declared
+   against the oracle's 4.34%. Every hand is offered Null by `candidates()`, so
+   the loss is in `declaringIsWorth(23, makeChance(NULL))` losing to the same
+   for two trump games. Two candidate causes with different fixes, and the
+   decomposition that separates them is the next measurement: on the boards
+   where the oracle says Null, what did that seat's ceiling, intent and measured
+   Null chance look like? Some gap is legitimate — the oracle has the actual
+   layout and the bidder samples, and Null safety is unusually sensitive to
+   which low cards sit where — but not a factor of ten.
+
+   Second thread, one call further down the same path: the model declares Null
+   on 0.45% of boards and Phase R's real matches on none of ~1,800. Something
+   after winning the auction loses the rest, and the skat pick-up is the
+   suspect.
 3. **The declining threshold.** We declare 24–26% against XSkat's 33% and win
    85% against its 77%. Sweep the threshold and measure; the aggression dials
    already exist and their sweep is redone on the Null-capable bidder.
