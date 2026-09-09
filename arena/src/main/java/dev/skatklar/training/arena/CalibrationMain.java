@@ -73,7 +73,8 @@ public final class CalibrationMain {
     private CalibrationMain() {}
 
     /** One hand, what it was promised, and what it got. */
-    private record Sample(Contract contract, double predicted, int value, boolean won) {
+    private record Sample(long board, Contract contract, double predicted,
+                          int value, boolean won) {
         /** Game points this contract actually returned, as the score sheet pays. */
         double points() { return won ? value : -2.0 * value; }
     }
@@ -135,7 +136,7 @@ public final class CalibrationMain {
                 if (intention == null) continue;
                 Boolean won = playOut(contestant, board, seat, intention, seed);
                 if (won == null) continue;
-                found.add(new Sample(intention.contract, intention.chance,
+                found.add(new Sample(board.index(), intention.contract, intention.chance,
                         intention.value, won));
             }
             return found;
@@ -314,49 +315,73 @@ public final class CalibrationMain {
         }
         System.out.println();
         System.out.printf(Locale.ROOT,
-                "Best cut here: p >= %.3f at %.2f points a hand; today's cut pays %.2f.%n",
-                bestLevel, bestPoints, todayPoints);
+                "Best cut in this sample: p >= %.3f at %.2f points a hand;"
+                + " today's cut pays %.2f.%n", bestLevel, bestPoints, todayPoints);
+        System.out.println("Both chosen and scored on the same hands, so that comparison"
+                + " is not yet worth");
+        System.out.println("anything. The one below is.");
 
-        // Judged against what the bidder does, not against the break-even. The
-        // two are not the same number and confusing them reported "the
-        // estimator is calibrated" off a table showing a 1.28-point gap.
-        if (bestLevel < todayLevel - 1e-9) {
-            System.out.printf(Locale.ROOT,
-                    "%nToday's cut is TOO STRICT by %.2f points a hand.%n", todayPoints < bestPoints
-                            ? bestPoints - todayPoints : 0.0);
-            if (Math.abs(bestLevel - BREAK_EVEN) < 1e-9) {
-                System.out.printf(Locale.ROOT,
-                        "And look where the difference lives: the best cut is break-even%n"
-                        + "ITSELF, %.3f, while the bidder needs strictly more than that. The%n"
-                        + "estimate is a count out of %d worlds, so break-even is a value it can%n"
-                        + "return exactly -- and a strict `>` against a discrete estimator%n"
-                        + "discards that whole bucket. Those hands are not marginal in practice:%n"
-                        + "read their actual win rate off the table above.%n"
-                        + "%nThat is a resolution bug, not a risk-appetite one, and it has two%n"
-                        + "independent repairs: bid on >= at break-even, and give the estimate%n"
-                        + "more than %d worlds so break-even stops being a mass point.%n",
-                        BREAK_EVEN, levels.size() - 1, levels.size() - 1);
-            } else {
-                System.out.printf(Locale.ROOT,
-                        "The gap column above says why: a predicted chance is a share of worlds%n"
-                        + "that survive PERFECT defence, and real defenders are worse than that.%n"
-                        + "The repair is a correction on makeChance, not a bolder dial -- and the%n"
-                        + "same correction raises Null, priced by the harshest defence of all.%n");
-            }
-        } else if (bestLevel > todayLevel + 1e-9) {
-            System.out.printf(Locale.ROOT,
-                    "%nToday's cut is TOO LOOSE by %.2f points a hand: the estimator is%n"
-                    + "optimistic and the bidder should be more selective, not less.%n",
-                    bestPoints - todayPoints);
-        } else {
-            System.out.println();
-            System.out.println("Which is where the bidder already sits. The cut is right;"
-                    + " the auction gap is elsewhere.");
+        // Choose on the even boards, pay on the odd ones. Boards and not hands:
+        // the three seats of one board share a deal, and splitting them would
+        // let the same cards inform both halves.
+        //
+        // This is not ceremony. The first version of this tool reported the best
+        // in-sample cut as a finding worth 1.28 game points a hand, off nine
+        // hands in one bucket, and it evaporated at scale. A finer estimate
+        // makes that worse rather than better: more levels means more candidates
+        // to maximise over, and the maximum of many noisy numbers is biased
+        // upward by construction.
+        List<Sample> fit = samples.stream().filter(x -> x.board() % 2 == 0).toList();
+        List<Sample> test = samples.stream().filter(x -> x.board() % 2 == 1).toList();
+        if (fit.isEmpty() || test.isEmpty()) return;
+
+        double chosen = Double.NaN;
+        double chosenPoints = Double.NEGATIVE_INFINITY;
+        for (double level : levels) {
+            double points = pointsPerHand(fit, level);
+            if (points > chosenPoints) { chosenPoints = points; chosen = level; }
         }
+        double chosenOnTest = pointsPerHand(test, chosen);
+        double todayOnTest = pointsPerHand(test, todayLevel);
+
+        System.out.println();
+        System.out.println("Held out: the cut chosen on half the boards, paid on the other");
+        System.out.printf(Locale.ROOT,
+                "  chosen on %4d hands   p >= %.3f, worth %.2f there%n",
+                fit.size(), chosen, chosenPoints);
+        System.out.printf(Locale.ROOT,
+                "  paid on   %4d hands   %.2f points%n", test.size(), chosenOnTest);
+        System.out.printf(Locale.ROOT,
+                "  today's cut, same hands %.2f points%n", todayOnTest);
+        System.out.println();
+
+        double edge = chosenOnTest - todayOnTest;
+        if (Math.abs(chosen - todayLevel) < 1e-9) {
+            System.out.println("The search picked today's cut. The threshold is right and the"
+                    + " auction gap is");
+            System.out.println("somewhere else -- which is a result, not a null one.");
+        } else if (edge > 0) {
+            System.out.printf(Locale.ROOT,
+                    "A different cut survived the holdout, worth %+.2f points a hand.%n"
+                    + "That is the one to act on.%n", edge);
+        } else {
+            System.out.printf(Locale.ROOT,
+                    "The chosen cut does NOT survive the holdout: %+.2f points a hand against%n"
+                    + "today's. It beat today only on the hands that chose it, which is what%n"
+                    + "overfitting looks like from the inside. Today's cut stands.%n", edge);
+        }
+
         System.out.printf(Locale.ROOT,
                 "%nSample size is %d hands, and the cut is decided by the few hundred nearest%n"
                 + "the threshold. Read the direction here and the size from a longer run.%n",
                 samples.size());
+    }
+
+    /** Game points a cut returns per hand, over every hand in {@code over}. */
+    private static double pointsPerHand(List<Sample> over, double level) {
+        if (over.isEmpty() || Double.isNaN(level)) return Double.NaN;
+        return over.stream().filter(sample -> sample.predicted() >= level)
+                .mapToDouble(Sample::points).sum() / over.size();
     }
 
     // ------------------------------------------------------------------- options

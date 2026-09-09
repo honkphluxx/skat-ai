@@ -2119,3 +2119,37 @@ hands -- a third of them, because on a weak hand every trump game prices worse
 -- and made **20.0%** of the time against a predicted 6.7%. Three times the
 estimate, and still nowhere near the 66.7% it would need. The Null thread stays
 closed, now on a second and much larger sample than the one that closed it.
+
+### 2026-09-09, eleventh: a holdout, before the run that would have needed one
+
+The 24-world run is the one that decides Phase A, and it would have been read
+the same way the 120-hand run was: pick the best cut, compare it to today's,
+report the difference. That is exactly how the 1.28-point ghost was produced --
+and **a finer estimate makes it worse, not better.** Six worlds offer seven
+candidate cuts; twenty-four offer twenty-five. The maximum of many noisy numbers
+is biased upward by construction, so the more resolution the estimator gains,
+the more the in-sample "best cut" flatters itself.
+
+So the tool now chooses on half the boards and pays on the other half. Boards
+and not hands: three seats share a deal, and splitting them would let the same
+cards inform both halves. The in-sample line is still printed, immediately
+followed by a sentence saying it is not worth anything, and **the verdict is
+computed from the held-out pair** rather than printed above it and contradicted
+below.
+
+It caught something on its first run -- 90 hands, `search`, 12 worlds, far too
+small to mean anything about Skat, but the machinery works:
+
+```
+Best cut in this sample: p >= 0.333 at 3.83 points a hand; today's cut pays 3.67.
+
+Held out: the cut chosen on half the boards, paid on the other
+  chosen on   45 hands   p >= 0.167, worth 3.16 there
+  paid on     45 hands   -1.27 points
+  today's cut, same hands 4.71 points
+```
+
+In-sample the search finds a cut beating today by 0.17. Held out, that cut is
+**5.98 points a hand worse.** It beat today only on the hands that chose it,
+which is what overfitting looks like from the inside -- and without the second
+half of that table, it is indistinguishable from a finding.
