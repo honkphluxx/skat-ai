@@ -24,6 +24,25 @@ public final class GameRunner {
 
     public static GameOutcome play(Board board, Map<SkatAi.Seat, SkatAiProvider> seating,
                                    long engineSeed) {
+        return play(board, seating, engineSeed, false);
+    }
+
+    /**
+     * @param voidPassedIn play the official game rather than the canon: when all
+     *                     three pass, score nothing instead of a Ramsch.
+     *                     <p>The engine has no such mode and should not grow one
+     *                     -- the app plays the canon and a measurement taken
+     *                     under different rules than the app plays is worthless,
+     *                     which is why this class drives the shipped engine at
+     *                     all. So the auction runs exactly as it always does and
+     *                     the arena declines the Ramsch it produced, one step
+     *                     later, without a card being played. What that buys is
+     *                     an honest auction-mode number against engines that
+     *                     have never heard of our Ramsch; see
+     *                     {@code docs/training-plan.md} 2.2.
+     */
+    public static GameOutcome play(Board board, Map<SkatAi.Seat, SkatAiProvider> seating,
+                                   long engineSeed, boolean voidPassedIn) {
         GameEngine engine = GameEngine.headless(new Random(engineSeed),
                 SeatedAiProviders.of(seating));
         showTableTo(seating, engine);
@@ -32,6 +51,12 @@ public final class GameRunner {
             // produces a Ramsch, so no board is thrown away and none is scored
             // as a non-event.
             engine.restartWithDeal(board.deal(), board.round(), Collections.emptySet());
+            // Read before the first card, so a voided board costs one auction
+            // and nothing else -- and so no provider is ever asked to play a
+            // Ramsch it would have had to delegate.
+            if (voidPassedIn && engine.snapshot().definition.isRamsch()) {
+                return GameOutcome.passedIn(board.round());
+            }
             return finish(engine, board);
         } finally {
             engine.close();

@@ -140,6 +140,12 @@ public final class MatchResult {
         row(out, "wins as declarer", a.declarerWinRate() * 100, b.declarerWinRate() * 100, "%");
         row(out, "overbid (lost)", a.overbidRate() * 100, b.overbidRate() * 100, "%");
         row(out, "ramsch", a.ramschRate() * 100, b.ramschRate() * 100, "%");
+        // Printed always, not only in void mode, and reading 0.00% everywhere
+        // else. A column that appears and disappears makes two reports
+        // undiffable, and the two rows are only meaningful side by side: every
+        // board that is a Ramsch under the canon is a passed-in board under the
+        // official rules, so one of these is always the other's shadow.
+        row(out, "passed in", a.passedInRate() * 100, b.passedInRate() * 100, "%");
         out.append(String.format(Locale.ROOT, "%-22s %12d %12d%n",
                 "rule violations", a.ruleViolations(), b.ruleViolations()));
         if (!a.violationPhases().isEmpty() || !b.violationPhases().isEmpty()) {

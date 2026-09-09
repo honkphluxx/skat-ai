@@ -48,6 +48,40 @@ public class ArenaTest {
     };
 
     /**
+     * Void mode must actually void: no Ramsch survives it, and the boards that
+     * would have been one are counted rather than lost.
+     *
+     * <p>{@code greedy} rather than {@code random}, which was the first choice
+     * and the wrong one: {@code random} bids on everything, so no board it sits
+     * at ever passes out and the test passed while testing nothing. Greedy
+     * declines often enough to pass out 3 to 18 games in ninety, at every seed
+     * tried.
+     *
+     * <p>The assertion that matters is not the rate but the identity between
+     * the two modes: every board that is a Ramsch under the canon is a
+     * passed-in board under the official rules, and the same seed must produce
+     * the same count of them either way. Anything else would mean the flag
+     * changed the auction, which is the one thing it must not do.
+     */
+    @Test public void voidModeReplacesEveryRamschWithAPassedInBoard() {
+        MatchResult canon = DuplicateMatch.run(
+                GREEDY, GREEDY, 30, 4242L, 1, DuplicateMatch.PassedIn.RAMSCH, line -> {});
+        MatchResult official = DuplicateMatch.run(
+                GREEDY, GREEDY, 30, 4242L, 1, DuplicateMatch.PassedIn.VOID, line -> {});
+
+        assertTrue("this seed must produce the case under test", canon.a().ramschGames() > 0);
+        assertEquals(0, official.a().ramschGames());
+        assertEquals(0, official.b().ramschGames());
+        assertEquals(canon.a().ramschGames(), official.a().passedInGames());
+        assertEquals(canon.b().ramschGames(), official.b().passedInGames());
+        assertEquals(0, canon.a().passedInGames());
+
+        // The board count is untouched: a voided board is still a board, so the
+        // denominators stay comparable and the pairing stays exact.
+        assertEquals(canon.a().games(), official.a().games());
+    }
+
+    /**
      * The arena's own correctness test. Two identical deterministic players must
      * score identically on every board, because duplicate rotation gives each of
      * them the same cards in the same seats. Any non-zero difference means the
@@ -486,25 +520,37 @@ public class ArenaTest {
         SkatAi.Seat declarer = round.forehand;
         SkatAi.Seat defender = round.middlehand;
 
-        GameOutcome won = new GameOutcome(round, false, declarer, Contract.CLUBS,
+        GameOutcome won = new GameOutcome(round, false, false, declarer, Contract.CLUBS,
                 24, true, 72, 24, false, java.util.Map.of(), java.util.List.of(),
                 declarer, false, false);
         assertEquals(24 + 50, Scoring.tournamentPoints(won, declarer));
         assertEquals(0, Scoring.tournamentPoints(won, defender));
 
         // A lost game already arrives doubled and negative from SkatRules.
-        GameOutcome lost = new GameOutcome(round, false, declarer, Contract.CLUBS,
+        GameOutcome lost = new GameOutcome(round, false, false, declarer, Contract.CLUBS,
                 24, false, 45, -48, false, java.util.Map.of(), java.util.List.of(),
                 declarer, false, false);
         assertEquals(-48 - 50, Scoring.tournamentPoints(lost, declarer));
         assertEquals(Scoring.DEFENDER_BONUS, Scoring.tournamentPoints(lost, defender));
 
         // A Ramsch scores one seat its card points and leaves the others blank.
-        GameOutcome ramsch = new GameOutcome(round, true, null, Contract.RAMSCH,
+        GameOutcome ramsch = new GameOutcome(round, true, false, null, Contract.RAMSCH,
                 0, false, 69, -69, false, java.util.Map.of(), java.util.List.of(),
                 declarer, false, false);
         assertEquals(-69, Scoring.tournamentPoints(ramsch, declarer));
         assertEquals(0, Scoring.tournamentPoints(ramsch, defender));
+
+        // A passed-in board scores nobody anything, in either currency. It is
+        // not a Ramsch worth zero: Seeger-Fabian pays a defender 40 whenever a
+        // declarer goes down, so a passed-in board that reached the defender
+        // branch would quietly pay both opponents for a game nobody played.
+        GameOutcome passed = GameOutcome.passedIn(round);
+        for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+            assertEquals(0, Scoring.tournamentPoints(passed, seat));
+            assertEquals(0, Scoring.gamePoints(passed, seat));
+            assertFalse(passed.isDeclarer(seat));
+        }
+        assertEquals(0, passed.chargedValue());
     }
 
     @Test public void registryResolvesBuiltInsAndClassSpecs() {

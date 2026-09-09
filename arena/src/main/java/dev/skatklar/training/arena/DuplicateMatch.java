@@ -36,6 +36,21 @@ public final class DuplicateMatch {
     }
 
     /**
+     * What happens to a board all three players passed.
+     *
+     * <p>{@link #RAMSCH} is the canon and the default, because it is what the
+     * app plays. {@link #VOID} is the official game everyone else plays, and it
+     * exists for one reason: an outside engine has no Ramsch, so in canon mode
+     * {@code ExternalBotProvider} hands those games to {@code greedy} and the
+     * result is partly a measurement of greedy. Voiding removes the delegation
+     * rather than hiding it -- the summary's {@code delegated games} should read
+     * 0 in this mode, and that is the gate.
+     *
+     * <p>It changes nothing at fixed contracts, where no board can pass in.
+     */
+    public enum PassedIn { RAMSCH, VOID }
+
+    /**
      * Compares card play only: the auction is replaced by {@code contracts}, and
      * both contestants play every board at the identical declarer and contract.
      *
@@ -47,7 +62,12 @@ public final class DuplicateMatch {
     public static MatchResult runFixedContract(Contestant a, Contestant b, int boards, long seed,
                                                int threads, ContractSource contracts,
                                                Consumer<String> progress) {
-        return execute(a, b, boards, seed, threads, contracts, progress);
+        // PassedIn.RAMSCH rather than a caller's choice, and not by oversight:
+        // a fixed contract is reached without an auction, so nothing can pass
+        // in and the flag has nothing to act on. Hard-coding it here is what
+        // makes "the flag must not touch the fixed-contract numbers" a
+        // property of the code rather than a promise.
+        return execute(a, b, boards, seed, threads, contracts, PassedIn.RAMSCH, progress);
     }
 
     /**
@@ -57,18 +77,23 @@ public final class DuplicateMatch {
      */
     public static MatchResult run(Contestant a, Contestant b, int boards, long seed,
                                   int threads, Consumer<String> progress) {
-        return execute(a, b, boards, seed, threads, null, progress);
+        return run(a, b, boards, seed, threads, PassedIn.RAMSCH, progress);
+    }
+
+    public static MatchResult run(Contestant a, Contestant b, int boards, long seed,
+                                  int threads, PassedIn passedIn, Consumer<String> progress) {
+        return execute(a, b, boards, seed, threads, null, passedIn, progress);
     }
 
     private static MatchResult execute(Contestant a, Contestant b, int boards, long seed,
                                        int threads, ContractSource contracts,
-                                       Consumer<String> progress) {
+                                       PassedIn passedIn, Consumer<String> progress) {
         if (boards < 1) throw new IllegalArgumentException("A match needs at least one board");
 
         List<Callable<BoardResult>> work = new ArrayList<>(boards);
         for (int i = 0; i < boards; i++) {
             final int index = i;
-            work.add(() -> playBoard(a, b, Board.of(seed, index), seed, contracts));
+            work.add(() -> playBoard(a, b, Board.of(seed, index), seed, contracts, passedIn));
         }
 
         List<BoardResult> results = threads > 1
@@ -93,7 +118,11 @@ public final class DuplicateMatch {
         double[] flat = new double[diffs.size()];
         for (int i = 0; i < flat.length; i++) flat[i] = diffs.get(i);
         return new MatchResult(tallyA, tallyB, flat, GAMES_PER_SIDE_AND_BOARD,
-                contracts == null ? "auction at every table" : contracts.describe(), skipped);
+                contracts == null
+                        ? "auction at every table" + (passedIn == PassedIn.VOID
+                                ? ", passed-in boards voided" : "")
+                        : contracts.describe(),
+                skipped);
     }
 
     private static List<BoardResult> runSerial(List<Callable<BoardResult>> work,
@@ -141,7 +170,7 @@ public final class DuplicateMatch {
     }
 
     private static BoardResult playBoard(Contestant a, Contestant b, Board board, long seed,
-                                         ContractSource contracts) {
+                                         ContractSource contracts, PassedIn passedIn) {
         ContractSource.FixedContract fixed = null;
         if (contracts != null) {
             fixed = contracts.contractFor(board);
@@ -152,8 +181,8 @@ public final class DuplicateMatch {
         Tally tallyA = new Tally(a.id());
         Tally tallyB = new Tally(b.id());
         for (SkatAi.Seat singleton : SkatAi.Seat.values()) {
-            tallyA.record(playRotation(board, a, b, singleton, seed, fixed), singleton);
-            tallyB.record(playRotation(board, b, a, singleton, seed, fixed), singleton);
+            tallyA.record(playRotation(board, a, b, singleton, seed, fixed, passedIn), singleton);
+            tallyB.record(playRotation(board, b, a, singleton, seed, fixed, passedIn), singleton);
         }
         return new BoardResult(tallyA, tallyB);
     }
@@ -181,7 +210,8 @@ public final class DuplicateMatch {
      */
     private static GameOutcome playRotation(Board board, Contestant singleton, Contestant others,
                                             SkatAi.Seat singletonSeat, long seed,
-                                            ContractSource.FixedContract fixed) {
+                                            ContractSource.FixedContract fixed,
+                                            PassedIn passedIn) {
         Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
         for (SkatAi.Seat seat : SkatAi.Seat.values()) {
             Contestant contestant = seat == singletonSeat ? singleton : others;
@@ -190,7 +220,7 @@ public final class DuplicateMatch {
         }
         long engineSeed = Seeds.mix(seed, board.index(), singletonSeat.ordinal(), 0xE1E1E1L);
         return fixed == null
-                ? GameRunner.play(board, seating, engineSeed)
+                ? GameRunner.play(board, seating, engineSeed, passedIn == PassedIn.VOID)
                 : GameRunner.playFixed(board, seating, fixed, engineSeed);
     }
 

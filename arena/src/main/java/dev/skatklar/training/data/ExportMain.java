@@ -41,7 +41,13 @@ import java.util.concurrent.Future;
  *   --out=&lt;dir&gt;     where the shards go                     (default belief-data)
  *   --shard=&lt;n&gt;     boards per shard file                    (default 500)
  *   --players=a,b   population to seat, comma separated
+ *   --passed-in=&lt;x&gt; ramsch (default) or void; see DuplicateMatch.PassedIn
  * </pre>
+ *
+ * <p>The corpus has to be exported under the rules the resulting player will be
+ * measured under. A model trained on boards where every pass-out became a
+ * Ramsch has learned what a pass implies at a table that plays Ramsch, and that
+ * is not the table it will be graded at in void-board mode.
  */
 public final class ExportMain {
 
@@ -60,6 +66,12 @@ public final class ExportMain {
         long seed = Long.parseLong(options.getOrDefault("seed", "1"));
         int threads = Integer.parseInt(options.getOrDefault("threads", "1"));
         int shardSize = Integer.parseInt(options.getOrDefault("shard", "500"));
+        boolean voidPassedIn = switch (options.getOrDefault("passed-in", "ramsch")) {
+            case "ramsch" -> false;
+            case "void" -> true;
+            default -> throw new IllegalArgumentException(
+                    "Unknown --passed-in '" + options.get("passed-in") + "'. Use ramsch or void.");
+        };
         Path out = Path.of(options.getOrDefault("out", "belief-data")).toAbsolutePath();
 
         PlayerRegistry registry = PlayerRegistry.withDefaults();
@@ -98,7 +110,7 @@ public final class ExportMain {
             int last = Math.min(boards, first + shardSize);
             Path shard = out.resolve(String.format(Locale.ROOT, "shard-%05d.bin", first));
             try (BeliefExporter.ShardWriter writer = new BeliefExporter.ShardWriter(shard)) {
-                play(population, first, last, seed, threads, writer);
+                play(population, first, last, seed, threads, writer, voidPassedIn);
                 total += writer.records();
                 System.out.printf(Locale.ROOT, "  %s: %,d records (%,d boards)%n",
                         shard.getFileName(), writer.records(), last - first);
@@ -110,12 +122,13 @@ public final class ExportMain {
     }
 
     private static void play(List<Contestant> population, int firstBoard, int lastBoard,
-                             long seed, int threads, BeliefExporter.Sink sink) throws Exception {
+                             long seed, int threads, BeliefExporter.Sink sink,
+                             boolean voidPassedIn) throws Exception {
         List<Callable<Void>> work = new ArrayList<>(lastBoard - firstBoard);
         for (int index = firstBoard; index < lastBoard; index++) {
             final int board = index;
             work.add(() -> {
-                playBoard(population, Board.of(seed, board), seed, sink);
+                playBoard(population, Board.of(seed, board), seed, sink, voidPassedIn);
                 return null;
             });
         }
@@ -153,7 +166,7 @@ public final class ExportMain {
     }
 
     private static void playBoard(List<Contestant> population, Board board, long seed,
-                                  BeliefExporter.Sink sink) {
+                                  BeliefExporter.Sink sink, boolean voidPassedIn) {
         Random random = new Random(Seeds.mix(seed, board.index(), 0xDA7AL));
         Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
         Map<SkatAi.Seat, Integer> whoSatWhere = new EnumMap<>(SkatAi.Seat.class);
@@ -170,7 +183,7 @@ public final class ExportMain {
             seating.put(seat, recorder);
         }
         GameRunner.play(board, seating,
-                Seeds.mix(seed, board.index(), 0xE1E1E1L));
+                Seeds.mix(seed, board.index(), 0xE1E1E1L), voidPassedIn);
         recorders.clear();
     }
 }

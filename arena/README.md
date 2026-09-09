@@ -1754,3 +1754,48 @@ And the log now names the file it opened, which is the one thing it did not say.
 Verified on Linux: cold cache loads and reports the path, warm cache reuses it,
 a decoy on `java.library.path` no longer wins, and a one-byte change to the
 library unpacks under a new name.
+
+### 2026-09-09, sixth: Phase V, and the delegation was worse than assumed
+
+`--passed-in=void` is in. When the auction ends with all three passing, the
+board scores nothing and no card is played, which is the game the rest of the
+world plays; the canon's Ramsch stays the default, because it is what the app
+plays.
+
+**Why it had to happen before Phase A.** Phase A is measured in auction mode,
+and auction mode against an outside engine was not honest. Neither XSkat nor
+go-skat has a Ramsch, so `ExternalBotProvider` hands those games to `greedy` on
+their behalf — and the JSkat adapter does the same thing, playing our
+`RamschPolicy` rather than handing the game to JSkat. The Phase R logs put a
+number on it:
+
+```
+xskat vs greedy, auction mode, three seeds
+  ramsch          14.44%  12.00%  8.89%  14.89%  6.67%  11.11%
+  delegated games  68      68      79     66      40     36     (of 900)
+```
+
+**So roughly one auction-mode game in ten had the outsider's seat played by
+somebody else.** That is not a rounding error like Null; it is a tenth of every
+number we have ever taken against an outside engine, and it was flattering or
+punishing us in a direction nobody had measured. Every auction-mode match
+against `xskat`, `go-skat` or `jskat-new` in `overnight-arena.sh` now runs void,
+and the log name carries the mode so a void run cannot read a canon log as its
+own.
+
+**What it does not touch.** Fixed contracts are reached without an auction, so
+nothing can pass in; `runFixedContract` hard-codes the canon rather than taking
+a caller's choice, which makes "the flag must not move the fixed-contract
+numbers" a property of the code instead of a promise.
+
+**Measured, at six seeds of `greedy` against itself:** every Ramsch under the
+canon becomes exactly one passed-in board under the official rules — 18, 12, 6,
+15, 15 and 3 games in ninety — with the ramsch count going to zero, the
+passed-in count taking its place, and the game count unchanged. The identity is
+the test: anything else would mean the flag changed the auction, which is the
+one thing it must not do. The first version of that test seated `random` and
+passed while testing nothing, because `random` bids on everything and its table
+never passes out.
+
+The report prints a `passed in` row always, reading 0.00% in canon mode, so two
+reports stay diffable.

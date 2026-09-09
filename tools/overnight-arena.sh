@@ -155,6 +155,10 @@ match() {
         *contracts=solver*) mode=oracle ;;
         *fixed-contract*)   mode=cardplay ;;
     esac
+    # Void-board mode is a different measurement of the same pair, so it needs a
+    # different name for exactly the reason the mode does: a shared filename
+    # would make the second run read the first one as already done.
+    case "$extra" in *--passed-in=void*) mode="$mode-void" ;; esac
     # The bidder belongs in the name too, and for the same reason: the same pair
     # at fixed contracts scores differently depending on who chose the contracts,
     # so a run that changes the bidder must not read the old logs as its own.
@@ -302,7 +306,7 @@ for SEED in $SEEDS; do
     # so neither side is measured on its own taste in games.
     match search solver       "$(boards 250)" ""
     match search greedy       "$(boards 300)" ""
-    match search jskat-new    "$(boards 250)" ""
+    match search jskat-new    "$(boards 250)" "--passed-in=void"
     match solver greedy       "$(boards 300)" "--fixed-contract $BIDDER"
     match search jskat-ml-pro "$(boards 200)" "--fixed-contract --contracts=solver"
 
@@ -330,7 +334,7 @@ for SEED in $SEEDS; do
         # for and no longer should: the app seats the belief player, so the belief
         # player is the one whose distance to JSkat means anything.
         match belief jskat-ml-pro "$(boards 300)" "--fixed-contract --contracts=solver"
-        match belief jskat-new    "$(boards 300)" ""
+        match belief jskat-new    "$(boards 300)" "--passed-in=void"
 
         # The same match at the effort the app's top level actually spends. At a
         # fixed contract `belief-32` and Opponents.Level.ANALYST are the same
@@ -402,28 +406,28 @@ for SEED in $SEEDS; do
     [ -x third_party/xskat/skatklar-xskat ] || [ -x third_party/xskat/skatklar-xskat.exe ] && XSKAT=true
     [ -x third_party/go-skat/skatklar-goskat ] || [ -x third_party/go-skat/skatklar-goskat.exe ] && GOSKAT=true
     if $XSKAT; then
-        match xskat greedy    "$(boards 300)" ""
+        match xskat greedy    "$(boards 300)" "--passed-in=void"
         match xskat greedy    "$(boards 300)" "--fixed-contract $BIDDER"
-        match xskat jskat-new "$(boards 250)" ""
+        match xskat jskat-new "$(boards 250)" "--passed-in=void"
         # The leak, priced: xskat is told the skat, xskat-blind is dealt a
         # sampled one. Measured in the container at +0.40 [-0.55, +1.35] over
         # 150 boards; three seeds of this is what settles whether it is zero.
-        match xskat xskat-blind "$(boards 300)" ""
+        match xskat xskat-blind "$(boards 300)" "--passed-in=void"
         if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
             match belief-32 xskat "$(boards 300)" "--fixed-contract --contracts=solver"
-            match belief-32 xskat "$(boards 300)" ""
+            match belief-32 xskat "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
-        match go-skat greedy "$(boards 200)" ""
+        match go-skat greedy "$(boards 200)" "--passed-in=void"
         match go-skat greedy "$(boards 200)" "--fixed-contract $BIDDER"
         if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
             match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=solver"
-            match belief-32 go-skat "$(boards 200)" ""
+            match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi
     if $XSKAT && $GOSKAT; then
-        match xskat go-skat "$(boards 300)" ""
+        match xskat go-skat "$(boards 300)" "--passed-in=void"
     fi
     # The honesty control, once a seed and small: every card re-asked under
     # eight reshuffles of what the seat cannot see. Zero is the expected answer
@@ -433,8 +437,8 @@ for SEED in $SEEDS; do
     if $XSKAT || $GOSKAT; then
         SAVED_PROPS="$PROPS"
         PROPS="$PROPS -Dskat.probe=8"
-        $XSKAT  && match xskat   greedy "$(boards 60)" ""
-        $GOSKAT && match go-skat greedy "$(boards 60)" ""
+        $XSKAT  && match xskat   greedy "$(boards 60)" "--passed-in=void"
+        $GOSKAT && match go-skat greedy "$(boards 60)" "--passed-in=void"
         PROPS="$SAVED_PROPS"
     fi
 done

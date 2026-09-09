@@ -11,6 +11,7 @@ import java.util.Map;
 /** The engine-reported result of one arena game, flattened for scoring and CSV. */
 public record GameOutcome(SkatAi.RoundPosition round,
                           boolean ramsch,
+                          boolean passedIn,
                           SkatAi.Seat declarer,
                           Contract contract,
                           int bidValue,
@@ -33,12 +34,35 @@ public record GameOutcome(SkatAi.RoundPosition round,
     public static GameOutcome of(SkatAi.GameResult result,
                                  Map<SkatAi.Seat, Integer> ruleViolations,
                                  List<GameEngine.RuleViolation> detail) {
-        return new GameOutcome(result.game.round, result.game.isRamsch(),
+        return new GameOutcome(result.game.round, result.game.isRamsch(), false,
                 result.game.declarer,
                 result.game.contract, result.game.bidValue, result.declarerWon,
                 result.declarerPoints, result.gameValue, result.overbid,
                 seatMap(ruleViolations), List.copyOf(detail),
                 result.scoredSeat, result.jungfrau, result.durchmarsch);
+    }
+
+    /**
+     * A deal nobody took, under the official rules rather than ours.
+     *
+     * <p>The canon plays a Ramsch when all three pass; the rules the rest of the
+     * world plays pass the board in and score nothing. Neither is more correct,
+     * but only one of them is a game an outside engine has ever heard of, and a
+     * measurement against XSkat or go-skat in which our Ramsch is quietly played
+     * by {@code greedy} on their behalf is a measurement of greedy. See
+     * {@code --passed-in=void}.
+     *
+     * <p>No cards are played, so there is no declarer, no defenders, no charged
+     * value and no violation to attribute. It is still one game at the table:
+     * the seat sat down, the auction happened, and nothing came of it. Counting
+     * it as a game is what makes "declares" mean what it says -- a player that
+     * passes half its boards should show a declaring rate near a half, not near
+     * one -- and it keeps both sides of a duplicate pairing on the same
+     * denominator whichever of them found a game.
+     */
+    public static GameOutcome passedIn(SkatAi.RoundPosition round) {
+        return new GameOutcome(round, false, true, null, null, 0, false, 0, 0, false,
+                Collections.emptyMap(), List.of(), null, false, false);
     }
 
     /** {@code new EnumMap<>(map)} rejects an empty non-enum map, hence the copy. */

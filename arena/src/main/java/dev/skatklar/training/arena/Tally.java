@@ -11,6 +11,7 @@ public final class Tally {
     private final String contestant;
     private int games;
     private int ramschGames;
+    private int passedInGames;
     private int declared;
     private int declarerWins;
     private int overbids;
@@ -49,6 +50,11 @@ public final class Tally {
         int points = Scoring.tournamentPoints(outcome, seat);
         tournamentPoints += points;
         gamePoints += Scoring.gamePoints(outcome, seat);
+        // Before the Ramsch branch, and before the defender branch below: a
+        // board that was passed in has no declarer and no defenders, so a seat
+        // at one is neither. Counting it as a defended game would credit a
+        // player for defending a game nobody played.
+        if (outcome.passedIn()) { passedInGames++; return; }
         if (outcome.ramsch()) { ramschGames++; return; }
         if (outcome.isDeclarer(seat)) declarerTournamentPoints += points;
         else { defenderTournamentPoints += points; defended++; }
@@ -65,6 +71,7 @@ public final class Tally {
     void add(Tally other) {
         games += other.games;
         ramschGames += other.ramschGames;
+        passedInGames += other.passedInGames;
         declared += other.declared;
         declarerWins += other.declarerWins;
         overbids += other.overbids;
@@ -86,6 +93,8 @@ public final class Tally {
     public String contestant() { return contestant; }
     public int games() { return games; }
     public int ramschGames() { return ramschGames; }
+    /** Boards this seat sat at where all three passed and nothing was played. */
+    public int passedInGames() { return passedInGames; }
     public int declared() { return declared; }
     public int declarerWins() { return declarerWins; }
     public int overbids() { return overbids; }
@@ -126,4 +135,5 @@ public final class Tally {
      * calibrated rather than how shy it is.
      */
     public double ramschRate() { return games == 0 ? 0 : (double) ramschGames / games; }
+    public double passedInRate() { return games == 0 ? 0 : (double) passedInGames / games; }
 }

@@ -32,6 +32,16 @@ public final class ArenaMain {
                                   solver   the double-dummy oracle: the most
                                            valuable contract that survives perfect
                                            defence. Objective, and slower.
+              --passed-in=<x>   what happens when all three pass:
+                                  ramsch   the canon, and what the app plays
+                                           (default)
+                                  void     the official game: score nothing and
+                                           play no cards. Use this against
+                                           outside engines, which have no
+                                           Ramsch and would otherwise have
+                                           those games played for them by
+                                           greedy. No effect with a fixed
+                                           contract, where nothing can pass in.
               --bidder=<player> the bidder for --contracts=auction (default
                                 greedy). Use the strongest bidder you have; the
                                 report prints the contract mix so you can judge
@@ -83,6 +93,7 @@ public final class ArenaMain {
         boolean fixedContract = options.containsKey("fixed-contract");
         String bidder = options.getOrDefault("bidder", "greedy");
         String contractSource = options.getOrDefault("contracts", "auction");
+        DuplicateMatch.PassedIn passedIn = passedIn(options.getOrDefault("passed-in", "ramsch"));
 
         Contestant first = registry.resolve(a);
         Contestant second = registry.resolve(b);
@@ -112,7 +123,7 @@ public final class ArenaMain {
         MatchResult result = fixedContract
                 ? DuplicateMatch.runFixedContract(first, second, boards, seed, threads,
                         contracts(contractSource, registry, bidder, seed), progress)
-                : DuplicateMatch.run(first, second, boards, seed, threads, progress);
+                : DuplicateMatch.run(first, second, boards, seed, threads, passedIn, progress);
         double seconds = (System.nanoTime() - startedAt) / 1e9;
 
         System.out.println();
@@ -138,6 +149,18 @@ public final class ArenaMain {
                 System.err.println("Could not write " + path + ": " + failure.getMessage());
             }
         }
+    }
+
+    private static DuplicateMatch.PassedIn passedIn(String value) {
+        return switch (value) {
+            case "ramsch" -> DuplicateMatch.PassedIn.RAMSCH;
+            case "void" -> DuplicateMatch.PassedIn.VOID;
+            // Rejected rather than defaulted. A typo that silently gives back
+            // the canon would put a Ramsch rate in a report whose filename says
+            // void, and the log outlives whoever typed it.
+            default -> throw new IllegalArgumentException(
+                    "Unknown --passed-in '" + value + "'. Use ramsch or void.");
+        };
     }
 
     private static ContractSource contracts(String source, PlayerRegistry registry,
