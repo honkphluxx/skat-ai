@@ -236,6 +236,26 @@ moves.
    on 0.45% of boards and Phase R's real matches on none of ~1,800. Something
    after winning the auction loses the rest, and the skat pick-up is the
    suspect.
+
+   **Both are now instrumented.** `--explain=null` dumps the boards the oracle
+   calls Null, one line per seat, with each seat's Null chance beside the chance
+   and guaranteed value of the trump game it preferred — a high Null chance
+   beside a preferred rival means the value comparison loses, a low one means
+   `makeChance` is the harsh part. And the audit now follows the skat for any
+   Null intent that wins, reporting what it announced once it had seen the two
+   cards. Run it over the same 400 boards:
+
+   ```
+   ./gradlew :arena:nullAudit --args="--player=belief-32 --boards=400 --threads=8 --explain=null"
+   ```
+
+   **Read it beside a second run at `--bidding-worlds=32`.** The bidder decides
+   Null on `clamp(worlds/3, 2, 6)` sampled worlds — six of them for `belief-32`
+   — so its Null chance is quantised in sixths, and a Null has to survive nearly
+   every world to look sound. If the chance rises sharply with more worlds, the
+   harshness is sampling noise and the fix is worlds rather than judgement; if
+   it does not, the evaluator genuinely dislikes those hands and that is a
+   different repair.
 3. **The declining threshold.** We declare 24–26% against XSkat's 33% and win
    85% against its 77%. Sweep the threshold and measure; the aggression dials
    already exist and their sweep is redone on the Null-capable bidder.
