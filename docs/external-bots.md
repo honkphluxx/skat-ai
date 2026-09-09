@@ -60,6 +60,13 @@ Measured, 40 boards (240 games) against `greedy`:
 | XSkat | 2,960 | **4 (0.14%)**, all as declarer |
 | go-skat | 1,480 | **2 (0.14%)** |
 
+Read those two rows with one caveat until 2026-09-09: **go-skat's driver did
+not record the breakdown at all.** Its STATS line carried a literal
+`declarer 0 defender 0 tricks 0 0 ...`, printed by the arena beside XSkat's
+real numbers, so two lines that looked identical meant "none" for one helper
+and "not recorded" for the other. It records them now. A zero that cannot be
+anything else is worse than no column.
+
 So both are honest to within a fifth of a percent of their decisions. XSkat's
 four are real: it is told the skat (`gespcd` marks it, and `gewinnstich` sums the
 points still in hands, which is 120 minus what is taken minus the skat), and as

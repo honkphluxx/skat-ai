@@ -36,7 +36,16 @@ var (
 	skDecisions int64
 	skMismatch  int64
 	skDiverge   int64
-	skOut       *bufio.Writer
+	// Where the mismatches fell. These used to be absent, and STATS reported a
+	// literal "declarer 0 defender 0 tricks 0 0 ..." -- which the arena printed
+	// beside XSkat's real breakdown, so two lines that looked identical meant
+	// "none" for one helper and "not recorded" for the other. A zero that cannot
+	// be anything else is worse than no column.
+	skMmDeclarer int64
+	skMmDefender int64
+	skMmTrick    [11]int64
+	skTricksDone int
+	skOut        *bufio.Writer
 )
 
 func init() {
@@ -161,8 +170,12 @@ func skatklarMain() {
 			fmt.Fprintf(skOut, "OK\n")
 		case "STATS":
 			fmt.Fprintf(skOut, "STATS decisions %d mismatches %d divergences %d"+
-				" declarer 0 defender 0 tricks 0 0 0 0 0 0 0 0 0 0\n",
-				skDecisions, skMismatch, skDiverge)
+				" declarer %d defender %d tricks",
+				skDecisions, skMismatch, skDiverge, skMmDeclarer, skMmDefender)
+			for trick := 1; trick <= 10; trick++ {
+				fmt.Fprintf(skOut, " %d", skMmTrick[trick])
+			}
+			fmt.Fprintf(skOut, "\n")
 		case "MAXBID":
 			seat, _ := strconv.Atoi(args[0])
 			p := skStubTable(seat, skCards(args[1:]))
@@ -252,6 +265,7 @@ func skSetupGame(args []string) {
 	skHandGame = args[3] == "1"
 	leader, _ := strconv.Atoi(args[5])
 	skFinished = false
+	skTricksDone = 0
 
 	for seat := 0; seat < 3; seat++ {
 		p := makePlayer(skCards(args[7+seat*10 : 17+seat*10]))
@@ -396,6 +410,7 @@ func skStep(forced *Card) Card {
 		skState.follow = getSuit(skState.trump, skState.trick[0])
 	}
 	if len(skState.trick) == 3 {
+		skTricksDone++
 		players = setNextTrickOrder(&skState, players)
 		skState.follow = ""
 		if players == nil {
@@ -466,5 +481,15 @@ func skProbeChoice(p PlayerI) {
 	skDecisions++
 	if mismatch {
 		skMismatch++
+		if skMySeat == skDeclarer {
+			skMmDeclarer++
+		} else {
+			skMmDefender++
+		}
+		// The trick this decision belongs to, numbered from 1 as XSkat numbers
+		// it, so the two helpers' histograms line up column for column.
+		if trick := skTricksDone + 1; trick >= 1 && trick <= 10 {
+			skMmTrick[trick]++
+		}
 	}
 }
