@@ -174,6 +174,18 @@ auction.
 and the Ramsch rate is 0; the fixed-contract numbers are byte-identical to
 before (the flag must not touch them).
 
+**Built 2026-09-09 (d09b943), and the delegation was larger than this section
+assumed.** The Phase R logs put it at 6.7-14.9% of games and 36-79 delegated
+games in 900, every seed -- about one auction-mode game in ten against an
+outside engine played by `greedy` rather than by the engine. The JSkat adapter
+does the same thing with `RamschPolicy`, so `jskat-new` was affected too and
+its auction-mode matches now run void as well.
+
+Unit-verified at six seeds: every Ramsch becomes exactly one passed-in board,
+the ramsch count goes to zero and the game count is unchanged. **The gate
+above still has to be run on the machine** -- what is checked so far is the
+identity, not a match against a real outsider.
+
 ### Phase B2 — belief v2 (the week that matters)
 
 1. **Diagnose before training.** Print the true-world share per trick for the
