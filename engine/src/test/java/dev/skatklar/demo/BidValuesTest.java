@@ -143,6 +143,25 @@ public class BidValuesTest {
         assertTrue(reachable.get(reachable.size() - 1) <= clubs.best());
     }
 
+    /**
+     * The unpriced list stops at nothing, because nothing has judged the hand:
+     * it is what the ceiling picker offers a player who never asked what the
+     * game is worth.
+     */
+    @Test
+    public void unpricedCeilingsRunTheWholeLadder() {
+        List<Integer> above = BidValues.reachable(18);
+        assertFalse(above.isEmpty());
+        assertEquals(BidValues.lowestReaching(19), (int) above.get(0));
+        assertEquals(BidValues.LADDER.get(BidValues.LADDER.size() - 1),
+                above.get(above.size() - 1));
+
+        BidValues.Range clubs = BidValues.evaluate(
+                Declaration.of(Contract.CLUBS), withoutTwoInClubs());
+        assertTrue("a priced list is the shorter one",
+                above.size() > BidValues.reachable(clubs, 18).size());
+    }
+
     /** Toggling an announcement repairs what it depends on, in both directions. */
     @Test
     public void announcementsRepairTheirOwnPrerequisites() {

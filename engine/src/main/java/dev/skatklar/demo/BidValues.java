@@ -167,8 +167,23 @@ public final class BidValues {
     }
 
     /**
+     * Every rung above {@code currentBid}, with no game bounding the top.
+     *
+     * <p>What a ceiling may be set to when nothing has priced the hand, or when
+     * the player has not asked for a price: where a holding runs out is then
+     * the player's own reading, and a list that stopped short would be the
+     * answer to it.
+     */
+    public static List<Integer> reachable(int currentBid) {
+        ArrayList<Integer> result = new ArrayList<>();
+        for (int value : LADDER) if (value > currentBid) result.add(value);
+        return result;
+    }
+
+    /**
      * The rungs from just above {@code currentBid} up to and including the
-     * highest value this declaration can reach. What a ceiling may be set to.
+     * highest value this declaration can reach. What a ceiling may be set to
+     * once the player has asked what the game is worth.
      */
     public static List<Integer> reachable(Range range, int currentBid) {
         ArrayList<Integer> result = new ArrayList<>();
