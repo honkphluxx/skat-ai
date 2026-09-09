@@ -1817,3 +1817,53 @@ for real, and the bug surfaced only on the machine that has JUnit. The stub now
 throws, and there is a reflective runner beside it that executes the `@Test`
 methods without JUnit on the classpath; all 20 pass there now. A stub that
 cannot fail is not a weaker test, it is the absence of one wearing its clothes.
+
+### 2026-09-09, seventh: the gate passed, and the gate could not be read
+
+The Phase V gate run, `xskat − greedy`, 100 boards, seed 11, void:
+
+```
+ramsch                        0.00%        0.00%
+passed in                    12.67%       14.33%
+xskat - greedy = +18.583 game pts/game   95% CI [+13.107, +24.059]
+```
+
+Ramsch is gone and the boards it stood for are counted. **But the number the
+gate is actually stated in — `delegated games 0` — was not in the output at
+all.** `ExternalBotProvider` armed its summary only when the honesty probe was
+on (`if (probeWorlds > 1) reportOnExit()`), and returned early unless the probe
+had decisions. That is backwards: the honesty control is an occasional audit,
+while *who actually played these games* qualifies every score the class ever
+produces. Now armed for every match, with its own line:
+
+```
+External bots: 600 games, 0 delegated (0.00%), 0 rule divergences
+```
+
+and a sentence naming the cause and the cure when the count is not zero. A gate
+whose evidence prints only in a mode nobody runs is not a gate.
+
+**What the delegation was worth, same pair and same seed.** The canon run is
+300 boards and the void run 100, so this is indicative rather than paired:
+
+| | canon | void |
+| --- | --- | --- |
+| xskat game pts/game | 1.89 | 4.39 |
+| greedy game pts/game | −20.23 | −14.19 |
+| xskat − greedy | **+22.116** | **+18.583** |
+| xskat declares / wins | 16.33% / 87.07% | 14.67% / 86.36% |
+
+Both players score better without the Ramsch, which is arithmetic — a Ramsch
+charges somebody and a passed-in board charges nobody — but **greedy gains
+6.0 and XSkat only 2.5, so the gap narrows by 3.5 game points.** Greedy was
+eating the larger share of those charges. The intervals overlap and the board
+counts differ, so this is not yet a measurement; a canon run at 100 boards on
+seed 11 would make it an exact pair, and costs seven seconds.
+
+**One thing to watch in the void numbers.** XSkat declares 14.67%, under the
+report's own 15% warning line: *winning by abstaining, not by playing*. Voiding
+removes the penalty a passed-out board used to carry, so a very selective
+bidder is now rewarded for selectivity more than before. That is the official
+game and not a bug — but it means the Phase A threshold sweep is being run in
+the mode that most favours declining, which is worth remembering when reading
+what the sweep says the threshold should be.

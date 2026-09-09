@@ -45,6 +45,7 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
     private static final AtomicLong PROBE_DECISIONS = new AtomicLong();
     private static final AtomicLong PROBE_MISMATCHES = new AtomicLong();
     private static final AtomicLong FALLBACKS = new AtomicLong();
+    private static final AtomicLong GAMES = new AtomicLong();
     private static final AtomicLong DIVERGENCES = new AtomicLong();
     private static final AtomicLong MISMATCH_DECLARER = new AtomicLong();
     private static final AtomicLong MISMATCH_DEFENDER = new AtomicLong();
@@ -66,21 +67,40 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
      * Printed at exit rather than folded into the match report, so that the
      * arena's own output format is untouched and the control's numbers cannot
      * be mistaken for part of the score.
+     *
+     * <p>Armed for every match, not only a probed one. It used to be armed only
+     * when {@code probeWorlds > 1}, and to return early unless the probe had
+     * decisions -- so the delegation count, which is the number that says
+     * whether this seat was played by this engine or by the stand-in, was
+     * visible only in a probe run. That is precisely backwards: the honesty
+     * control is an occasional audit, while "who actually played these games"
+     * qualifies every score this class ever produces. Phase V's gate is
+     * {@code delegated games 0}, and the gate could not be read.
      */
     private static void reportOnExit() {
         if (!SUMMARY_ARMED.compareAndSet(false, true)) return;
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            long games = GAMES.get();
+            if (games > 0) {
+                long delegated = FALLBACKS.get();
+                System.out.printf("%nExternal bots: %,d games, %,d delegated (%.2f%%),"
+                        + " %d rule divergences%n",
+                        games, delegated, 100.0 * delegated / games, DIVERGENCES.get());
+                if (delegated > 0) {
+                    System.out.println("  A delegated game was played by the stand-in, not by "
+                            + "the engine named in the report. Ramsch is the usual cause; "
+                            + "--passed-in=void removes it.");
+                }
+            }
             long decisions = PROBE_DECISIONS.get();
             if (decisions == 0) return;
             long mismatches = PROBE_MISMATCHES.get();
             System.out.printf("%nHonesty control: %d of %d decisions changed under "
                     + "reshuffles of the cards the seat cannot see (%.2f%%)"
-                    + "%n  as declarer %d, as defender %d, by trick %s"
-                    + "%n  rule divergences %d, delegated games %d%n",
+                    + "%n  as declarer %d, as defender %d, by trick %s%n",
                     mismatches, decisions, 100.0 * mismatches / decisions,
                     MISMATCH_DECLARER.get(), MISMATCH_DEFENDER.get(),
-                    java.util.Arrays.toString(mismatchesByTrick()),
-                    DIVERGENCES.get(), FALLBACKS.get());
+                    java.util.Arrays.toString(mismatchesByTrick()));
             if (mismatches > 0) {
                 System.out.println("  A non-zero count means the score above is not "
                         + "an honest player's. Run the same match against the -blind "
@@ -100,7 +120,7 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
         this.seed = seed;
         this.probeWorlds = probeWorlds;
         this.sampledWorld = sampledWorld;
-        if (probeWorlds > 1) reportOnExit();
+        reportOnExit();
     }
 
     /** Decisions probed and answers that changed, across every helper this run. */
@@ -281,6 +301,7 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
         @Override public void startGame(SkatAi.GameStartContext context) {
             blind.startGame(context);
             if (mySeat == null) begin(context.mySeat, context.round);
+            GAMES.incrementAndGet();
             SkatAi.GameDefinition game = context.game;
             if (game.isRamsch() || engine == null) {
                 delegated = true;
