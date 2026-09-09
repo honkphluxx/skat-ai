@@ -2223,3 +2223,66 @@ That 2.5 points goes somewhere, and it is now measured **not** to be in how ofte
 we declare. What is left is *which* contract we choose and *how high we bid* --
 `overbid (lost)` is 0.00% in every report we have, which for a bidder that never
 overbids is less a virtue than a symptom.
+
+### 2026-09-09, thirteenth: go-skat says the same thing, and pins the number down
+
+go-skat has been seated all along and simply never made it into a write-up here,
+because XSkat is the harder opponent and took the attention. That was a mistake:
+go-skat is the control that turns the last entry's open question into a
+measurement.
+
+**belief-32 minus opponent, game points per game, three seeds:**
+
+| | seed 11 | seed 12 | seed 13 | mean |
+| --- | --- | --- | --- | --- |
+| vs `xskat`, oracle contracts | +2.565 | +4.337 | +3.209 | **+3.37** |
+| vs `xskat`, full auction | +1.628 | −2.661 | −0.240 | **−0.42** |
+| vs `go-skat`, oracle contracts | +5.952 | +8.764 | +9.740 | **+8.15** |
+| vs `go-skat`, full auction | +3.780 | +4.102 | +4.547 | **+4.14** |
+
+Every oracle line is resolved positive and every go-skat line is resolved
+positive. **We beat go-skat in the full game, comfortably and on all three
+seeds; XSkat is the one we cannot yet beat with the auction attached.**
+
+**But look at the difference between the two rows for each opponent.**
+
+```
+what the auction costs us against xskat   : -3.79 game points a game
+what the auction costs us against go-skat : -4.01 game points a game
+```
+
+**Near-identical, against two engines that share nothing** -- one K&R C from
+1996 with hand-written heuristics, one Go with PIMC and alpha-beta. An auction
+penalty that is the same size against opponents that different is not a property
+of the opponent. **It is ours, and it is about four game points a game.**
+
+That is the whole gap against XSkat (+3.37 becomes −0.42) and half of it against
+go-skat. It is the single largest known deficit in the player.
+
+**And the declaring rate is not it, which is now measured twice over.** Both
+outsiders declare about a third of games and we declare a quarter:
+
+```
+                    we declare    they declare
+vs xskat              23.9-25.9%    32.7-34.1%
+vs go-skat            22.2-26.3%    32.8-33.8%
+```
+
+The same 9-point shortfall against both -- yet one of them we beat by +4.14 and
+the other we do not beat at all. **A gap that is identical where the outcomes
+differ cannot be what causes the difference**, and the calibration run says
+independently that closing it would cost us points. Two different arguments, one
+conclusion.
+
+**So the four points are in which contract we choose or how high we bid.** The
+next measurement is the one that separates those two, and `overbid (lost)` at
+0.00% in every report is the place to start: a bidder whose ceiling is what the
+hand *guarantees* can never overbid, and can only ever lose auctions it should
+have won.
+
+**One caveat on the auction rows above, and it is not small.** They were all run
+before Phase V, in canon mode, where roughly one game in eight is a Ramsch the
+outsider cannot play and `greedy` plays for it. The oracle rows are unaffected
+-- no auction, no Ramsch. So the four points is an estimate taken through a
+contaminated instrument, and the honest version of this table needs the auction
+rows re-run with `--passed-in=void`. The overnight script already does that.
