@@ -290,6 +290,29 @@ moves.
    harshness is sampling noise and the fix is worlds rather than judgement; if
    it does not, the evaluator genuinely dislikes those hands and that is a
    different repair.
+   **CLOSED, 2026-09-09, on the oracle-contract run.** `belief-32 - xskat`,
+   300 boards, seed 11, contracts from the double-dummy oracle. Pooling both
+   players, because the question is about the contract and not about us:
+   non-Null contracts are made **463 of 510 = 90.8%**, Null **13 of 20 = 65.0%**.
+   Break-even is 46/69 = **0.667**, so declining is right by a hair and the
+   interval ([0.43, 0.82]) says nothing.
+
+   More boards do not help: at p = 0.65 the interval still straddles 0.667 at
+   n = 90 and at n = 160, and reaching n = 90 costs about 2,400 oracle boards.
+   And the stakes are below the noise floor -- Null is the oracle's best contract
+   on 3.8% of boards, so capturing every one perfectly is worth between **-0.17
+   and +0.09 game points per game**, against a match margin of +2.565 whose own
+   interval is +/-2.10. **Two orders of magnitude under our measurement noise.**
+
+   The mechanism, corrected: nobody plays double-dummy defence in that match, so
+   the Null gap is about the *declarer* -- a cold Null has one line and must be
+   found blind, a cold trump game survives imprecision. Full entry in
+   [`../arena/README.md`](../arena/README.md).
+
+   **What the same run says instead:** at identical contracts we make 93.96% to
+   XSkat's 85.66% and win by +2.565, resolved. Our card play is ahead; our
+   auction is not. That makes item 3 below the top of the list, not a follow-up.
+
 3. **The declining threshold.** We declare 24–26% against XSkat's 33% and win
    85% against its 77%. Sweep the threshold and measure; the aggression dials
    already exist and their sweep is redone on the Null-capable bidder.

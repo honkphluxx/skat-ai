@@ -1658,3 +1658,75 @@ touches the auction model at all.
 **Still outstanding, and unchanged:** the oracle-contract run against `4ae717e`,
 which prints declared *and* won per contract. That is the measurement that says
 whether declining these Nulls is timidity or judgement.
+
+### 2026-09-09, fifth: the Null thread closes, on a number rather than a guess
+
+`belief-32 − xskat`, 300 boards, seed 11, oracle contracts, with the
+declared-and-won table from `4ae717e`:
+
+```
+                          belief-32        xskat
+game pts/game                13.99        11.42
+wins as declarer            93.96%       85.66%
+  Diamonds              14 of 16, 88%      12 of 16, 75%
+  Hearts                29 of 30, 97%      24 of 30, 80%
+  Spades                36 of 40, 90%      31 of 40, 78%
+  Clubs                 52 of 53, 98%      48 of 53, 91%
+  Grand               112 of 116, 97%    105 of 116, 91%
+  Null                   6 of 10, 60%       7 of 10, 70%
+belief-32 - xskat = +2.565 game pts/game   95% CI [+0.462, +4.668]
+```
+
+**The Null row is the only one either side is bad at, and the only one we lose.**
+Pooling both players, because the question is about the contract and not about
+us: non-Null contracts are made **463 of 510, 90.8%**; Null is made **13 of 20,
+65.0%**. Every contract here is double-dummy cold by construction — the oracle
+picks the best contract that survives perfect defence — so that gap is entirely
+about converting a cold contract with imperfect information.
+
+**And the mechanism is not the one I wrote in the third entry.** I said
+double-dummy defence punishes Null harder than a trump game. In *this* match
+nobody plays double-dummy defence; the oracle only chooses the contract and both
+sides then play normally. What the gap actually shows is about the **declarer**:
+a cold Null has essentially one line and the declarer must find it blind, while a
+cold trump game survives a good deal of imprecision. Same direction, different
+cause, and this measurement is the one that distinguishes them.
+
+**So: are we right to decline?** Break-even is 46/69 = **0.667** — win 23, lose
+46. Measured conversion is 0.65. The point estimate says declining is right by a
+hair, and the interval says nothing at all:
+
+| | rate | 95% (Wilson) | EV/game |
+|---|---|---|---|
+| ours, 6 of 10 | 0.60 | [0.31, 0.83] | −4.60 |
+| pooled, 13 of 20 | 0.65 | [0.43, 0.82] | −1.15 |
+
+**More boards will not fix this, and that is the finding.** Null sits *on* the
+break-even line, so the interval has to exclude 0.667 to decide anything, and at
+p = 0.65 it does not — not at n = 40 ([0.50, 0.78]), not at n = 90 ([0.54, 0.74]),
+not at n = 160 ([0.57, 0.72]). Reaching even n = 90 needs about **2,400 oracle
+boards**, roughly four hours, to buy an interval that still straddles the answer.
+
+**The stakes settle it.** Null is the oracle's best contract on 10 of 265 boards
+= **3.8%**. So capturing every one of them perfectly is worth, across the whole
+match, between **−0.17 and +0.09 game points per game** — against a match margin
+of +2.565 whose own 95% interval is ±2.10. **The entire Null question lives two
+orders of magnitude below our measurement noise.** It cannot be measured, and it
+is not worth measuring.
+
+**Closed.** Not "Null is hard", not "the bidder is timid" — Null is a rounding
+error in this game and the bidder's refusal costs nothing detectable. The audit
+tool stays; it answered its question.
+
+**What the same table says instead, and this is where the points are.** At
+identical contracts we make **93.96%** to XSkat's **85.66%** and win by +2.565
+resolved. **Our card play is ahead of XSkat's; our auction is not.** In auction
+mode we declare 24–26% and win 85% while XSkat declares 33% and wins 77% — it
+takes on the marginal hands we refuse, wins fewer of them, and still finishes
+level. That is not a Null problem, it is a **declining-threshold** problem across
+every contract, and Phase A already has the sweep for it. It is now the top of
+the list.
+
+**One practical note from the run.** The native solver did not load —
+`UnsatisfiedLinkError: NativeSolver.version()` — so all 1,548 s ran on the Java
+search. Any future oracle-mode run is worth taking only after that is fixed.
