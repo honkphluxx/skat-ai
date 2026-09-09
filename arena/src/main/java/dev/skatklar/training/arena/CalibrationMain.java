@@ -355,15 +355,40 @@ public final class CalibrationMain {
                 "  today's cut, same hands %.2f points%n", todayOnTest);
         System.out.println();
 
+        // How many held-out hands the two cuts actually disagree about. Without
+        // this the verdict reads an edge off the whole sample when the sample
+        // that produced it is a handful: the first run of this block reported
+        // +0.11 points a hand as "the one to act on", and the two cuts differed
+        // over nine hands. An edge is only as trustworthy as the hands that
+        // separate the two things being compared.
+        double lower = Math.min(chosen, todayLevel);
+        double upper = Math.max(chosen, todayLevel);
+        long separating = test.stream()
+                .filter(x -> x.predicted() >= lower && x.predicted() < upper).count();
+
         double edge = chosenOnTest - todayOnTest;
+        if (Math.abs(chosen - todayLevel) >= 1e-9) {
+            System.out.printf(Locale.ROOT,
+                    "  the two cuts differ over %d of those hands%n", separating);
+            System.out.println();
+        }
         if (Math.abs(chosen - todayLevel) < 1e-9) {
             System.out.println("The search picked today's cut. The threshold is right and the"
                     + " auction gap is");
             System.out.println("somewhere else -- which is a result, not a null one.");
         } else if (edge > 0) {
             System.out.printf(Locale.ROOT,
-                    "A different cut survived the holdout, worth %+.2f points a hand.%n"
-                    + "That is the one to act on.%n", edge);
+                    "A different cut survived the holdout, worth %+.2f points a hand --%n"
+                    + "decided by %d hands.%n", edge, separating);
+            if (separating < 40) {
+                System.out.println("Which is far too few to act on. Two cuts that disagree"
+                        + " about a handful of");
+                System.out.println("hands cannot be separated by those hands, whichever way"
+                        + " the sign falls.");
+                System.out.println("Read this as \"no difference found\", and if the"
+                        + " difference matters, run");
+                System.out.println("enough boards that the disputed band holds a few hundred.");
+            }
         } else {
             System.out.printf(Locale.ROOT,
                     "The chosen cut does NOT survive the holdout: %+.2f points a hand against%n"

@@ -2153,3 +2153,73 @@ In-sample the search finds a cut beating today by 0.17. Held out, that cut is
 **5.98 points a hand worse.** It beat today only on the hands that chose it,
 which is what overfitting looks like from the inside -- and without the second
 half of that table, it is indistinguishable from a finding.
+
+### 2026-09-09, twelfth: 24 worlds, and Phase A answered in the negative
+
+`belief-32`, 300 boards, 900 hands, `--bidding-worlds=24`, 1,189 s.
+
+**The pessimism hypothesis is alive again, and yesterday's retraction of it was
+wrong.** At 24 worlds the gap is positive across essentially the whole range:
+
+```
+predicted  hands  actual     gap        contract  hands  predicted  actual     gap
+    0.020    330   0.155  +0.135        Diamonds    156      0.412   0.564  +0.153
+    0.145     79   0.329  +0.184        Hearts      130      0.435   0.585  +0.150
+    0.250    108   0.380  +0.130        Spades      123      0.467   0.496  +0.029
+    0.356     50   0.580  +0.224        Clubs       138      0.556   0.623  +0.067
+    0.437     55   0.618  +0.181        Grand        28      0.921   0.964  +0.043
+    0.536     55   0.618  +0.082        Null        325      0.053   0.194  +0.141
+    0.641     47   0.681  +0.040
+    0.739     62   0.806  +0.067
+    0.854     37   0.811  -0.043
+    0.963     77   0.961  -0.002
+```
+
+The negative gaps at six worlds -- `1.000` predicted made only 89.2% of the time
+-- were **saturation, not optimism.** Six worlds pin 41% of hands to 0.000 or
+1.000, and conditioning on a pinned count bends both ends inward hard enough to
+hide the real bias underneath. At 24 worlds the top is calibrated (0.963 →
+0.961) and what is left is a genuine, uniform, upward gap. `HandEvaluator`'s
+javadoc was right all along; six worlds simply cannot see it.
+
+**And yet it still does not help the auction, for a reason worth keeping.** Look
+at where the error lives: **+0.18 to +0.22 around predicted 0.35–0.45, and ~0.00
+above 0.85.** The cut is at the top. **The estimator's error is concentrated
+where the decision is not**, so correcting it moves hands that are nowhere near
+the threshold.
+
+**Phase A's premise is refuted.** The plan said we declare 24–26% against XSkat's
+33% and should sweep for boldness. Declaring more costs points, monotonically,
+the whole way down:
+
+```
+p >= 0.667   21.6% of hands   won 0.866   4.65 points/hand
+p >= 0.708   19.6%            won 0.875   4.55   <- today
+p >= 0.625   24.8%            won 0.834   4.22
+p >= 0.583   26.7%            won 0.817   4.00
+p >= 0.500   30.9%            won 0.791   3.80
+p >= 0.333   42.6%            won 0.739   3.11
+```
+
+Getting from ~20% of hands to XSkat's share costs the better part of a point a
+hand. **There is no boldness dividend. The threshold is right, and the sweep
+would have spent two nights confirming it.**
+
+**The one candidate improvement does not survive its own error bars.** The
+holdout chose `p >= 0.667` -- break-even exactly, admitted by `>=` rather than
+refused by `>` -- and paid +0.11 points a hand against today's cut. But the two
+cuts **differ over nine held-out hands.** That is the same shape, and very
+nearly the same number, as the retracted 1.28-point claim. It is not a finding;
+it is the absence of one, and the tool now prints the separating count and says
+so rather than calling +0.11 "the one to act on".
+
+**Raising the bidding world cap is not worth it either.** Four times the worlds
+cost roughly 2.7x the bidding time per board, and bought a cut difference worth
+0.11 points a hand decided by nine hands. `clamp(worlds/3, 2, 6)` stays.
+
+**So Phase A closes, and the interesting part is what it leaves.** Our card play
+beats XSkat's at identical contracts by +2.565, and the full auction is level.
+That 2.5 points goes somewhere, and it is now measured **not** to be in how often
+we declare. What is left is *which* contract we choose and *how high we bid* --
+`overbid (lost)` is 0.00% in every report we have, which for a bidder that never
+overbids is less a virtue than a symptom.

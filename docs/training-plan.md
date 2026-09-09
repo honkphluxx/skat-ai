@@ -359,6 +359,32 @@ moves.
    XSkat's 85.66% and win by +2.565, resolved. Our card play is ahead; our
    auction is not. That makes item 3 below the top of the list, not a follow-up.
 
+   **PHASE A ANSWERED, AND IN THE NEGATIVE, 2026-09-09.** Item 3 below assumed
+   a boldness dividend. There is none. Measured over 900 hands at 24 bidding
+   worlds, each seat's intended contract played out whether or not it would
+   have been declared, declaring more costs points monotonically: 4.65 points
+   a hand at 21.6% of hands declared, 4.22 at 24.8%, 4.00 at 26.7%, 3.80 at
+   30.9%, 3.11 at 42.6%. Today's cut pays 4.55. Reaching XSkat's share would
+   cost the better part of a point a hand.
+
+   Three things follow, all recorded in [`../arena/README.md`](../arena/README.md):
+
+   - The estimator **is** systematically pessimistic, as `HandEvaluator` always
+     claimed -- but only visibly at 24 worlds. At 6 the top of the range is
+     saturated (41% of hands pinned to 0.000 or 1.000) and the bias hides.
+   - Correcting it still would not move the auction: the error is +0.18 to
+     +0.22 around predicted 0.35-0.45 and about zero above 0.85, and the cut is
+     at the top. **The estimator is wrong where the decision is not.**
+   - Raising the bidding world cap is not worth it. 4x the worlds for a cut
+     difference worth 0.11 points a hand decided by nine held-out hands.
+
+   **So the 2.5 points are elsewhere.** Our card play beats XSkat's at identical
+   contracts by +2.565 and the full auction is level. It is now measured not to
+   be in how often we declare, which leaves *which contract we choose* and *how
+   high we bid*. `overbid (lost)` is 0.00% in every report we have; for a bidder
+   that never overbids that is a symptom rather than a virtue, and it is the
+   next thing to look at.
+
 3. **The declining threshold.** We declare 24–26% against XSkat's 33% and win
    85% against its 77%. Sweep the threshold and measure; the aggression dials
    already exist and their sweep is redone on the Null-capable bidder.
