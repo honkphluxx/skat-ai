@@ -44,6 +44,26 @@ Null did not exist. What that reaches:
 | `tools/challenge-seeds.tsv` | `--purge` and regenerate | old bidder's judgement |
 | fixed-contract and oracle-contract results | **survive** | they bypass the auction |
 
+**Softened, 2026-09-09, and this is worth two nights.** The argument above is
+that a Null-*capable* bidder is a different bidder, so every low bid and every
+pass in the corpus came from the wrong population. Measurement since says the
+two bidders are very nearly the same one. The fix landed in 09a81fa; across 51
+arena reports after it, the bidder declared Null **zero times**, and the audit
+puts its modelled rate at 0.45% of boards -- itself an upper bound. A bidder
+that *can* say Null and essentially never does produces almost exactly the
+bidding distribution of one that cannot.
+
+So the corpus is not the wrong population; it is the right population missing
+a rounding error. **`belief-data/` does not need regenerating for the Null
+reason** -- which removes a night of export and a night of training from Phase
+B2. It still needs regenerating for anything else that changed the bidder, and
+Phase V will change it again, so the export belongs after V rather than before.
+
+What survives from the row is narrower and still true: there are no Null
+decision points in the corpus, so the model has never seen Null play and cannot
+learn it from this data. Given the contract is worth between -0.17 and +0.09
+game points per game, that is a fact to record, not a reason to spend a week.
+
 The last row is why the parity result stands: it was measured at oracle
 contracts.
 
