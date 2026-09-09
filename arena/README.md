@@ -1958,3 +1958,82 @@ Three ways out, and the choice belongs to whoever runs the sweep:
    direction, so a sweep still orders the dials correctly even if every one of
    them declares slightly too much. Cheapest of all, and the one that leaves a
    footnote for someone to trip over later.
+
+### 2026-09-09, ninth: the estimator, and a bucket the bidder throws away
+
+Phase A was going to sweep the aggression dial. It should not: the dial is
+already at the right setting and the number it is compared against is not.
+
+`declaringIsWorth(v, c) = v*c - 2*v*(1-c)*lossWeight`, and at the reference
+aggression the loss weight is exactly 1.0, so the bidder declares above
+**c = 2/3**. That is the score sheet and not a taste -- a lost game is charged
+at twice its value, so `c = 2(1-c)` is the game's own arithmetic.
+
+**But `c` is on a different scale from the threshold it meets, and
+`HandEvaluator` has said so in its own first paragraphs all along:** the number
+is a share of sampled worlds surviving *perfect* defence, "systematically
+pessimistic -- real defenders let contracts through that a solver would beat
+&hellip; it means the threshold a player bids at is not the win rate it will
+actually see. **The arena is what converts one into the other.**" That
+conversion was never built. A double-dummy probability has been going straight
+into a real-payoff comparison since the beginning.
+
+`:arena:calibration` builds it. Per seat per board it asks the evaluator what
+the hand would announce and what it thinks of it, then **plays the board at that
+contract whether or not the bidder would have declared it** -- declining the
+ones under the threshold would leave the curve unmeasured exactly where the
+decision is made.
+
+**First read, `search`, 40 boards, 120 hands. Small; read the direction, not the
+size.**
+
+```
+predicted   hands    actual        contract   hands  predicted   actual     gap
+    0.000      43     0.163        Diamonds      18      0.370    0.667   +0.296
+    0.167      18     0.500        Hearts        23      0.486    0.783   +0.297
+    0.333      20     0.650        Spades        15      0.456    0.600   +0.144
+    0.500       8     0.500        Clubs         18      0.537    0.556   +0.019
+    0.667       9     0.889        Grand          4      0.875    0.750   -0.125
+    0.833       9     0.889        Null          42      0.056    0.214   +0.159
+    1.000      13     0.923
+```
+
+The pessimism is there and it is large: a hand the evaluator scores 0.333 is
+made 65% of the time, one it scores 0.167 is made half the time. But the sharper
+finding is in the left column, and it is not about bias at all.
+
+**The estimate can take seven values.** It is a count out of six bidding worlds
+-- `clamp(worlds/3, 2, 6)` -- so it is quantised to sixths, and **4/6 is exactly
+the break-even.** The bidder declares on `declaring > passing`, strictly, and a
+holding seat has `passing = 0`. So a hand scoring exactly break-even is
+**refused**, and that bucket is not marginal in practice:
+
+```
+declare at   declared   share      won   points/hand
+p >= 0.667         31   25.8%    0.903         5.58
+p >= 0.833         22   18.3%    0.909         4.30   <- today, holding
+```
+
+**A strict inequality against a discrete estimator discards its single best
+marginal bucket, and here that is worth 1.28 game points a hand.** Those hands
+win 89%.
+
+That is a resolution bug, not a risk-appetite one, and it has two independent
+repairs, both cheap:
+
+1. **Bid on `>=` at break-even.** A hand priced exactly at the game's own
+   break-even is a coin the score sheet says is fair; refusing it is a rounding
+   artefact, not a decision.
+2. **Give the estimate more than six worlds**, so break-even stops being a mass
+   point the cut can land on. The cap exists to bound bidding time and has never
+   been measured against what the rounding costs.
+
+And the calibration correction is a third, larger repair, still worth doing: the
+gap column is positive for every contract except Grand, and largest for the
+suit games. **It would also raise Null** -- priced by the harshest defence of
+all, and the reason that thread ran into an unreachable 0.667 in the first
+place.
+
+**None of this is measured yet at a size worth acting on.** 120 hands, from a
+2-core container, with `search` rather than `belief-32`. The run that decides it
+is `--player=belief-32 --boards=600` on the machine.

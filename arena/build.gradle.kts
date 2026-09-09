@@ -114,6 +114,16 @@ tasks.register<JavaExec>("play") {
  *
  * ./gradlew :arena:nullAudit --args="--player=belief-32 --boards=2000 --threads=8"
  */
+/** ./gradlew :arena:calibration --args="--player=belief-32 --boards=600" */
+tasks.register<JavaExec>("calibration") {
+    group = "verification"
+    description = "Measures what the bidder's probability is worth against what happens"
+    mainClass.set("dev.skatklar.training.arena.CalibrationMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 tasks.register<JavaExec>("nullAudit") {
     group = "verification"
     description = "Asks every seat how high it would bid and what it would announce"
