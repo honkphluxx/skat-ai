@@ -178,6 +178,13 @@ match() {
         *--bidder=*) mode="$mode-$(printf '%s' "${extra##*--bidder=}" | cut -d' ' -f1)" ;;
     esac
     local tag="$a-vs-$b-$mode-s$SEED"
+    # The board count belongs in the name whenever it is not the standard one.
+    # A 20%-scale rehearsal once shadowed the whole of seed 11 -- the name
+    # carried the seed but not the size, so 40-board logs with intervals four
+    # times too wide stood in for 300-board ones and every real match was
+    # skipped as already done. Only when SCALE differs from 1, so the names of
+    # every existing log stay exactly as they are.
+    case "$SCALE" in 1|1.0) ;; *) tag="$tag-b$count" ;; esac
     # A probed match is not the same match: the control adds a summary to the
     # report and costs several times as much, so it gets its own name and never
     # shadows an unprobed log.
@@ -428,12 +435,22 @@ for SEED in $SEEDS; do
         if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
             match belief-32 xskat "$(boards 300)" "--fixed-contract --contracts=solver"
             match belief-32 xskat "$(boards 300)" "--passed-in=void"
+            # And against the same engine with the leak removed rather than
+            # merely measured. xskat is told the skat, so as declarer it knows
+            # two cards it should not; xskat-blind is dealt a world sampled
+            # from the ones its seat cannot tell apart, which neutralises any
+            # dependence on unseen cards whether or not the probe found it.
+            # The probe is a detector and finds what it looks for; this is a
+            # removal and does not have to.
+            match belief-32 xskat-blind "$(boards 300)" "--passed-in=void"
+            match belief-32 xskat-blind "$(boards 300)" "--fixed-contract --contracts=solver"
         fi
     fi
     if $GOSKAT; then
         match go-skat greedy "$(boards 200)" "--passed-in=void"
         match go-skat greedy "$(boards 200)" "--fixed-contract $BIDDER"
         if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
+            match belief-32 go-skat-blind "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=solver"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi

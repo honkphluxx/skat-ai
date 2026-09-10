@@ -2358,3 +2358,72 @@ needs seed 11 at full scale before it can be repeated.
 two points (neither seed resolved). Our card play is well ahead of both. Every
 point of that is being handed back in the auction, and it is not the declaring
 rate.
+
+### 2026-09-10, second: the ladder, honestly, and XSkat's auction read in full
+
+Three seeds, void mode, seed 11 re-run at full scale after the rehearsal logs
+were moved aside. Inverse-variance pooled:
+
+| full game, void auction | pooled | 95% CI | |
+| --- | --- | --- | --- |
+| belief-32 − `xskat` | **−1.31** | [−2.56, −0.06] | resolved, XSkat ahead |
+| belief-32 − `go-skat` | **+2.22** | [+0.86, +3.57] | resolved, we are ahead |
+| `xskat` − `go-skat` | +3.51 | [+2.43, +4.59] | resolved |
+
+| card play alone, oracle contracts | pooled | 95% CI | |
+| --- | --- | --- | --- |
+| belief-32 − `xskat` | **+3.15** | [+1.77, +4.53] | resolved, we are ahead |
+| belief-32 − `go-skat` | **+7.53** | [+5.70, +9.35] | resolved |
+
+**The instrument checks out against itself.** Those three full-game rows are
+independent matches and need not agree, but
+(+2.215) − (−1.310) = **+3.525** against a directly measured **+3.512**.
+Transitive to 0.013 game points.
+
+**So: we play better cards than both, and lose to XSkat on the auction alone.**
+The auction costs **−4.5 against XSkat and −5.3 against go-skat** -- two
+opponents with nothing in common, the same order of magnitude. Looser than the
+suspiciously exact −3.79/−4.01 of the contaminated runs, and still supporting
+the same conclusion: the deficit is ours.
+
+### Is XSkat cheating? The auction answer is in forty lines of its own source
+
+The question was raised the obvious way: thirty-year-old rudimentary C is
+beating us, and the beating happens in the auction, which is exactly where the
+honesty probe never looked -- `probe_choice` is called only from the two
+card-play paths. So "XSkat is honest to 0.2%" was always a claim about card
+play.
+
+It does not need a probe. `calc_rw`, which computes the highest XSkat will bid:
+
+```c
+VOID calc_rw(s)
+  for (i=0;i<10;i++) { c=cards[10*s+i]; ... }     /* its own ten cards */
+  for (i=1;i<4;i++) if (t[i]>=t[tr]) tr=i;        /* longest suit = trump */
+  if ((bb+t[tr]==5 && (dk+10*ze>=39 || (as>=2 && dk+10*ze) || as>=3)) || ...)
+      maxrw[s] = f*rwert[tr];
+```
+
+**It reads `cards[10*s+i]` for i in 0..9 and nothing else** -- no other hand, no
+skat, no global state. The bid is a deterministic function of the seat's own ten
+cards: count jacks, take the longest suit as trump, count aces and tens outside
+it, run a chain of hand-tuned thresholds. Our own protocol reinforces it: the
+`MAXBID` line carries the ten cards and nothing more.
+
+**Which makes the finding more interesting than manipulation would have been. A
+1996 lookup table out-bids a Monte Carlo search.** That is not absurd: hand
+evaluation is where a tuned expert heuristic beats a shallow sample, and ours
+gets six imagined deals and answers in sixths.
+
+**Card play is where a leak exists**, and it is real -- XSkat is told the skat,
+so as declarer it knows two cards it should not, which is exactly where every
+mismatch fell. Priced over three seeds: `xskat − xskat-blind = +0.152`, 95%
+[−0.096, +0.401], not resolved. At most about 0.4 points against a 1.31 deficit.
+
+But a probe finds what it looks for, and that is a fair objection to leave
+standing. So the next run does not detect, it **removes**: `belief-32` against
+`xskat-blind`, which is dealt a world sampled uniformly from the ones its seat
+cannot tell apart. Any dependence on unseen cards is neutralised whether or not
+we ever found it. `belief-32 − go-skat-blind` goes with it, and both at fixed
+contracts too, so the removal is priced in card play as well as in the full
+game.
