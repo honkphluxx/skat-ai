@@ -90,9 +90,18 @@ PROPS=""
 # instrument, and the realistic distribution is already measured: that is what
 # the auction-mode block below is.
 BIDDER=""
+QUICK=false
 for arg in "$@"; do
     case "$arg" in
-        --quick)      SEEDS="11"; SCALE=0.2 ;;
+        # A rehearsal writes into its own directory. It used to write beside
+        # the real logs under the same names, and since the name carries the
+        # seed but not the board count, a 20%-scale rehearsal of seed 11
+        # permanently shadowed the full-scale seed 11: every one of those
+        # matches was skipped that night as "log already exists", and the
+        # numbers that survived were 40-board ones with intervals four times
+        # too wide to say anything. A rehearsal is not a measurement and must
+        # not be able to stand in for one.
+        --quick)      SEEDS="11"; SCALE=0.2; QUICK=true ;;
         --props=*)    PROPS="${arg#*=}" ;;
         --seeds=*)    SEEDS="${arg#*=}" ;;
         --scale=*)    SCALE="${arg#*=}" ;;
@@ -104,6 +113,9 @@ for arg in "$@"; do
 done
 
 LOG=arena-logs
+# An if rather than `$QUICK && ...`, which evaluates to false here and would
+# abort the script the day somebody adds `set -e` to the line above.
+if $QUICK; then LOG=arena-logs/quick; fi
 mkdir -p "$LOG"
 SUMMARY="$LOG/summary.txt"
 

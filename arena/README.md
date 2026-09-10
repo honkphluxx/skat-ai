@@ -2286,3 +2286,75 @@ outsider cannot play and `greedy` plays for it. The oracle rows are unaffected
 -- no auction, no Ramsch. So the four points is an estimate taken through a
 contaminated instrument, and the honest version of this table needs the auction
 rows re-run with `--passed-in=void`. The overnight script already does that.
+
+### 2026-09-10: the void re-baseline, and two of my own bugs in the way
+
+The night ran. Ramsch is 0.00% everywhere, no run reported a delegated game,
+and the honest auction numbers are in. Two things went wrong first, both mine.
+
+**1. The go-skat honesty control reported an impossibility.**
+
+```
+Honesty control: 5 of 4610 decisions changed ... (0.11%)
+  as declarer 0, as defender 80, by trick [0, 0, 24, 0, 0, 14, 6, 0, 36, 0]
+```
+
+Eighty defender mismatches out of five mismatches. XSkat's driver resets its
+probe counters on every `SEED`, which arrives once a deal, because the arena
+reads them once a deal and adds them up -- and the C source says so in a
+comment two lines long. The breakdown counters added to the Go driver the night
+before were left out of that reset, so cumulative totals were summed once per
+deal against per-deal mismatches. The result made the honesty control look like
+it had caught the thing it exists to catch. Fixed; the three counters are in
+the reset now.
+
+**2. A rehearsal permanently shadowed a real seed.** I recommended
+`--quick` before the night, which runs seed 11 at 20% scale -- and it wrote its
+logs beside the real ones, under the same names. The log name carries the seed
+but not the board count. So the whole of seed 11 was skipped that night as
+"log already exists", and what survived were 40- and 60-board runs with
+intervals four times too wide to say anything:
+
+```
+belief-32 - xskat  = +0.089  [-5.198, +5.375]     (60 boards, a rehearsal)
+belief-32 - xskat  = -2.897  [-5.255, -0.539]     (300 boards, seed 12)
+```
+
+`--quick` now writes into `arena-logs/quick/`, and the rehearsal logs have been
+moved there. **Seed 11 still needs running.** A rehearsal is not a measurement
+and must not be able to stand in for one.
+
+**So the table below is seeds 12 and 13 only, and it is worse than the one it
+replaces.**
+
+| belief-32 minus | oracle | canon auction | void auction |
+| --- | --- | --- | --- |
+| `xskat` | +3.77 | −1.45 | **−2.08** |
+| `go-skat` | +9.25 | +4.32 | **+1.92** |
+
+**Voiding cost us 0.63 against XSkat and 2.40 against go-skat.** The Ramsch
+delegation was *flattering us*: when `greedy` played the outsider's Ramsch
+games we were beating it there, and that edge was never ours to keep. Those
+boards now score zero for everybody, as the official rules have them.
+
+**What the auction costs us is therefore larger than yesterday's number, not
+smaller:**
+
+```
+                    reported yesterday   measured now
+vs xskat                     -3.79          -5.85
+vs go-skat                   -4.01          -7.33
+```
+
+And the near-equality that made yesterday's argument -- *the same penalty
+against two engines that share nothing, so it is ours* -- **does not survive
+the honest instrument.** −5.85 and −7.33 are not the same number. The
+conclusion may still hold, since both are large and both point the same way,
+but the evidence I gave for it was an artifact of the contaminated runs. It
+needs seed 11 at full scale before it can be repeated.
+
+**Where we actually stand in the full game, honestly, at last:** behind XSkat
+(one seed resolved negative, one not resolved) and ahead of go-skat by about
+two points (neither seed resolved). Our card play is well ahead of both. Every
+point of that is being handed back in the auction, and it is not the declaring
+rate.

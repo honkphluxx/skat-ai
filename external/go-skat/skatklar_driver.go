@@ -160,7 +160,16 @@ func skatklarMain() {
 			}
 			skRng = rand.New(rand.NewSource(n))
 			r = rand.New(rand.NewSource(n))
+			// Per deal, like XSkat's: the arena reads them once a game and adds
+			// them up, so a pooled process must not carry a deal's counts into
+			// the next read. The breakdown counters were left out of this line
+			// when they were added, and the arena summed cumulative totals once
+			// per deal against per-deal mismatches -- which printed "5
+			// mismatches, 80 as defender" and made the honesty control look
+			// like the thing it exists to detect.
 			skDecisions, skMismatch, skDiverge = 0, 0, 0
+			skMmDeclarer, skMmDefender = 0, 0
+			skMmTrick = [11]int64{}
 			fmt.Fprintf(skOut, "OK\n")
 		case "PROBE":
 			skProbe, _ = strconv.Atoi(args[0])
