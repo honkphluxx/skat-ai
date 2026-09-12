@@ -258,6 +258,7 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
             delegated = false;
             gameCounted = false;
             fallbackCounted = false;
+            lastChosen = null;
             long dealSeed = seed * 1_000_003L + round.roundNumber * 31L;
             bot().ask("SEED " + Math.floorMod(dealSeed, 2_000_000_000L));
             if (probeWorlds > 1) bot().ask("PROBE " + probeWorlds);
@@ -364,8 +365,23 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
                 delegated = true;          // its game state and ours have parted company
                 return standIn(context);
             }
+            lastChosen = card;
             return card;
         }
+
+        /**
+         * The card the helper last chose for this seat, so that a card played
+         * for this seat by somebody else can be told apart from one it played.
+         *
+         * <p>A seat's own card normally needs no announcement: the helper played
+         * it inside PLAY and its game has moved on. But a wrapper may answer
+         * {@code chooseCard} without asking this session at all -- a scripted
+         * opening, a tutorial's fixed first tricks, the Mini-Skat bridge -- and
+         * then the helper's game and the engine's part company on a card the
+         * helper never saw. Both drivers' PLAYED command steps whichever seat is
+         * to move, its own included, so telling it is enough.
+         */
+        private Card lastChosen;
 
         /** The stand-in's card, counted once per game however many it plays. */
         private Card standIn(SkatAi.DecisionContext context) {
@@ -375,7 +391,11 @@ public final class ExternalBotProvider implements SkatAiProvider, TableObserver 
 
         @Override public void cardPlayed(SkatAi.CardPlayedEvent event) {
             blind.cardPlayed(event);
-            if (delegated || event.play.seat == mySeat) return;
+            if (delegated) return;
+            if (event.play.seat == mySeat) {
+                if (event.play.card.equals(lastChosen)) { lastChosen = null; return; }
+                // Played for this seat without asking the helper: see lastChosen.
+            }
             bot().ask("PLAYED " + encode(event.play.card));
         }
 
