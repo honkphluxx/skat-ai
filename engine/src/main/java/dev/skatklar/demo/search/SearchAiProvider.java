@@ -120,6 +120,19 @@ public final class SearchAiProvider implements SkatAiProvider {
     private final long biddingBudgetNanos;
 
     /**
+     * How readily this player takes a card it believes to be worse, measured in
+     * the share of sampled worlds the card gives up. Zero -- the default and
+     * every shipped setting -- always takes the best.
+     *
+     * <p>It exists for rating boards, not for playing them. A player that
+     * always finds the same card answers "how hard is this deal?" with the same
+     * result every time and so rates nothing; one that errs the way a person
+     * errs -- often on the near-miss, seldom on the disaster -- turns a board
+     * into a win rate. See {@code challenge-seeds}' difficulty tool.
+     */
+    private final double temperature;
+
+    /**
      * Cards in hand at or below which αµ is used instead of the vote.
      *
      * <p>A cost limit, not a taste. The search branches on our own card, then on
@@ -185,12 +198,19 @@ public final class SearchAiProvider implements SkatAiProvider {
 
     private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
                              WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos) {
+        this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos, 0);
+    }
+
+    private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
+                             WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
+                             double temperature) {
         this.delegate = delegate;
         this.personality = personality;
         this.seed = seed;
         this.worlds = worlds;
         this.alphaMuDepth = Math.max(0, alphaMuDepth);
         this.biddingBudgetNanos = Math.max(0L, biddingBudgetNanos);
+        this.temperature = Math.max(0, temperature);
     }
 
     /**
@@ -210,7 +230,32 @@ public final class SearchAiProvider implements SkatAiProvider {
      * @param nanos how long one seat may take; zero or less removes the ceiling
      */
     public SearchAiProvider withBiddingBudget(long nanos) {
-        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos);
+        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos,
+                temperature);
+    }
+
+    /**
+     * The same player, but fallible: among the legal cards it picks one with a
+     * weight of {@code exp(-lost / temperature)}, where {@code lost} is the
+     * share of sampled worlds that card gives up against the best one.
+     *
+     * <p>A copy rather than a setting, for the same reason
+     * {@link #withBiddingBudget} is one: the fallible player and the sharp one
+     * must be different objects so that nothing acquires noise by accident. No
+     * shipped path calls this; only a difficulty rating does.
+     *
+     * <p>The scale is a probability, not a score, and that is deliberate.
+     * Whatever the contract is worth, a card that makes the game five worlds in
+     * a hundred less often is the same size of mistake, so one temperature
+     * reads the same across Grand, a suit game and Null.
+     *
+     * @param temperature share of worlds per unit of unlikelihood; 0.05 is a
+     *                    player who plays a card costing five points of make
+     *                    chance about a third as often as the best one
+     */
+    public SearchAiProvider withTemperature(double temperature) {
+        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -569,6 +614,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             }
 
             Map<Card, Integer> scores = votes;
+            if (temperature > 0) return sampleCard(legal, scores, sampled.size());
             Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
             return legal.stream()
@@ -581,6 +627,31 @@ public final class SearchAiProvider implements SkatAiProvider {
                             .thenComparing(byCost.reversed())
                             .thenComparing(Comparator.comparing(Card::toString).reversed()))
                     .orElse(legal.get(0));
+        }
+
+        /**
+         * One card drawn in proportion to {@code exp(-lost / temperature)}, where
+         * {@code lost} is the share of worlds it gives up against the best card.
+         *
+         * <p>Only reached when a temperature was asked for. The draw comes off
+         * the session's own stream, so a rating run replays exactly.
+         */
+        private Card sampleCard(List<Card> legal, Map<Card, Integer> votes, int worldCount) {
+            int best = 0;
+            for (Card card : legal) best = Math.max(best, votes.getOrDefault(card, 0));
+            double total = 0;
+            double[] weights = new double[legal.size()];
+            for (int i = 0; i < legal.size(); i++) {
+                double lost = (best - votes.getOrDefault(legal.get(i), 0)) / (double) Math.max(1, worldCount);
+                weights[i] = Math.exp(-lost / temperature);
+                total += weights[i];
+            }
+            double draw = random.nextDouble() * total;
+            for (int i = 0; i < legal.size(); i++) {
+                draw -= weights[i];
+                if (draw <= 0) return legal.get(i);
+            }
+            return legal.get(legal.size() - 1);
         }
 
         /**

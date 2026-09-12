@@ -536,6 +536,32 @@ public final class GameEngine {
                                                  SkatAi.Seat declarer,
                                                  Declaration declaration, int bidValue,
                                                  Set<SkatAi.Seat> occupiedHumanSeats) {
+        return startChallengeDeal(board, position, declarer, declaration, bidValue,
+                occupiedHumanSeats, true);
+    }
+
+    /**
+     * As {@link #startChallengeDeal(SkatDeck.Deal, SkatAi.RoundPosition, SkatAi.Seat,
+     * Declaration, int, Set)}, but able to start a challenge board with nobody
+     * sitting at it.
+     *
+     * <p>The one-argument-shorter version seats a person at {@link SkatAi.Seat#HUMAN}
+     * when it is given no seats, because every caller in the app is starting an
+     * exercise for somebody and an empty set there is a mistake it should not
+     * honour. A harness that rates a board is the exception: it plays the same
+     * board hundreds of times with three automated seats to see how often each
+     * of them brings it home, and a table with a person at it is exactly what it
+     * must not have. Kept as a separate entry point rather than as a special
+     * value of the old one so that the app's mistake is still caught.
+     *
+     * @param seatSomebody false to take the seats given verbatim, empty included
+     */
+    public synchronized Phase startChallengeDeal(SkatDeck.Deal board,
+                                                 SkatAi.RoundPosition position,
+                                                 SkatAi.Seat declarer,
+                                                 Declaration declaration, int bidValue,
+                                                 Set<SkatAi.Seat> occupiedHumanSeats,
+                                                 boolean seatSomebody) {
         Objects.requireNonNull(board, "board");
         Objects.requireNonNull(position, "position");
         Objects.requireNonNull(declaration, "declaration");
@@ -544,7 +570,7 @@ public final class GameEngine {
         ruleViolations.clear();
         humanSeats.clear();
         if (occupiedHumanSeats != null) humanSeats.addAll(occupiedHumanSeats);
-        if (humanSeats.isEmpty()) humanSeats.add(SkatAi.Seat.HUMAN);
+        if (seatSomebody && humanSeats.isEmpty()) humanSeats.add(SkatAi.Seat.HUMAN);
         // The rotation counter is deliberately not advanced from a supplied
         // position. A challenge board's position comes from which audition
         // attempt happened to fit, and letting that number into the counter
