@@ -2427,3 +2427,75 @@ cannot tell apart. Any dependence on unseen cards is neutralised whether or not
 we ever found it. `belief-32 − go-skat-blind` goes with it, and both at fixed
 contracts too, so the removal is priced in card play as well as in the full
 game.
+
+### 2026-09-12: 900 boards a seed, and what it settles
+
+The day run at `--scale=3`: every pair at 900 boards (600 for go-skat), three
+seeds, 2,700 boards and 16,200 games per pair. Inverse-variance pooled.
+
+**1. The leak is closed, to three decimals.** Paired board by board -- the two
+matches share deals and share our player, so the only thing that differs is the
+outsider's information -- and pooled over three seeds:
+
+```
+xskat, full game    blind minus sighted   +0.001   95% [-0.015, +0.017]
+xskat, card play                          +0.007   95% [-0.002, +0.017]
+go-skat, full game                        -0.007   95% [-0.041, +0.027]
+```
+
+Neither engine's play depends on cards it cannot see, to within two hundredths
+of a game point. The auction was already proven blind from `calc_rw`'s source;
+this closes card play the same way. `xskat-blind` and `xskat` are the same
+opponent for every purpose but the training population, where the blind variant
+stays because it costs nothing and settles the principle.
+
+**2. Where we stand, and both of the last two days' numbers were wrong in
+opposite directions.**
+
+| belief-32 minus | full game | card play (oracle) | auction cost |
+| --- | --- | --- | --- |
+| `xskat` | **−0.73** [−1.47, +0.00] | **+3.22** [+2.42, +4.02] | −3.95 |
+| `go-skat` | **+1.95** [+1.20, +2.70] | **+8.22** [+7.07, +9.36] | −6.27 |
+| `xskat − go-skat` | +3.14 [+2.50, +3.78] | | |
+
+Against XSkat we are three-quarters of a point behind in the full game, with
+the interval touching zero exactly. Yesterday's pooled −1.31 leaned on seed 12
+at 300 boards; the day before's +0.07 was seed 11 alone. At 900 boards all
+three seeds sit between +0.07 and −1.12 and the truth is in the middle. **Card
+play is not in question: +3.22 and +8.22, resolved, on the objective
+contracts.**
+
+**3. And the "auction cost" is not one number, which reopens what it means.**
+−3.95 against XSkat, −6.27 against go-skat, intervals of about ±1.1 each. Those
+are different. So the claim that the penalty is a property of ours alone is
+dead for good -- and the more interesting question is *why it is larger against
+the weaker card player.*
+
+The likely answer is a confound in the decomposition itself. "Full game minus
+oracle" has been read as "what our bidding costs". But the oracle picks the
+objectively best makeable contract on every board -- Grand-heavy, high-value,
+demanding -- and that mix amplifies a card-play edge. A real auction produces
+modest contracts that a weaker player can still bring home. So part of the
+6.27 against go-skat is not our bidding losing points; it is **our card-play
+edge being worth less at realistic contracts than at oracle ones.** That
+confound has been sitting inside every "auction cost" figure in this file.
+
+**The run that separates the two** is one the arena already supports and this
+script never seated: fixed contracts drawn from a *real* bidder rather than the
+oracle. `--fixed-contract --contracts=auction --bidder=xskat` plays every board
+at the contract XSkat would have reached, both sides; `--bidder=belief-32` the
+same for ours. Card play at realistic contracts, isolated. Then:
+
+- full game − (card play at auction contracts) = what the *bidding* costs
+- (card play at auction contracts) − oracle = what the *contract mix* is worth
+
+If our edge at auction-drawn contracts is still near +3, the bidding really
+costs ~4 and the ceiling work is the right next thing. If it drops to ~+1, most
+of the "auction cost" was never about bidding, and Phase A's successor changes.
+
+**4. The go-skat honesty control now means what it says.** `14 of 14,100
+decisions, as declarer 0, as defender 14` -- the breakdown sums to the total.
+And it is the mirror image of XSkat's: XSkat's dependence is all as declarer
+(the skat), go-skat's is all as defender (its inference module, reading the
+sampled world). Both under a quarter of a percent, and both worth nothing at
+the score sheet, as the paired numbers above say.

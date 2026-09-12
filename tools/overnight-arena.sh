@@ -444,6 +444,19 @@ for SEED in $SEEDS; do
             # removal and does not have to.
             match belief-32 xskat-blind "$(boards 300)" "--passed-in=void"
             match belief-32 xskat-blind "$(boards 300)" "--fixed-contract --contracts=solver"
+            # Card play at REALISTIC contracts, which the oracle rows are not.
+            # "Full game minus oracle" was being read as what our bidding costs,
+            # but the oracle's contract mix -- the best makeable game on every
+            # board, Grand-heavy and demanding -- amplifies a card-play edge
+            # that a real auction's modest contracts do not. These two rows
+            # fix the contract to what a real bidder reaches, both sides play
+            # it, and the bidder's share of the gap falls out by subtraction:
+            #   full game - this          = what the bidding costs
+            #   this      - oracle        = what the contract mix is worth
+            # Once with XSkat choosing the contracts and once with ours, since
+            # the two bidders reach different games and the answer may differ.
+            match belief-32 xskat "$(boards 300)" "--fixed-contract --contracts=auction --bidder=xskat"
+            match belief-32 xskat "$(boards 300)" "--fixed-contract --contracts=auction --bidder=belief-32"
         fi
     fi
     if $GOSKAT; then
@@ -452,6 +465,8 @@ for SEED in $SEEDS; do
         if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
             match belief-32 go-skat-blind "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=solver"
+            match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=auction --bidder=go-skat"
+            match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=auction --bidder=belief-32"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi

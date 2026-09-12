@@ -118,6 +118,38 @@ overall. **Phase A moves ahead of Phase D**, and the Null variants are the first
 thing in it — a Null that can only ever be bid to 23 is a contract we own on
 paper and never play.
 
+## 2.4 Where we stand after the 900-board run, 2026-09-12
+
+Three seeds at 900 boards each, void mode, every outsider blind-checked. In
+[`../arena/README.md`](../arena/README.md), 2026-09-12.
+
+| belief-32 minus | full game | card play (oracle) |
+| --- | --- | --- |
+| `xskat` | **−0.73** [−1.47, +0.00] | **+3.22** [+2.42, +4.02] |
+| `go-skat` | **+1.95** [+1.20, +2.70] | **+8.22** [+7.07, +9.36] |
+
+- **Information leakage is closed.** Paired board by board, blinding either
+  engine changes the result by under 0.01 game points a game. The auction was
+  already blind from source. Nothing about either opponent is dubious.
+- **Card play is ahead of both, resolved.** Belief v2 (B2) remains worth doing
+  but it is improving the part that is already winning.
+- **The full game is where the points go**, and by an amount that differs by
+  opponent -- 3.95 against XSkat, 6.27 against go-skat -- which means "full
+  game minus oracle" is not measuring the bidding alone. The oracle's contract
+  mix amplifies a card-play edge; a real auction's does not. **That confound is
+  inside every auction-cost figure so far**, and the next run removes it.
+
+**Immediate next (queued in the overnight script):** card play at fixed
+contracts drawn from a real bidder -- `--contracts=auction --bidder=xskat` and
+`--bidder=belief-32` -- so that bidding and contract mix separate by
+subtraction. What comes after depends on the answer:
+
+- edge at realistic contracts still near +3 → the bidding costs ~4, build the
+  ceiling instrument (does the bid cap, priced on ten cards before the skat,
+  lose auctions it should win?)
+- edge drops to ~+1 → most of the "auction cost" was contract mix, the bidding
+  is only ~1–2 behind, and B2 moves back up the list
+
 ## 3. The levers, ranked
 
 1. **The belief model.** +2.4 delivered against +25 available. Before training
