@@ -100,6 +100,7 @@ public final class CalibrationMain {
         int biddingWorlds = intOption(options, "bidding-worlds", 6);
         boolean quiet = options.containsKey("quiet");
 
+        String matadors = Matadors.apply(options);
         PlayerRegistry registry = PlayerRegistry.withDefaults();
         Contestant contestant = registry.resolve(playerId);
         Contestant opponents = registry.resolve(opponentId);
@@ -107,6 +108,7 @@ public final class CalibrationMain {
         System.out.printf(Locale.ROOT,
                 "Calibration: %s, %d boards x 3 seats, seed %d, %d threads, %d bidding worlds%n",
                 contestant.displayName(), boards, seed, threads, biddingWorlds);
+        System.out.println(matadors);
         System.out.printf(Locale.ROOT, "Defended by: %s%n", opponents.displayName());
         System.out.println("Every seat's intended contract is played out, "
                 + "including the ones it would decline.");

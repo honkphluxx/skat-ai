@@ -21,6 +21,20 @@ import org.junit.Test;
  */
 public final class HandPromiseTest {
 
+    /**
+     * These tests are the ISkO's arithmetic -- "without nine, game ten" is a
+     * run through the trump suit -- and they stay on it, so that the official
+     * count the arena measures under keeps its coverage after the engine's
+     * default moved to the canon (jacks only) on 2026-09-13.
+     */
+    @org.junit.Before public void underTheIsko() {
+        SkatRules.setMatadorRule(SkatRules.MatadorRule.OFFICIAL);
+    }
+
+    @org.junit.After public void backToTheCanon() {
+        SkatRules.setMatadorRule(SkatRules.MatadorRule.JACKS_ONLY);
+    }
+
     /** Four sevens, four eights, two nines: it cannot be forced to take a trick. */
     private static List<Card> perfectNull() {
         List<Card> hand = new ArrayList<>();

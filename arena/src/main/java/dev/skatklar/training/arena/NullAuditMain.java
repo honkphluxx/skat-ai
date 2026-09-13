@@ -128,6 +128,7 @@ public final class NullAuditMain {
         // random stream, close to the player's but not the identical float.
         int biddingWorlds = intOption(options, "bidding-worlds", 6);
 
+        String matadors = Matadors.apply(options);
         PlayerRegistry registry = PlayerRegistry.withDefaults();
         Contestant contestant = registry.resolve(playerId);
         ContractSource oracleSource = oracle ? new SolverContractSource() : null;
@@ -136,6 +137,7 @@ public final class NullAuditMain {
                 "Null audit: %s, %d boards, seed %d, %d threads%s%n",
                 contestant.displayName(), boards, seed, threads,
                 oracle ? ", with the double-dummy oracle" : "");
+        System.out.println(matadors);
         System.out.println("Asking every seat how high it would go and what it would announce.");
         System.out.println();
 

@@ -17,6 +17,23 @@ defaults are what the AI is trained and measured on.
   `−2 × value`. This is already what `SkatRules.score` does.
 - **No Spitze.** Winning the last trick with the jack of clubs is worth nothing
   extra.
+- **Only jacks are matadors** (set 2026-09-13). The "with N / without N" run
+  counts down from the jack of clubs and **stops at the four jacks**; it does
+  not continue into the trump suit. So "with four" is the most a hand can be,
+  a suit game's multiplier tops out at five before hand, Schneider and Schwarz,
+  and a Clubs hand holding all four jacks and the ace is "with four, game
+  five, sixty" rather than the ISkO's "with five, game six, seventy-two". Grand
+  is unchanged, since only jacks are trumps there. This is what the multiplier
+  ladder on screen shows, and it applies to the game value, the bid ceiling,
+  the overbid check and hand evaluation alike -- they are one count.
+  - *In the engine:* `SkatRules.MatadorRule`, defaulting to `JACKS_ONLY`, so
+    the app and the server play the canon with no wiring.
+  - *In the arena and the training tools:* the **ISkO rule, explicitly**, and
+    printed in every run's header. Every number recorded before 2026-09-13 was
+    taken under it, and the outside engines bid by it (XSkat's own ceiling
+    stops at the jacks regardless; go-skat's does not). `--matadors=jacks`
+    measures under the canon. Clamping the training ladder to the canon later
+    is one word in `Matadors.DEFAULT`.
 
 ## 2. Kontra and Re
 

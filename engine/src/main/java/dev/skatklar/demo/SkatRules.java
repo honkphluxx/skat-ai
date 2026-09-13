@@ -13,6 +13,40 @@ import java.util.Map;
 public final class SkatRules {
     private SkatRules() {}
 
+    /**
+     * Which trumps count as matadors -- the "with N / without N" that sets a
+     * game's multiplier.
+     *
+     * <p>{@link #OFFICIAL} is the ISkO: the unbroken run of top trumps from the
+     * jack of clubs down, through the four jacks and on into the trump suit, so
+     * a Clubs hand holding all four jacks and the ace is "with five" and worth
+     * base times six. {@link #JACKS_ONLY} is the canon this app plays
+     * ({@code docs/rules.md} 1): the run stops at the jacks, so "with four" is
+     * the most a hand can be and a suit game's multiplier tops out at five
+     * before announcements. Grand is the same under both, since only jacks are
+     * trumps there.
+     *
+     * <p>A process-wide setting rather than a parameter, and set once at
+     * startup: the count feeds the game value, the bid ceiling, the overbid
+     * check, hand evaluation and the multiplier the UI draws, and every one of
+     * those must agree inside one game. The engine defaults to the canon, so
+     * the app and the server play it with no wiring. The arena and the
+     * training tools set {@link #OFFICIAL} explicitly and print which rule a
+     * run was taken under, because the outside engines they measure against
+     * bid by the ISkO and every number recorded before 2026-09-13 was taken
+     * under it. The switch is how the training ladder gets clamped to the
+     * app's rule later without a second copy of anything.
+     */
+    public enum MatadorRule { OFFICIAL, JACKS_ONLY }
+
+    private static volatile MatadorRule matadorRule = MatadorRule.JACKS_ONLY;
+
+    public static MatadorRule matadorRule() { return matadorRule; }
+
+    public static void setMatadorRule(MatadorRule rule) {
+        matadorRule = java.util.Objects.requireNonNull(rule, "rule");
+    }
+
     public static Set<Card> legalCards(Contract contract, List<Card> hand,
                                        List<SkatAi.PlayedCard> currentTrick) {
         if (hand.isEmpty()) return Collections.emptySet();
@@ -370,6 +404,11 @@ public final class SkatRules {
         LinkedHashSet<Card> cards = new LinkedHashSet<>();
         for (Card card : heldCards) cards.add(card);
         List<Card> trumpOrder = trumpOrder(contract);
+        // Under the canon the run stops at the jacks, which are the first four
+        // of the trump order for every contract that has one. See MatadorRule.
+        if (matadorRule == MatadorRule.JACKS_ONLY && trumpOrder.size() > 4) {
+            trumpOrder = trumpOrder.subList(0, 4);
+        }
         boolean with = cards.contains(trumpOrder.get(0));
         int matadors = 0;
         for (Card trump : trumpOrder) {

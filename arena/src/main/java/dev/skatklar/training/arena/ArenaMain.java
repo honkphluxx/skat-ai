@@ -42,6 +42,12 @@ public final class ArenaMain {
                                            those games played for them by
                                            greedy. No effect with a fixed
                                            contract, where nothing can pass in.
+              --matadors=<x>    which trumps count as matadors:
+                                  official the ISkO run through the trump suit
+                                           (default here; what every recorded
+                                           number was taken under)
+                                  jacks    the app's rule: the run stops at the
+                                           four jacks, multiplier tops at five
               --bidder=<player> the bidder for --contracts=auction (default
                                 greedy). Use the strongest bidder you have; the
                                 report prints the contract mix so you can judge
@@ -76,6 +82,7 @@ public final class ArenaMain {
             return;
         }
 
+        String matadors = Matadors.apply(options);
         PlayerRegistry registry = PlayerRegistry.withDefaults();
         String a = options.get("a");
         String b = options.get("b");
@@ -113,9 +120,10 @@ public final class ArenaMain {
             // German machine and "1,000 boards" elsewhere is ambiguous in logs and
             // unusable in a diff between two runs.
             System.out.printf(Locale.ROOT,
-                    "%s vs %s over %,d boards (%,d games), seed %d, %d thread(s)%n",
+                    "%s vs %s over %,d boards (%,d games), seed %d, %d thread(s), %s%n",
                     first.displayName(), second.displayName(),
-                    boards, boards * DuplicateMatch.GAMES_PER_SIDE_AND_BOARD * 2, seed, threads);
+                    boards, boards * DuplicateMatch.GAMES_PER_SIDE_AND_BOARD * 2, seed, threads,
+                    matadors);
         }
 
         long startedAt = System.nanoTime();
