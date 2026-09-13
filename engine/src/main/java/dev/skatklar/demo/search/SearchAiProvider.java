@@ -204,6 +204,13 @@ public final class SearchAiProvider implements SkatAiProvider {
     private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
                              WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
                              double temperature) {
+        this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos,
+                temperature, false);
+    }
+
+    private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
+                             WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
+                             double temperature, boolean adaptiveBidding) {
         this.delegate = delegate;
         this.personality = personality;
         this.seed = seed;
@@ -211,6 +218,36 @@ public final class SearchAiProvider implements SkatAiProvider {
         this.alphaMuDepth = Math.max(0, alphaMuDepth);
         this.biddingBudgetNanos = Math.max(0L, biddingBudgetNanos);
         this.temperature = Math.max(0, temperature);
+        this.adaptiveBidding = adaptiveBidding;
+    }
+
+    /**
+     * Whether the auction is allowed to change the price of the hand.
+     *
+     * <p>Off, the hand is priced once at the deal against uniformly dealt
+     * worlds and that number is held through the whole auction -- bold at 18
+     * and equally bold at 44 against an opponent who has just said 44. On, the
+     * hand is re-priced whenever an opponent says something new, against only
+     * the worlds consistent with what they said: an opponent who held 44 holds
+     * the jacks in every world that survives, and one who passed at 20 mostly
+     * does not. See {@link HandEvaluator.AuctionEvidence} for what "consistent"
+     * means and why it is taken from the score sheet rather than learned.
+     *
+     * <p>Why it is a property of the player rather than always on: the arena
+     * measures the two side by side. The fixed price was cleared as a threshold
+     * twice and then shown to be the wrong question, because a passed hand is
+     * not zero -- on the other side of the pairing it is the opponent's to
+     * declare. Against XSkat a bolder fixed dial earned +0.8 a game and against
+     * belief-32 the same dial lost 0.67, which is the signature of information
+     * being ignored: the dividend belongs to a player that is bold when the
+     * table is quiet and cautious when it is not, and that is this.
+     */
+    private final boolean adaptiveBidding;
+
+    /** The same player, listening to the auction. A copy, for the reason {@link #withBiddingBudget} is. */
+    public SearchAiProvider withAdaptiveBidding() {
+        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature, true);
     }
 
     /**
@@ -231,7 +268,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withBiddingBudget(long nanos) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos,
-                temperature);
+                temperature, adaptiveBidding);
     }
 
     /**
@@ -354,6 +391,14 @@ public final class SearchAiProvider implements SkatAiProvider {
         private boolean unevaluated;
         /** Opponents who have passed for good, which is how close a Ramsch is. */
         private int opponentsOut;
+        /** What each opponent declined, for the adaptive price; see {@link #reprice}. */
+        private Map<SkatAi.Seat, Integer> passedAt = new EnumMap<>(SkatAi.Seat.class);
+        /** The ten as dealt, kept so the auction can re-price them. */
+        private List<Card> dealtHand = List.of();
+        /** The contract rules of the deal, kept for the same reason. */
+        private SkatAi.ContractRules dealtRules;
+        /** The evidence the current price was computed under, to re-price only on news. */
+        private HandEvaluator.AuctionEvidence pricedUnder = HandEvaluator.AuctionEvidence.NONE;
 
         Session(SkatAiSession blind) {
             this.blind = blind;
@@ -375,6 +420,8 @@ public final class SearchAiProvider implements SkatAiProvider {
             intendedChance = 0;
             unevaluated = false;
             opponentsOut = 0;
+            passedAt = new EnumMap<>(SkatAi.Seat.class);
+            pricedUnder = HandEvaluator.AuctionEvidence.NONE;
             countsKept = random.nextDouble() < personality.countMemory();
             highestBids = new EnumMap<>(SkatAi.Seat.class);
             schieben = null;
@@ -394,40 +441,10 @@ public final class SearchAiProvider implements SkatAiProvider {
             // often it holds. Only the two most promising contracts are asked
             // about, because each answer costs several solves.
             List<Card> hand = new ArrayList<>(context.initialHand);
-            HandEvaluator evaluator = new HandEvaluator(biddingWorlds(), random);
-            // One budget for the seat, not one per contract: the tail this
-            // guards against is a single solve, and splitting the allowance
-            // would let a cheap first contract subsidise nothing while a
-            // pathological one still ran to its own full share.
-            boolean bounded = biddingBudgetNanos > 0;
-            long deadline = bounded ? System.nanoTime() + biddingBudgetNanos : 0L;
-            boolean measuredAnything = false;
-            double best = Double.NEGATIVE_INFINITY;
-            for (Contract contract : candidates(hand)) {
-                if (!context.contractRules.allowedTypes.contains(
-                        SkatAi.ContractType.valueOf(contract.name()))) {
-                    continue;
-                }
-                double chance = bounded
-                        ? evaluator.makeChanceBefore(contract, hand, context.mySeat,
-                                context.round.forehand, deadline)
-                        : evaluator.makeChance(contract, hand, context.mySeat,
-                                context.round.forehand);
-                // Not a number means not a single world was solved in time, which
-                // is silence rather than a low chance. Scoring it as zero would
-                // be reading an answer out of a question that was never asked.
-                if (Double.isNaN(chance)) continue;
-                measuredAnything = true;
-                int value = SkatRules.guaranteedValue(contract, hand);
-                double expected = declaringIsWorth(value, chance);
-                if (expected > best) {
-                    best = expected;
-                    maxBid = value;
-                    intended = contract;
-                    intendedChance = chance;
-                }
-            }
-            unevaluated = !measuredAnything;
+            dealtHand = hand;
+            dealtRules = context.contractRules;
+            dealtForehand = context.round.forehand;
+            price(HandEvaluator.AuctionEvidence.NONE);
             if (unevaluated) {
                 // Nothing to price the alternative against, and the Ramsch
                 // playouts would only spend more of a budget already gone.
@@ -441,6 +458,77 @@ public final class SearchAiProvider implements SkatAiProvider {
             // game, which are both the borderline bid and the likely loser.
             ramschValue = RamschEvaluator.expectedValue(context.mySeat,
                     context.initialHand, context.round.forehand, biddingWorlds(), random);
+        }
+
+        private SkatAi.Seat dealtForehand;
+
+        /**
+         * Prices the dealt ten against worlds consistent with {@code evidence},
+         * and sets the intention, its chance and the ceiling from the result.
+         * At the deal the evidence is empty and this is the price the player
+         * has always computed; during the auction, with adaptive bidding on, it
+         * is called again with what the table has said.
+         */
+        private void price(HandEvaluator.AuctionEvidence evidence) {
+            List<Card> hand = dealtHand;
+            HandEvaluator evaluator = new HandEvaluator(biddingWorlds(), random);
+            // One budget for the seat, not one per contract: the tail this
+            // guards against is a single solve, and splitting the allowance
+            // would let a cheap first contract subsidise nothing while a
+            // pathological one still ran to its own full share.
+            boolean bounded = biddingBudgetNanos > 0;
+            long deadline = bounded ? System.nanoTime() + biddingBudgetNanos : 0L;
+            boolean measuredAnything = false;
+            double best = Double.NEGATIVE_INFINITY;
+            Contract bestContract = null;
+            double bestChance = 0;
+            int bestValue = 0;
+            for (Contract contract : candidates(hand)) {
+                if (!dealtRules.allowedTypes.contains(
+                        SkatAi.ContractType.valueOf(contract.name()))) {
+                    continue;
+                }
+                double chance = bounded
+                        ? evaluator.makeChanceBefore(contract, hand, mySeat, dealtForehand,
+                                deadline, evidence)
+                        : evaluator.makeChance(contract, hand, mySeat, dealtForehand, evidence);
+                // Not a number means not a single world was solved in time, which
+                // is silence rather than a low chance. Scoring it as zero would
+                // be reading an answer out of a question that was never asked.
+                if (Double.isNaN(chance)) continue;
+                measuredAnything = true;
+                int value = SkatRules.guaranteedValue(contract, hand);
+                double expected = declaringIsWorth(value, chance);
+                if (expected > best) {
+                    best = expected;
+                    bestValue = value;
+                    bestContract = contract;
+                    bestChance = chance;
+                }
+            }
+            if (measuredAnything) {
+                maxBid = bestValue;
+                intended = bestContract;
+                intendedChance = bestChance;
+                unevaluated = false;
+            } else if (evidence.isEmpty()) {
+                // Silence at the deal is silence: the delegate bids.
+                unevaluated = true;
+            }
+            // A re-price that measured nothing keeps the price it had.
+            pricedUnder = evidence;
+        }
+
+        /**
+         * Re-prices the hand if the auction has said something since the last
+         * price. Called before every bid decision when adaptive bidding is on.
+         */
+        private void reprice() {
+            if (!adaptiveBidding || unevaluated) return;
+            HandEvaluator.AuctionEvidence now = new HandEvaluator.AuctionEvidence(
+                    new EnumMap<>(highestBids), new EnumMap<>(passedAt));
+            if (now.equals(pricedUnder)) return;
+            price(now);
         }
 
         /**
@@ -486,6 +574,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             // A bid the contract cannot cover is a lost game whatever the cards,
             // and no expectation makes that worth saying.
             if (unevaluated) return blind.bid(request);
+            reprice();
             if (intended == null || request.requestedBid > maxBid) return 0;
             double declaring = declaringIsWorth(maxBid, intendedChance);
             double passing = ramschRisk(request.currentBid, opponentsOut) * ramschValue;
@@ -499,6 +588,9 @@ public final class SearchAiProvider implements SkatAiProvider {
         @Override public void bidObserved(SkatAi.BidEvent event) {
             if (event.passed && event.seat != mySeat) opponentsOut++;
             if (!event.passed) highestBids.merge(event.seat, event.value, Math::max);
+            if (event.passed && event.seat != mySeat) {
+                passedAt.merge(event.seat, event.value, Math::max);
+            }
             blind.bidObserved(event);
         }
 

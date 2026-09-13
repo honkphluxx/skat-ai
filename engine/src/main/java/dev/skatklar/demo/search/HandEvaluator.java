@@ -81,26 +81,151 @@ public final class HandEvaluator {
         return sample(contract, myCards, mySeat, leader, true, deadlineNanos);
     }
 
+    /**
+     * What the auction has said so far, as a constraint on the worlds a hand is
+     * priced against.
+     *
+     * <p>The plain sampler deals the unseen cards uniformly, which prices a
+     * hand as if nobody else had spoken. But an opponent who has held 44 has
+     * told you something about where the jacks are, and one who passed at 20
+     * has told you something weaker in the other direction. This carries
+     * both, per seat, and {@link #consistent} turns them into a rule for
+     * keeping or rejecting a sampled world.
+     *
+     * <p><b>What a bid means here is the jacks it implies, and nothing
+     * learned.</b> The first version of this took "a bid of V needs a hand
+     * that guarantees V" from the score sheet and rejected the rest -- and
+     * excluded almost nothing, because a hand with no jacks at all guarantees
+     * 120: Grand, without four, game five. Guaranteed value is what a game is
+     * worth if made, not whether it can be, and "without N" sends the two in
+     * opposite directions. So the floor is taken from the one thing every
+     * bidder bids on, held jacks: a bid of V claims a game worth V, the most
+     * lenient contract is Grand at base 24, and reaching V <em>with</em> N
+     * matadors needs N held jacks, while any suit game needs more. That gives
+     * {@link #jacksImplied}: a bid up to 24 says nothing, 25 to 48 says one
+     * jack, 49 to 72 two, 73 to 96 three. It is wrong only for a bid of 49 or
+     * more on at most one jack -- a "without" game in a monster suit, rare and
+     * weak -- and wrong in the direction of trusting the bid slightly too much,
+     * which is the small error to make. It learns nothing from any opponent:
+     * the alternative, a model of what a bid means fitted to the arena's
+     * population, would learn that XSkat never bluffs and then trust a human
+     * who does.
+     *
+     * <p>A pass is weaker evidence and is treated as such. A player who passed
+     * at L holding two more jacks than L implies could plainly have bid; the
+     * world is kept with a reduced weight rather than rejected, because
+     * cautious bidders exist. {@link #PASS_WEIGHT} is the one constant in
+     * this, and it is not to be fitted against any particular opponent.
+     *
+     * @param bids   the highest value each opponent has bid or held, by seat;
+     *               absent or zero for a seat that has not bid
+     * @param passes the value each opponent declined, by seat; absent or zero
+     *               for a seat that has not passed
+     */
+    public record AuctionEvidence(Map<SkatAi.Seat, Integer> bids,
+                                  Map<SkatAi.Seat, Integer> passes) {
+        public static final AuctionEvidence NONE = new AuctionEvidence(Map.of(), Map.of());
+
+        /** How much of a world survives an opponent's pass at a level their jacks could have bid. */
+        public static final double PASS_WEIGHT = 0.35;
+
+        public boolean isEmpty() {
+            return bids.values().stream().allMatch(v -> v <= 0)
+                    && passes.values().stream().allMatch(v -> v <= 0);
+        }
+
+        /** The fewest held jacks a bid of {@code value} can plausibly rest on. */
+        public static int jacksImplied(int value) {
+            if (value <= 0) return 0;
+            return Math.max(0, Math.min(4, (value + 23) / 24 - 1));
+        }
+
+        static int jacksHeld(List<Card> hand) {
+            int jacks = 0;
+            for (Card card : hand) if (card.rank == Card.Rank.JACK) jacks++;
+            return jacks;
+        }
+
+        /**
+         * Whether a sampled world is consistent with what its seats have said,
+         * drawing on {@code random} for the soft cases.
+         */
+        boolean consistent(Map<SkatAi.Seat, List<Card>> hands, SkatAi.Seat mySeat, Random random) {
+            for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+                if (seat == mySeat) continue;
+                int bid = bids.getOrDefault(seat, 0);
+                int passedAt = passes.getOrDefault(seat, 0);
+                if (bid <= 0 && passedAt <= 0) continue;
+                int jacks = jacksHeld(hands.get(seat));
+                if (bid > 0 && jacks < jacksImplied(bid)) return false;
+                if (bid <= 0 && passedAt > 0 && jacks >= jacksImplied(passedAt) + 2
+                        && random.nextDouble() >= PASS_WEIGHT) return false;
+            }
+            return true;
+        }
+    }
+
+    /**
+     * As {@link #makeChance}, priced against worlds consistent with the auction
+     * so far rather than against all of them.
+     */
+    public double makeChance(Contract contract, List<Card> myCards, SkatAi.Seat mySeat,
+                             SkatAi.Seat leader, AuctionEvidence evidence) {
+        return sample(contract, myCards, mySeat, leader, false, 0L, evidence);
+    }
+
+    /** As {@link #makeChanceBefore}, with the auction as a constraint. */
+    public double makeChanceBefore(Contract contract, List<Card> myCards, SkatAi.Seat mySeat,
+                                   SkatAi.Seat leader, long deadlineNanos,
+                                   AuctionEvidence evidence) {
+        return sample(contract, myCards, mySeat, leader, true, deadlineNanos, evidence);
+    }
+
+    /**
+     * How many deals may be drawn and rejected in search of one the auction
+     * allows, before the last one is taken anyway. A bound so that evidence
+     * the sampler cannot satisfy -- three opponents all claiming the jacks --
+     * degrades to the unconstrained answer rather than to a hang.
+     */
+    private static final int REJECTION_ATTEMPTS = 40;
+
     private double sample(Contract contract, List<Card> myCards, SkatAi.Seat mySeat,
                           SkatAi.Seat leader, boolean bounded, long deadlineNanos) {
+        return sample(contract, myCards, mySeat, leader, bounded, deadlineNanos,
+                AuctionEvidence.NONE);
+    }
+
+    private double sample(Contract contract, List<Card> myCards, SkatAi.Seat mySeat,
+                          SkatAi.Seat leader, boolean bounded, long deadlineNanos,
+                          AuctionEvidence evidence) {
         List<Card> rest = new ArrayList<>();
         Set<Card> mine = new LinkedHashSet<>(myCards);
         for (Card card : SkatDeck.ordered()) if (!mine.contains(card)) rest.add(card);
+        boolean constrained = evidence != null && !evidence.isEmpty();
 
         int made = 0;
         int solved = 0;
         for (int world = 0; world < worlds; world++) {
             if (bounded && world > 0 && System.nanoTime() - deadlineNanos >= 0) break;
-            Collections.shuffle(rest, random);
             Map<SkatAi.Seat, List<Card>> hands = new EnumMap<>(SkatAi.Seat.class);
             int at = 0;
-            for (SkatAi.Seat seat : SkatAi.Seat.values()) {
-                if (seat == mySeat) {
-                    hands.put(seat, new ArrayList<>(myCards));
-                } else {
-                    hands.put(seat, new ArrayList<>(rest.subList(at, at + 10)));
-                    at += 10;
+            // Deal until the auction allows it, or give up and take the last one.
+            // Dealing is cheap and solving is not, so the rejections happen here
+            // and never cost a solve.
+            for (int attempt = 0; ; attempt++) {
+                Collections.shuffle(rest, random);
+                hands.clear();
+                at = 0;
+                for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+                    if (seat == mySeat) {
+                        hands.put(seat, new ArrayList<>(myCards));
+                    } else {
+                        hands.put(seat, new ArrayList<>(rest.subList(at, at + 10)));
+                        at += 10;
+                    }
                 }
+                if (!constrained || attempt >= REJECTION_ATTEMPTS
+                        || evidence.consistent(hands, mySeat, random)) break;
             }
             // The declarer picks the skat up and buries two cards, so a hand has
             // to be judged as it will be played rather than as it was dealt.

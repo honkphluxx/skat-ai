@@ -129,6 +129,12 @@ public final class BeliefPlayers {
         registry.register(sweep("belief-32-a65", 32, 0.65, loader));
         registry.register(sweep("belief-32-a80", 32, 0.80, loader));
         registry.register(sweep("belief-32-a95", 32, 0.95, loader));
+        // belief-32 with the auction allowed to change the price of the hand,
+        // and nothing else different. The dial above was +0.8 against XSkat
+        // and -0.67 against belief-32; this is the player that is meant to
+        // earn the first without paying the second, by being bold only when
+        // the table is quiet. See SearchAiProvider.withAdaptiveBidding.
+        registry.register(adaptive("belief-32-adaptive", 32, loader));
         registry.register(alphaMu(registry, "alphamu-1", 1, loader));
         registry.register(alphaMu(registry, "alphamu", 2, loader));
         registry.register(alphaMu(registry, "alphamu-3", 3, loader));
@@ -151,6 +157,23 @@ public final class BeliefPlayers {
             @Override public SkatAiProvider newProvider(long seed) {
                 return new SearchAiProvider(new GreedyAiProvider(), personality, seed,
                         new BeliefWorldSource(loader.get()));
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
+    /** The belief player at the reference aggression, listening to the auction. */
+    private static Contestant adaptive(String id, int worlds, Loader loader) {
+        Personality personality = new Personality(worlds, Personality.REFERENCE.memory(),
+                Personality.REFERENCE.risk(), Personality.REFERENCE.aggression());
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() {
+                return "Belief, " + worlds + " worlds, adaptive bidding";
+            }
+            @Override public SkatAiProvider newProvider(long seed) {
+                return new SearchAiProvider(new GreedyAiProvider(), personality, seed,
+                        new BeliefWorldSource(loader.get())).withAdaptiveBidding();
             }
             @Override public String toString() { return id; }
         };

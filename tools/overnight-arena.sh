@@ -492,6 +492,14 @@ for SEED in $SEEDS; do
             # outsider, or it does not ship. jskat-new bids nothing like XSkat,
             # which is the point of having it here.
             match belief-32-a80 jskat-new "$(boards 300)" "--passed-in=void"
+            # The adaptive bidder: the same four gates the dial was held to.
+            # Exact pairing against belief-32 first -- the dial failed this one
+            # at -0.67 and passing it is the whole meaning of "adaptive rather
+            # than bold" -- then the outsiders, where it must not lose what the
+            # dial won.
+            match belief-32-adaptive belief-32 "$(boards 300)" "--passed-in=void"
+            match belief-32-adaptive xskat "$(boards 300)" "--passed-in=void"
+            match belief-32-adaptive jskat-new "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
@@ -504,6 +512,7 @@ for SEED in $SEEDS; do
             match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=auction --bidder=belief-32"
             # The aggression dial's third opponent; see the xskat block.
             match belief-32-a80 go-skat "$(boards 200)" "--passed-in=void"
+            match belief-32-adaptive go-skat "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi
