@@ -471,6 +471,14 @@ for SEED in $SEEDS; do
             # And each against belief-32 itself, so the dial is measured on
             # the same boards with the same opponent and the pairing is exact.
             match belief-32-a80 belief-32 "$(boards 300)" "--passed-in=void"
+            # A dial that wins against XSkat has shown nothing yet. XSkat's
+            # bidding is a rule table -- it never bluffs and never backs down --
+            # and a setting that exploits that is exactly wrong against a human
+            # who does both. So the same dial goes against the rest of the
+            # field, and the plan's gate applies: non-negative against every
+            # outsider, or it does not ship. jskat-new bids nothing like XSkat,
+            # which is the point of having it here.
+            match belief-32-a80 jskat-new "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
@@ -481,6 +489,8 @@ for SEED in $SEEDS; do
             match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=solver"
             match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=auction --bidder=go-skat"
             match belief-32 go-skat "$(boards 200)" "--fixed-contract --contracts=auction --bidder=belief-32"
+            # The aggression dial's third opponent; see the xskat block.
+            match belief-32-a80 go-skat "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi
