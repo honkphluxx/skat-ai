@@ -2542,3 +2542,57 @@ aggression ladder at 32 worlds, declaring above 0.630, 0.583 and 0.524 against
 `belief-32` itself for an exact pairing. If a bolder dial beats belief-32 in the
 full game, the dividend is real and was hidden; if none does, the threshold is
 closed for good and the points are in the ceiling or the contract choice.
+
+### 2026-09-13, second: the ladder, the pairing, and the decomposition
+
+**Ladder against XSkat, dial minus reference on the same boards:**
+
+```
+        a65      a80      a95
+s11    +0.44    +0.72    +0.95
+s12    +1.23    +1.14    +0.87
+s13    +0.82    +0.68    +0.89
+```
+
+Nine of nine positive. Pooled, every dial sits near −0.5 against XSkat where
+the reference is −1.31: a dividend of about **+0.8**, and flat across the
+ladder -- the first step of boldness earns it and the next two add nothing,
+which is the plateau the calibration tool drew against XSkat's defence.
+
+**And the exact pairing, same boards, same opponent, only the dial moved:**
+
+```
+belief-32-a80 − belief-32 = −0.67  [−1.30, −0.04]   RESOLVED
+```
+
+Bold loses to the reference in self-play. **The same dial is +0.8 against
+XSkat and −0.67 against ourselves.** A dividend against an opponent that takes
+your passed hands and defends softly; a penalty against one that defends hard.
+The dial is opponent-dependent and does not ship as a setting. The guard rows
+against jskat-new and go-skat did not run this pass and are not needed for that
+verdict.
+
+What it establishes is that the mechanism is worth about a point against a
+realistic opponent -- and that the fix is not a number but a bidder that
+**listens to the auction**: bold when the opposition is silent, cautious when
+it bids strongly. Such a bidder earns the XSkat dividend *because* XSkat's
+bids are informative and forgoes it against belief-32 *because* belief-32's
+are too. Nothing to overfit.
+
+**The decomposition, at contracts a real bidder reaches:**
+
+| belief-32 minus | contracts by opponent | by belief-32 | by the oracle |
+| --- | --- | --- | --- |
+| `xskat` | +1.59 [+0.43, +2.75] | +1.83 [+0.86, +2.79] | +3.22 |
+| `go-skat` | +3.08 [+1.80, +4.36] | +4.55 [+3.22, +5.88] | +8.22 |
+
+The oracle's contract mix inflated our card-play edge by **1.5 points against
+XSkat and 5 against go-skat.** At realistic contracts we are +1.6 to +1.8
+against XSkat, so the bidding's true share of the full-game gap is about
+**2.5 points**, not four. The dial recovers 0.8 of it; the ceiling that never
+hears the auction is the candidate for the rest.
+
+**Also fixed:** the script now runs from a copy of itself, so editing the file
+during a night can no longer reach the running process. A commit made mid-run
+landed bash on a byte offset mid-word and killed the trailer with
+`en: command not found`; every seed had already finished.

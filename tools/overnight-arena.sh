@@ -39,11 +39,24 @@
 # with "command not found" on the first line. .gitattributes pins it.
 
 set -uo pipefail
+# Run from a copy of this file, not from the file itself. Bash reads a script
+# incrementally as it executes, so editing this file while a night is running
+# changes what the running process reads next -- a commit made mid-run on
+# 2026-09-13 landed the process on a byte offset in the middle of a word and
+# killed the trailer with "en: command not found". The copy is taken once,
+# here, before anything else is read; the original's directory is passed along
+# so the project root is still found from it and not from the copy.
+if [ -z "${OVERNIGHT_ORIGINAL:-}" ]; then
+    OVERNIGHT_ORIGINAL="$0"
+    copy="$(mktemp "${TMPDIR:-/tmp}/overnight-arena.XXXXXX")" || exit 1
+    cp "$0" "$copy" || exit 1
+    OVERNIGHT_ORIGINAL="$OVERNIGHT_ORIGINAL" exec bash "$copy" "$@"
+fi
 # One level up from tools/ is the skat-ai project root, which is where the arena
 # reads and writes: arena-logs/, belief-model/, the wrapper. Anchored rather than
 # taken from the caller, because the run resumes by checking whether a match's
 # log already exists -- started from elsewhere it would quietly redo the night.
-cd "$(dirname "$0")/.."
+cd "$(dirname "$OVERNIGHT_ORIGINAL")/.."
 # A Windows path, not a MINGW one. Git Bash reports /c/Users/... and the JVM
 # reads that as a relative path off the drive root, so the CSVs would land in
 # C:\c\Users\... -- which is exactly the shape of bug that eats a night's run.
@@ -107,7 +120,7 @@ for arg in "$@"; do
         --scale=*)    SCALE="${arg#*=}" ;;
         --threads=*)  THREADS="${arg#*=}" ;;
         --redo=*)     REDO="${arg#*=}" ;;
-        -h|--help)    sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,30p' "$OVERNIGHT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
