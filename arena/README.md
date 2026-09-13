@@ -2499,3 +2499,46 @@ And it is the mirror image of XSkat's: XSkat's dependence is all as declarer
 (the skat), go-skat's is all as defender (its inference module, reading the
 sampled world). Both under a quarter of a percent, and both worth nothing at
 the score sheet, as the paired numbers above say.
+
+### 2026-09-13: the threshold against XSkat's defence, and why the sweep is back
+
+`:arena:calibration --opponents=xskat`, same 900 hands, same estimates, only
+the defenders changed:
+
+```
+                     vs ourselves   vs xskat
+p >= 0.458  (33.9%)      3.57          4.97
+p >= 0.500  (30.9%)      3.80          4.98
+p >= 0.667  (21.6%)      4.65          5.25
+p >= 0.708  (19.6%)      4.55          5.03   <- today
+p >= 0.750  (16.3%)      4.45          4.98
+```
+
+Every hand converts better against XSkat (0.536 predicted is made 71% of the
+time, not 62%; Grand 100%), and the cut table turns from a peak into a
+**plateau from 0.458 to 0.750**. Declaring a third of hands pays within 0.3 of
+declaring a sixth. Held out, a stricter cut lost by 0.28 over 13 hands -- noise
+on a flat surface. **Today's cut stands against XSkat too**, and the threshold
+is cleared against the toughest defence and a realistic one.
+
+**And that is the wrong question for the arena, which this result makes
+visible.** The tool scores a passed hand as zero. In the duplicate pairing a
+passed hand is not zero: XSkat holds the same cards in the same seat on the
+other side, bids them -- 33% of games to our 24% -- and makes them 86% of the
+time. A hand worth nothing *to declare* can be worth a great deal *to deny*.
+
+The obvious repair, subtracting XSkat's take from each hand's row, does not
+work: for one hand that take is a constant with respect to our cut, and
+subtracting a constant from every row leaves the best cut where it was. Denial
+lives in the **interaction between seats** -- being bolder with this hand takes
+the board from XSkat holding that one -- and a per-hand tool cannot see across
+seats. The auction can. The arena runs the auction against the real opponent.
+
+**So Phase A's sweep is back, and Thursday's dismissal of it was wrong** for
+exactly this reason: it rested on a tool whose accounting hides the effect the
+sweep measures. `belief-32-a65`, `-a80`, `-a95` are registered -- the
+aggression ladder at 32 worlds, declaring above 0.630, 0.583 and 0.524 against
+0.667 at reference -- and seated against XSkat in void mode, plus `a80` against
+`belief-32` itself for an exact pairing. If a bolder dial beats belief-32 in the
+full game, the dividend is real and was hidden; if none does, the threshold is
+closed for good and the points are in the ceiling or the contract choice.

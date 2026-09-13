@@ -112,6 +112,23 @@ public final class BeliefPlayers {
         registry.register(worlds("belief-32", 32, loader));
         registry.register(sweep("belief-bold", 0.80, loader));
         registry.register(sweep("belief-timid", 0.20, loader));
+        // The aggression ladder at 32 worlds, so that a bolder bidder is
+        // compared with belief-32 and nothing else moves. `belief-bold` above
+        // is at 16 worlds, and against belief-32 it confounds the dial with
+        // the sampling budget.
+        //
+        // Why the ladder exists after the calibration tool said the threshold
+        // was right: that tool scores a passed hand as zero. In the duplicate
+        // arena a passed hand is not zero -- on the other side of the pairing
+        // XSkat holds the same cards in the same seat, declares them, and
+        // scores. And being bolder with one hand can take the board away from
+        // XSkat holding another at the same table. Neither effect is visible
+        // one hand at a time; both are visible to the auction, and the arena is
+        // what runs the auction against the real opponent. The break-even each
+        // dial declares above: 0.630, 0.583, 0.524, against 0.667 at reference.
+        registry.register(sweep("belief-32-a65", 32, 0.65, loader));
+        registry.register(sweep("belief-32-a80", 32, 0.80, loader));
+        registry.register(sweep("belief-32-a95", 32, 0.95, loader));
         registry.register(alphaMu(registry, "alphamu-1", 1, loader));
         registry.register(alphaMu(registry, "alphamu", 2, loader));
         registry.register(alphaMu(registry, "alphamu-3", 3, loader));
@@ -141,12 +158,18 @@ public final class BeliefPlayers {
 
     /** The belief player at a different aggression, for the auction sweep. */
     private static Contestant sweep(String id, double aggression, Loader loader) {
-        Personality personality = new Personality(Personality.REFERENCE.worlds(),
+        return sweep(id, Personality.REFERENCE.worlds(), aggression, loader);
+    }
+
+    /** As above, at a stated world count rather than the reference one. */
+    private static Contestant sweep(String id, int worlds, double aggression, Loader loader) {
+        Personality personality = new Personality(worlds,
                 Personality.REFERENCE.memory(), Personality.REFERENCE.risk(), aggression);
         return new Contestant() {
             @Override public String id() { return id; }
             @Override public String displayName() {
-                return "Belief, aggression " + Math.round(aggression * 100) + "%";
+                return "Belief, " + worlds + " worlds, aggression "
+                        + Math.round(aggression * 100) + "%";
             }
             @Override public SkatAiProvider newProvider(long seed) {
                 return new SearchAiProvider(new GreedyAiProvider(), personality, seed,

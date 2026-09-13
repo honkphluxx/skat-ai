@@ -457,6 +457,20 @@ for SEED in $SEEDS; do
             # the two bidders reach different games and the answer may differ.
             match belief-32 xskat "$(boards 300)" "--fixed-contract --contracts=auction --bidder=xskat"
             match belief-32 xskat "$(boards 300)" "--fixed-contract --contracts=auction --bidder=belief-32"
+            # The aggression ladder against XSkat, in the full game. The
+            # calibration tool cleared the threshold twice, against our own
+            # defence and against XSkat's -- but it scores a passed hand as
+            # zero, and in the pairing a passed hand is XSkat's to declare.
+            # Only the auction sees that. If a bolder dial beats belief-32
+            # here, the dividend is real and the tool's accounting hid it; if
+            # none does, the threshold is closed for good and the points are
+            # in the ceiling or the contract choice.
+            match belief-32-a65 xskat "$(boards 300)" "--passed-in=void"
+            match belief-32-a80 xskat "$(boards 300)" "--passed-in=void"
+            match belief-32-a95 xskat "$(boards 300)" "--passed-in=void"
+            # And each against belief-32 itself, so the dial is measured on
+            # the same boards with the same opponent and the pairing is exact.
+            match belief-32-a80 belief-32 "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
