@@ -42,12 +42,13 @@ public final class ArenaMain {
                                            those games played for them by
                                            greedy. No effect with a fixed
                                            contract, where nothing can pass in.
-              --matadors=<x>    which trumps count as matadors:
-                                  official the ISkO run through the trump suit
-                                           (default here; what every recorded
-                                           number was taken under)
-                                  jacks    the app's rule: the run stops at the
-                                           four jacks, multiplier tops at five
+              --rules=<x>       which rule set the games are scored under:
+                                  official the ISkO: matadors run into the trump
+                                           suit, a hand game is valued with the
+                                           skat (default here; every recorded
+                                           number was taken under it)
+                                  canon    the app's rules: jacks-only matadors,
+                                           a hand game valued as declared
               --bidder=<player> the bidder for --contracts=auction (default
                                 greedy). Use the strongest bidder you have; the
                                 report prints the contract mix so you can judge
@@ -82,7 +83,7 @@ public final class ArenaMain {
             return;
         }
 
-        String matadors = Matadors.apply(options);
+        String rules = Rules.apply(options);
         PlayerRegistry registry = PlayerRegistry.withDefaults();
         String a = options.get("a");
         String b = options.get("b");
@@ -123,7 +124,7 @@ public final class ArenaMain {
                     "%s vs %s over %,d boards (%,d games), seed %d, %d thread(s), %s%n",
                     first.displayName(), second.displayName(),
                     boards, boards * DuplicateMatch.GAMES_PER_SIDE_AND_BOARD * 2, seed, threads,
-                    matadors);
+                    rules);
         }
 
         long startedAt = System.nanoTime();

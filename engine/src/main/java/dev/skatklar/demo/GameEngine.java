@@ -1754,12 +1754,16 @@ public final class GameEngine {
         int declarerCaptured = capturedPoints.get(definition.declarer);
         int declarerPoints = declarerCaptured + skatPoints;
         int defenderPoints = 120 - declarerPoints;
-        ArrayList<Card> declarerCards = new ArrayList<>(skat);
+        ArrayList<Card> declarerPlayed = new ArrayList<>(10);
         for (SkatAi.CompletedTrick completed : history) {
             for (SkatAi.PlayedCard play : completed.plays) {
-                if (play.seat == definition.declarer) declarerCards.add(play.card);
+                if (play.seat == definition.declarer) declarerPlayed.add(play.card);
             }
         }
+        // Whether the skat joins the ten for the matador count is a rule, not a
+        // fact: under the ISkO it always does, under the canon a hand game is
+        // valued on what was known when it was declared. See HandValueRule.
+        List<Card> declarerCards = SkatRules.matadorCards(definition, declarerPlayed, skat);
         // Winning and the value are settled together: an overbid declarer loses
         // even with 61 or more card points.
         SkatRules.GameScore score = SkatRules.score(

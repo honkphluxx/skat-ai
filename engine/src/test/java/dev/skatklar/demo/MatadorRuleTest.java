@@ -2,7 +2,11 @@ package dev.skatklar.demo;
 
 import static org.junit.Assert.assertEquals;
 
+import dev.skatklar.demo.ai.SkatAi;
+import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Map;
 import org.junit.After;
 import org.junit.Test;
 
@@ -41,6 +45,7 @@ public final class MatadorRuleTest {
 
     @After public void restoreTheCanon() {
         SkatRules.setMatadorRule(SkatRules.MatadorRule.JACKS_ONLY);
+        SkatRules.setHandValueRule(SkatRules.HandValueRule.AS_DECLARED);
     }
 
     @Test public void theCanonIsTheDefault() {
@@ -80,5 +85,90 @@ public final class MatadorRuleTest {
         SkatRules.setMatadorRule(SkatRules.MatadorRule.JACKS_ONLY);
         assertEquals(official, SkatRules.matadorCount(Contract.CLUBS, WITHOUT_ONE));
         assertEquals(1, official);
+    }
+
+    // ---------------------------------------------------------- hand games
+
+    /** "Without two" as dealt: no club or spade jack, the heart jack held. */
+    private static final List<Card> WITHOUT_TWO_HAND = List.of(
+            new Card(Card.Suit.HEARTS, Card.Rank.JACK),
+            new Card(Card.Suit.DIAMONDS, Card.Rank.JACK),
+            new Card(Card.Suit.CLUBS, Card.Rank.ACE),
+            new Card(Card.Suit.CLUBS, Card.Rank.TEN),
+            new Card(Card.Suit.CLUBS, Card.Rank.KING),
+            new Card(Card.Suit.CLUBS, Card.Rank.QUEEN),
+            new Card(Card.Suit.SPADES, Card.Rank.ACE),
+            new Card(Card.Suit.HEARTS, Card.Rank.ACE),
+            new Card(Card.Suit.HEARTS, Card.Rank.SEVEN),
+            new Card(Card.Suit.DIAMONDS, Card.Rank.SEVEN));
+
+    /** The trap: the jack of clubs was lying in the skat all along. */
+    private static final List<Card> SKAT_WITH_THE_CLUB_JACK = List.of(
+            new Card(Card.Suit.CLUBS, Card.Rank.JACK),
+            new Card(Card.Suit.SPADES, Card.Rank.SEVEN));
+
+    private static SkatAi.GameDefinition clubsHandGame(int bid) {
+        return new SkatAi.GameDefinition(SkatAi.Seat.HUMAN, SkatAi.Seat.HUMAN, Contract.CLUBS,
+                new SkatAi.RoundPosition(0, SkatAi.Seat.HUMAN), bid, true, false, false, false);
+    }
+
+    private static Map<SkatAi.Seat, Integer> tricks(int declarer) {
+        Map<SkatAi.Seat, Integer> map = new EnumMap<>(SkatAi.Seat.class);
+        map.put(SkatAi.Seat.HUMAN, declarer);
+        map.put(SkatAi.Seat.OPPONENT_ONE, (10 - declarer) / 2);
+        map.put(SkatAi.Seat.OPPONENT_TWO, 10 - declarer - (10 - declarer) / 2);
+        return map;
+    }
+
+    @Test public void theSkatJoinsAHandGameUnderTheIsko() {
+        SkatRules.setHandValueRule(SkatRules.HandValueRule.AS_PLAYED);
+        List<Card> counted = SkatRules.matadorCards(clubsHandGame(18),
+                WITHOUT_TWO_HAND, SKAT_WITH_THE_CLUB_JACK);
+        assertEquals(12, counted.size());
+        // With the club jack now counted, the run is broken at the spade jack:
+        // "without one", hand -- game three, thirty-six. The bid was 48,
+        // "without two, hand, game four": the declarer is overbid after the
+        // fact, on a card they never saw.
+        assertEquals(1, SkatRules.matadorCount(Contract.CLUBS, counted));
+        SkatRules.GameScore score = SkatRules.score(clubsHandGame(48), counted, 75, tricks(7));
+        assertEquals(true, score.overbid());
+    }
+
+    @Test public void aHandGameIsValuedAsDeclaredUnderTheCanon() {
+        SkatRules.setHandValueRule(SkatRules.HandValueRule.AS_DECLARED);
+        List<Card> counted = SkatRules.matadorCards(clubsHandGame(18),
+                WITHOUT_TWO_HAND, SKAT_WITH_THE_CLUB_JACK);
+        assertEquals("the skat stays out of a hand game's count", 10, counted.size());
+        // "Without two, hand": game four, forty-eight. A bid of 48 is exactly
+        // covered and there is no retrospective overbid.
+        assertEquals(2, SkatRules.matadorCount(Contract.CLUBS, counted));
+        SkatRules.GameScore score = SkatRules.score(clubsHandGame(48), counted, 75, tricks(7));
+        assertEquals(false, score.overbid());
+        assertEquals(true, score.declarerWon());
+        assertEquals(48, score.gameValue());
+    }
+
+    @Test public void aSkatGameCountsAllTwelveUnderBoth() {
+        // Not a hand game: the declarer saw the skat and discarded into it, so
+        // all twelve were known at declaration and both rules count them.
+        SkatAi.GameDefinition skatGame = new SkatAi.GameDefinition(SkatAi.Seat.HUMAN,
+                SkatAi.Seat.HUMAN, Contract.CLUBS, new SkatAi.RoundPosition(0, SkatAi.Seat.HUMAN),
+                18, false, false, false, false);
+        for (SkatRules.HandValueRule rule : SkatRules.HandValueRule.values()) {
+            SkatRules.setHandValueRule(rule);
+            assertEquals(rule.toString(), 12, SkatRules.matadorCards(
+                    skatGame, WITHOUT_TWO_HAND, SKAT_WITH_THE_CLUB_JACK).size());
+        }
+    }
+
+    @Test public void schneiderStillCountsUnderTheCanon() {
+        // "As declared" freezes the matadors, not the outcome: Schneider and
+        // Schwarz are earned at the table and still lift the multiplier.
+        SkatRules.setHandValueRule(SkatRules.HandValueRule.AS_DECLARED);
+        List<Card> counted = SkatRules.matadorCards(clubsHandGame(18),
+                WITHOUT_TWO_HAND, SKAT_WITH_THE_CLUB_JACK);
+        // Without two, hand, Schneider: game five, sixty.
+        SkatRules.GameScore score = SkatRules.score(clubsHandGame(18), counted, 95, tricks(9));
+        assertEquals(60, score.gameValue());
     }
 }

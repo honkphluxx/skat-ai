@@ -75,9 +75,9 @@ public final class ExportMain {
         Path out = Path.of(options.getOrDefault("out", "belief-data")).toAbsolutePath();
 
         // The corpus is scored under the same rule the arena measures under;
-        // see Matadors. It prints, because a corpus and the model trained on it
+        // see Rules. It prints, because a corpus and the model trained on it
         // must be read against the ladder they were built on.
-        System.out.println(dev.skatklar.training.arena.Matadors.apply(options));
+        System.out.println(dev.skatklar.training.arena.Rules.apply(options));
         PlayerRegistry registry = PlayerRegistry.withDefaults();
         List<Contestant> population = new ArrayList<>();
         for (String id : options.getOrDefault("players",

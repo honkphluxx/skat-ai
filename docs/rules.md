@@ -31,9 +31,24 @@ defaults are what the AI is trained and measured on.
   - *In the arena and the training tools:* the **ISkO rule, explicitly**, and
     printed in every run's header. Every number recorded before 2026-09-13 was
     taken under it, and the outside engines bid by it (XSkat's own ceiling
-    stops at the jacks regardless; go-skat's does not). `--matadors=jacks`
+    stops at the jacks regardless; go-skat's does not). `--rules=canon`
     measures under the canon. Clamping the training ladder to the canon later
-    is one word in `Matadors.DEFAULT`.
+    is one word in `Rules.DEFAULT`.
+- **A hand game is valued on what was known when it was declared** (set
+  2026-09-13). The matadors of a hand game are counted on the ten cards the
+  declarer held, never on the skat. The skat's jacks neither lift nor break
+  the run, and **there is no retrospective overbid**: "without two, hand" bid
+  to 48 is game four, forty-eight, whatever was lying in the skat. The ISkO
+  would count the skat and turn that into "without one" and a lost game --
+  too hard to explain on a screen to a player who never saw the card. What
+  the table settles still counts: the skat's card points go to the declarer,
+  and Schneider, Schwarz, Kontra and Re apply as achieved. A skat game is
+  unchanged, since all twelve were known when it was declared.
+  - *In the engine:* `SkatRules.HandValueRule`, default `AS_DECLARED`; the
+    engine asks `SkatRules.matadorCards` which cards to count rather than
+    merging hand and skat itself.
+  - *In the arena:* the ISkO, with the matador rule, under the same
+    `--rules` switch.
 
 ## 2. Kontra and Re
 

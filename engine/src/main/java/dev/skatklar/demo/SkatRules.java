@@ -47,6 +47,50 @@ public final class SkatRules {
         matadorRule = java.util.Objects.requireNonNull(rule, "rule");
     }
 
+    /**
+     * Which cards a <em>hand</em> game's matadors are counted on.
+     *
+     * <p>{@link #AS_PLAYED} is the ISkO: the skat belongs to the declarer, so
+     * after the last trick its two cards join the hand and the run is counted
+     * on all twelve -- which is how a hand game declared "without two" turns
+     * into "without one" when the jack of clubs was lying in the skat, and the
+     * declarer who bid 40 on it discovers, retrospectively, an overbid.
+     * {@link #AS_DECLARED} is the canon ({@code docs/rules.md} 1): a hand game
+     * is valued on what was known when it was declared, the ten cards held.
+     * The skat's jacks neither lift nor break the run, and there is no
+     * retrospective overbid. Card points are untouched -- the skat's points
+     * count for the declarer either way -- and so are Schneider, Schwarz,
+     * Kontra and Re, which sit outside the matador count.
+     *
+     * <p>A skat game is the same under both: the declarer saw all twelve and
+     * discarded two, and every one of the twelve was known at declaration.
+     * Process-wide and set once, for the same reason as {@link MatadorRule}.
+     */
+    public enum HandValueRule { AS_PLAYED, AS_DECLARED }
+
+    private static volatile HandValueRule handValueRule = HandValueRule.AS_DECLARED;
+
+    public static HandValueRule handValueRule() { return handValueRule; }
+
+    public static void setHandValueRule(HandValueRule rule) {
+        handValueRule = java.util.Objects.requireNonNull(rule, "rule");
+    }
+
+    /**
+     * The cards the declarer's matadors are counted on, under the rule in force.
+     *
+     * @param held the ten the declarer played, which in a hand game are the ten
+     *             they were dealt and in a skat game the ten they kept
+     * @param skat the two in the skat at the end: never seen in a hand game,
+     *             the declarer's own discard in a skat game
+     */
+    public static List<Card> matadorCards(SkatAi.GameDefinition game, Collection<Card> held,
+                                          Collection<Card> skat) {
+        ArrayList<Card> cards = new ArrayList<>(held);
+        if (!(game.hand && handValueRule == HandValueRule.AS_DECLARED)) cards.addAll(skat);
+        return cards;
+    }
+
     public static Set<Card> legalCards(Contract contract, List<Card> hand,
                                        List<SkatAi.PlayedCard> currentTrick) {
         if (hand.isEmpty()) return Collections.emptySet();
