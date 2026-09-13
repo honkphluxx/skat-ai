@@ -84,6 +84,14 @@ public final class CalibrationMain {
         if (options.containsKey("help") || options.containsKey("h")) { usage(); return; }
 
         String playerId = options.getOrDefault("player", "belief-32");
+        // Who defends. The default seats the player against copies of itself,
+        // which measures declaring against OUR defence -- and ours is about
+        // eight points tougher than XSkat's (94% made against theirs, 86%
+        // against ours, at oracle contracts). A threshold tuned against the
+        // harsher defence is too strict for the softer one. So the question
+        // "is there a boldness dividend" has a different answer per opponent,
+        // and this is how it is asked of a specific one.
+        String opponentId = options.getOrDefault("opponents", playerId);
         int boards = intOption(options, "boards", 400);
         long seed = Long.parseLong(options.getOrDefault("seed", "1"));
         int threads = intOption(options, "threads", Runtime.getRuntime().availableProcessors());
@@ -94,10 +102,12 @@ public final class CalibrationMain {
 
         PlayerRegistry registry = PlayerRegistry.withDefaults();
         Contestant contestant = registry.resolve(playerId);
+        Contestant opponents = registry.resolve(opponentId);
 
         System.out.printf(Locale.ROOT,
                 "Calibration: %s, %d boards x 3 seats, seed %d, %d threads, %d bidding worlds%n",
                 contestant.displayName(), boards, seed, threads, biddingWorlds);
+        System.out.printf(Locale.ROOT, "Defended by: %s%n", opponents.displayName());
         System.out.println("Every seat's intended contract is played out, "
                 + "including the ones it would decline.");
         System.out.println();
@@ -109,7 +119,7 @@ public final class CalibrationMain {
             List<Future<List<Sample>>> pending = new ArrayList<>(boards);
             for (int index = 0; index < boards; index++) {
                 pending.add(pool.submit(
-                        measure(contestant, Board.of(seed, index), seed, biddingWorlds)));
+                        measure(contestant, opponents, Board.of(seed, index), seed, biddingWorlds)));
             }
             int done = 0;
             for (Future<List<Sample>> future : pending) {
@@ -124,8 +134,8 @@ public final class CalibrationMain {
         report(samples, System.nanoTime() - startedAt);
     }
 
-    private static Callable<List<Sample>> measure(Contestant contestant, Board board,
-                                                  long seed, int biddingWorlds) {
+    private static Callable<List<Sample>> measure(Contestant contestant, Contestant opponents,
+                                                  Board board, long seed, int biddingWorlds) {
         return () -> {
             List<List<Card>> hands = List.of(
                     board.deal().human, board.deal().opponentOne, board.deal().opponentTwo);
@@ -134,7 +144,7 @@ public final class CalibrationMain {
                 List<Card> hand = hands.get(seat.ordinal());
                 Intention intention = intend(board, seat, hand, biddingWorlds);
                 if (intention == null) continue;
-                Boolean won = playOut(contestant, board, seat, intention, seed);
+                Boolean won = playOut(contestant, opponents, board, seat, intention, seed);
                 if (won == null) continue;
                 found.add(new Sample(board.index(), intention.contract, intention.chance,
                         intention.value, won));
@@ -188,11 +198,12 @@ public final class CalibrationMain {
      * @return whether the declarer made it, or null if the board could not be
      *         played at that contract
      */
-    private static Boolean playOut(Contestant contestant, Board board, SkatAi.Seat declarer,
-                                   Intention intention, long seed) {
+    private static Boolean playOut(Contestant contestant, Contestant opponents, Board board,
+                                   SkatAi.Seat declarer, Intention intention, long seed) {
         Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
         for (SkatAi.Seat seat : SkatAi.Seat.values()) {
-            seating.put(seat, contestant.newProvider(
+            Contestant who = seat == declarer ? contestant : opponents;
+            seating.put(seat, who.newProvider(
                     Seeds.mix(seed, board.index(), declarer.ordinal(), seat.ordinal())));
         }
         // The bid the contract must cover: what the hand guarantees, floored at
@@ -415,7 +426,10 @@ public final class CalibrationMain {
         System.out.println("""
                 Measures what the bidder's probability is worth against what happens.
 
-                  --player=<id>          the contestant to price and to play (belief-32)
+                  --player=<id>          the contestant to price and to declare (belief-32)
+                  --opponents=<id>       who defends; default is the player itself.
+                                         Use xskat to ask whether the threshold is
+                                         right AGAINST XSKAT rather than against us.
                   --boards=<n>           boards; each gives up to 3 hands      (400)
                   --seed=<n>             the usual match seed                    (1)
                   --threads=<n>          parallel boards            (all cores)
