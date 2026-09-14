@@ -2596,3 +2596,50 @@ hears the auction is the candidate for the rest.
 during a night can no longer reach the running process. A commit made mid-run
 landed bash on a byte offset mid-word and killed the trailer with
 `en: command not found`; every seed had already finished.
+
+### 2026-09-14: the adaptive bidder passes its four gates
+
+`belief-32-adaptive`: the reference player with the auction allowed to
+re-price the hand -- a bid of V implies held jacks and rejects the worlds
+without them, a pass at L softly discounts hands that could plainly have bid
+L. Three seeds, 300 boards each, void mode, inverse-variance pooled:
+
+| belief-32-adaptive minus | pooled | 95% CI | reference (belief-32) | change |
+| --- | --- | --- | --- | --- |
+| `belief-32` (exact pairing) | **+0.14** | [−0.49, +0.77] | 0 | +0.14 |
+| `xskat` | −0.85 | [−2.13, +0.43] | −1.31 | **+0.46** |
+| `go-skat` | +2.38 | [+1.08, +3.68] resolved | +1.95 | **+0.43** |
+| `jskat-new` | +10.94 | [+9.70, +12.18] resolved | ~+9 | ≥ +1 |
+
+**All four non-negative.** No cost in self-play -- the gate the dial failed at
+−0.67 -- and about half a point better than the reference against both
+outside engines that have a reference. Nothing is individually resolved
+against the reference at 300 boards a seed, and I would not claim the size;
+but the direction agrees on every opponent, which is what the dial never did.
+
+**The dial, with its guards finally in, for comparison:** `a80` was +0.8
+against XSkat, −0.67 against belief-32, and −0.50 against go-skat. Positive
+against exactly one opponent. It does not ship, and now for three reasons.
+
+**What the adaptive bidder is actually doing**, from the declaring rates:
+against belief-32 it declares *less* (26.9% to 29.1%, on every seed) and
+passes in slightly more. Against XSkat it declares 23–25% to XSkat's 34–36%,
+about where the reference sits. So the gain is coming from **the cautious
+half** -- the jack floor saving marginal declarations against a table that
+has bid -- and not from the bold half. The pass rule, at weight 0.35 on two
+jacks over the implied count, is barely firing. Which is why it recovers 0.46
+of the dial's 0.80 against XSkat rather than all of it: the dividend that
+came from taking hands XSkat would otherwise play is mostly still on the
+table.
+
+**So: eligible to ship, and one tuning step left.** The mechanism is safe
+everywhere it was measured and pays a little everywhere it should. The pass
+side is the under-delivering half and it has one constant; a variant with a
+stronger pass rule (one jack over the implied count, or a lower weight) put
+through the same four gates would say whether the other half of the dividend
+is reachable without reopening the self-play cost. That is a one-dimensional
+check against the whole field, not a fit to XSkat, and the four gates are the
+guard against it becoming one.
+
+Wiring it into the app is one call in `Opponents.seat`:
+`.withAdaptiveBidding()` beside `.withBiddingBudget(...)`.
