@@ -554,6 +554,13 @@ for SEED in $SEEDS; do
         if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
             match belief-32 skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
             match belief-32-adaptive-margin skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
+            # Distance to omniscience. At oracle contracts the cheat makes every
+            # game it declares by construction, so this row is one number: how
+            # often the honest player makes an oracle-makeable contract against
+            # perfect defence. The same row for belief-32 says how much of that
+            # distance SkatZero has closed and how much is left for anyone.
+            match belief-32 solver "$(boards 200)" "--fixed-contract --contracts=solver"
+            match skatzero solver "$(boards 200)" "--fixed-contract --contracts=solver"
         fi
     fi
     # The honesty control, once a seed and small: every card re-asked under
