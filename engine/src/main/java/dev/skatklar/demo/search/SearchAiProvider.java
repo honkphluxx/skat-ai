@@ -206,13 +206,13 @@ public final class SearchAiProvider implements SkatAiProvider {
                              WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
                              double temperature) {
         this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos,
-                temperature, false, HandEvaluator.AuctionEvidence.PassRule.DEFAULT);
+                temperature, false, HandEvaluator.AuctionEvidence.PassRule.DEFAULT, 0);
     }
 
     private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
                              WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
                              double temperature, boolean adaptiveBidding,
-                             HandEvaluator.AuctionEvidence.PassRule passRule) {
+                             HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints) {
         this.delegate = delegate;
         this.personality = personality;
         this.seed = seed;
@@ -222,6 +222,33 @@ public final class SearchAiProvider implements SkatAiProvider {
         this.temperature = Math.max(0, temperature);
         this.adaptiveBidding = adaptiveBidding;
         this.passRule = Objects.requireNonNull(passRule, "passRule");
+        this.marginPoints = Math.max(0, marginPoints);
+    }
+
+    /**
+     * Card points of cushion the tiebreak asks for; zero asks for none.
+     *
+     * <p>The vote is on results, and stays so: a card that keeps the target
+     * reachable in more worlds is played, whatever the margins, because Skat
+     * pays for crossing 61 and not for the distance. But among cards that win
+     * in equally many worlds the tiebreak used to be the cheapest card, and the
+     * worlds are guesses. A line that wins by one point in every sampled world
+     * is a line that loses the moment the real deal differs from all of them;
+     * a line that wins by fifteen survives being wrong about a card. So with
+     * this set, every world is asked a second question at the target shifted
+     * by this many points -- further for a declarer, lower for a defender --
+     * and among the cards that tie on the first question, the one that holds
+     * the shifted target in the most worlds is played. The second question is
+     * the same null-window search as the first, so it doubles the solver's
+     * work per decision and touches nothing else: the sampler, the count and
+     * the primary vote are as they were.
+     */
+    private final int marginPoints;
+
+    /** The same player, breaking ties by cushion. See {@link #marginPoints}. */
+    public SearchAiProvider withMarginTiebreak(int points) {
+        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points);
     }
 
     /**
@@ -263,7 +290,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule rule) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, true, rule);
+                biddingBudgetNanos, temperature, true, rule, marginPoints);
     }
 
     /**
@@ -284,7 +311,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withBiddingBudget(long nanos) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos,
-                temperature, adaptiveBidding, passRule);
+                temperature, adaptiveBidding, passRule, marginPoints);
     }
 
     /**
@@ -308,7 +335,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withTemperature(double temperature) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -715,23 +742,32 @@ public final class SearchAiProvider implements SkatAiProvider {
             if (sampled.isEmpty()) return blind.chooseCard(context);
 
             Map<Card, Integer> votes = alphaMuScores(context, sampled);
+            Map<Card, Integer> cushion = new LinkedHashMap<>();
             if (votes == null) {
                 votes = new LinkedHashMap<>();
-                for (Card card : legal) votes.put(card, 0);
-                for (WorldSampler.World sample : sampled) castVotes(context, sample, votes);
+                for (Card card : legal) { votes.put(card, 0); cushion.put(card, 0); }
+                boolean withCushion = marginPoints > 0 && playsForCardPoints(context.game.contract);
+                for (WorldSampler.World sample : sampled) {
+                    castVotes(context, sample, votes, withCushion ? cushion : null);
+                }
             }
 
             Map<Card, Integer> scores = votes;
+            Map<Card, Integer> held = cushion;
             if (temperature > 0) return sampleCard(legal, scores, sampled.size());
             Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
+            Comparator<Card> byCushion = Comparator.comparingInt(card -> held.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
             return legal.stream()
-                    // Among cards that win equally often, keep the points off the
-                    // table. This used to depend on the personality -- a bold
-                    // player took the trick with the big card -- until the
-                    // aggression sweep priced that at 4.08 game points a game
-                    // against it. See Personality, where the dial used to live.
+                    // Among cards that win equally often, the one that wins by
+                    // the wider margin where a margin was asked for, and then
+                    // keep the points off the table. The last used to depend on
+                    // the personality -- a bold player took the trick with the
+                    // big card -- until the aggression sweep priced that at 4.08
+                    // game points a game against it. See Personality, where the
+                    // dial used to live.
                     .max(byVotes
+                            .thenComparing(byCushion)
                             .thenComparing(byCost.reversed())
                             .thenComparing(Comparator.comparing(Card::toString).reversed()))
                     .orElse(legal.get(0));
@@ -840,7 +876,7 @@ public final class SearchAiProvider implements SkatAiProvider {
         }
 
         private void castVotes(SkatAi.DecisionContext context, WorldSampler.World sample,
-                               Map<Card, Integer> votes) {
+                               Map<Card, Integer> votes, Map<Card, Integer> cushion) {
             SkatAi.Seat declarer = context.game.declarer;
             boolean iAmTheDeclarer = context.mySeat == declarer;
             List<Card> played = new ArrayList<>(3);
@@ -863,14 +899,28 @@ public final class SearchAiProvider implements SkatAiProvider {
             int banked = context.derived.cardPoints.getOrDefault(declarer, 0)
                     + SkatRules.cardPoints(sample.skat());
             int target = personality.targetFor(banked);
+            tally(context, sample, played, target, iAmTheDeclarer, votes);
 
+            // The second question, for the tiebreak: does the line hold with
+            // marginPoints to spare? A declarer wants the target and more; a
+            // defender wants the declarer held below the target and lower still.
+            // A shifted target nobody can reach, or nobody can miss, answers the
+            // same for every card and so decides nothing, which is correct.
+            if (cushion != null) {
+                int shifted = iAmTheDeclarer ? target + marginPoints : target - marginPoints;
+                if (shifted >= 1) tally(context, sample, played, shifted, iAmTheDeclarer, cushion);
+            }
+        }
+
+        private void tally(SkatAi.DecisionContext context, WorldSampler.World sample,
+                           List<Card> played, int target, boolean iAmTheDeclarer,
+                           Map<Card, Integer> into) {
             List<DoubleDummySolver.Verdict> verdicts = DoubleDummySolver.movesReaching(
-                    context.game.contract, declarer, context.mySeat, sample.hands(),
+                    context.game.contract, context.game.declarer, context.mySeat, sample.hands(),
                     context.currentTrick.leader, played, target);
             for (DoubleDummySolver.Verdict verdict : verdicts) {
-                if (verdict.reachesTarget() == iAmTheDeclarer
-                        && votes.containsKey(verdict.card())) {
-                    votes.merge(verdict.card(), 1, Integer::sum);
+                if (verdict.reachesTarget() == iAmTheDeclarer && into.containsKey(verdict.card())) {
+                    into.merge(verdict.card(), 1, Integer::sum);
                 }
             }
         }

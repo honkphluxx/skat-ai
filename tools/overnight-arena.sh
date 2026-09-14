@@ -507,6 +507,12 @@ for SEED in $SEEDS; do
             match belief-32-adaptive-p1 belief-32 "$(boards 300)" "--passed-in=void"
             match belief-32-adaptive-p1 xskat "$(boards 300)" "--passed-in=void"
             match belief-32-adaptive-p1 jskat-new "$(boards 300)" "--passed-in=void"
+            # The margin tiebreak: card play only, bidding untouched, so the
+            # exact pairing against belief-32 is the measurement and the
+            # outsiders are the check that it is not a fit to self-play.
+            match belief-32-margin belief-32 "$(boards 300)" "--passed-in=void"
+            match belief-32-margin xskat "$(boards 300)" "--passed-in=void"
+            match belief-32-margin jskat-new "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
@@ -521,6 +527,7 @@ for SEED in $SEEDS; do
             match belief-32-a80 go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-adaptive go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-adaptive-p1 go-skat "$(boards 200)" "--passed-in=void"
+            match belief-32-margin go-skat "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi
