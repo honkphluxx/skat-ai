@@ -219,9 +219,59 @@ without it is not something `CreateProcess` will start. The build script
 handles that from `uname -s`; it is written down here because a helper that
 builds and cannot be launched looks exactly like a helper that did not build.
 
-## Adding a third engine
+## SkatZero: the third engine, and a different kind
+
+[SkatZero](https://github.com/Jimboom7/SkatZero) (MIT) is not a search program.
+It is a self-play reinforcement learner in the DouZero mould: a six-layer MLP
+over one-hot features of the seat's own hand, the set of cards it has not seen,
+the trick, each seat's shown voids and the points, plus an LSTM over the play
+history, trained by deep Monte Carlo over about 1.5 billion games per model,
+nine models in all (declarer and two defender seats, for suit games, Grand and
+Null; suit games are played as Diamonds with the colours swapped). Its author
+reports first place on the ISS leaderboard and 27.1 to Kermit's 25.1 Seeger-
+Fabian points over 10,000 games.
+
+**It is seated for its card play, and only that.** Its bidding is a heuristic
+bolted on afterwards -- the net run over every pickup and discard, up to a
+minute a hand, deaf to the other bidders -- so `tools/skatzero-bot.py` does not
+bid: `MAXBID` answers 0 and the seat never declares in auction mode. Measure it
+with `--fixed-contract`. The first measurement, in a container at oracle
+contracts, 102 boards, seed 1: **skatzero − search = +9.8 [+5.8, +13.8]**, 64
+boards to SkatZero and 5 to search, both as declarer (97% of its games won
+against search's defence, 84% the other way) and as defender. For scale,
+belief-32 beats search by about +2.4 on the same line. That makes it the
+strongest card play on the ladder by some distance, and the reference the
+population constraint in `docs/training-plan.md` wanted: a player whose style
+owes nothing to ours.
+
+**Honesty is by construction, not by probe.** The driver receives the `GAME`
+line like the others and keeps its own ten cards (and the skat, when it is the
+declarer and picked up); the other hands are dropped before anything is stored.
+The net's features are what a person at the table knows. The `STATS` reply
+therefore reports zero mismatches without running the reshuffle, because there
+is nothing a reshuffle could change; the honesty-control line in a SkatZero
+match is not evidence, the source is.
+
+Getting it:
+
+```
+git clone https://github.com/Jimboom7/SkatZero third_party/skatzero
+python -m pip install numpy onnxruntime
+```
+
+The models ship in the clone (`models/onnx/`, 52 MB); nothing is built. The
+driver runs them through onnxruntime and never imports torch. `ExternalBots`
+registers `skatzero` when `third_party/skatzero/models/onnx/D_0.onnx` exists
+(or `$SKATKLAR_SKATZERO_DIR` names the checkout) and runs the driver with
+`python` on Windows and `python3` elsewhere; `$SKATKLAR_PYTHON` overrides.
+One decision costs about a millisecond on one CPU thread. The overnight script
+seats it at oracle contracts against `search`, `belief-32` and the current ship
+candidate.
+
+## Adding a fourth engine
 
 Nothing in the Java side is XSkat- or go-skat-specific. Write a driver that
 speaks the table above, put the binary where `ExternalBots` looks, and it is a
-contestant. The two existing drivers are about 500 lines of C and 400 of Go, and
-most of that is the two controls rather than the protocol.
+contestant. The two compiled drivers are about 500 lines of C and 400 of Go, and
+most of that is the two controls rather than the protocol; the SkatZero driver
+is 300 lines of Python and has no controls, for the reason above.

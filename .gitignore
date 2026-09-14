@@ -39,6 +39,7 @@ belief-model/*
 # would otherwise commit somebody else's program into this repository.
 third_party/xskat/
 third_party/go-skat/
+third_party/skatzero/
 
 # Native build output
 native/build/

@@ -46,6 +46,48 @@ public final class ExternalBots {
             registry.register(contestant("go-skat", "go-skat (Dranidis)", command, probe, false));
             registry.register(contestant("go-skat-blind", "go-skat, blind", command, probe, true));
         }
+
+        // SkatZero (Jimboom7, MIT): a self-play reinforcement learner, seated
+        // through tools/skatzero-bot.py, which runs its ONNX models under
+        // Python. Card play only -- the driver never bids -- so it is a
+        // --fixed-contract reference, and the strongest one we have. Present
+        // when the models are: the checkout is not built, only cloned.
+        String skatzero = skatZeroModels();
+        String script = scriptFor("tools/skatzero-bot.py",
+                "skat-ai/tools/skatzero-bot.py", "../tools/skatzero-bot.py");
+        if (skatzero != null && script != null) {
+            List<String> command = List.of(python(), script);
+            registry.register(contestant("skatzero", "SkatZero (Jimboom7), card play only",
+                    command, probe, false));
+        }
+    }
+
+    /** The SkatZero checkout's ONNX models, or null. $SKATKLAR_SKATZERO_DIR names the checkout. */
+    private static String skatZeroModels() {
+        String named = System.getenv("SKATKLAR_SKATZERO_DIR");
+        List<String> roots = named != null ? List.of(named)
+                : List.of("third_party/skatzero", "skat-ai/third_party/skatzero", "../third_party/skatzero");
+        for (String root : roots) {
+            java.nio.file.Path model = java.nio.file.Path.of(root, "models", "onnx", "D_0.onnx");
+            if (java.nio.file.Files.isRegularFile(model)) return model.toAbsolutePath().normalize().toString();
+        }
+        return null;
+    }
+
+    private static String scriptFor(String... relativePaths) {
+        for (String relative : relativePaths) {
+            java.nio.file.Path candidate = java.nio.file.Path.of(relative).toAbsolutePath().normalize();
+            if (java.nio.file.Files.isRegularFile(candidate)) return candidate.toString();
+        }
+        return null;
+    }
+
+    /** $SKATKLAR_PYTHON, else the interpreter the platform usually calls Python 3. */
+    private static String python() {
+        String named = System.getenv("SKATKLAR_PYTHON");
+        if (named != null && !named.isBlank()) return named;
+        boolean windows = System.getProperty("os.name", "").toLowerCase().contains("windows");
+        return windows ? "python" : "python3";
     }
 
     private static Contestant contestant(String id, String displayName,

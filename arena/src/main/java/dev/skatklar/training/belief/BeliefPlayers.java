@@ -152,6 +152,13 @@ public final class BeliefPlayers {
         // SearchAiProvider.withMarginTiebreak. Fifteen is a round number below
         // the Schneider step, chosen once and not swept.
         registry.register(margin("belief-32-margin", 32, 15, loader));
+        // Both switches on: the adaptive bidder at its reference reading and
+        // the fifteen-point cushion. Each passed its four gates alone (the
+        // bidder +0.14 in self-play, the cushion +1.10, both non-negative
+        // against every outsider); one is bidding and the other card play, so
+        // the effects should add, and "should" is what this row measures.
+        // The candidate for Opponents.seat if it lands where the sum predicts.
+        registry.register(combined("belief-32-adaptive-margin", 32, PassRule.DEFAULT, 15, loader));
         registry.register(alphaMu(registry, "alphamu-1", 1, loader));
         registry.register(alphaMu(registry, "alphamu", 2, loader));
         registry.register(alphaMu(registry, "alphamu-3", 3, loader));
@@ -174,6 +181,25 @@ public final class BeliefPlayers {
             @Override public SkatAiProvider newProvider(long seed) {
                 return new SearchAiProvider(new GreedyAiProvider(), personality, seed,
                         new BeliefWorldSource(loader.get()));
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
+    /** The belief player listening to the auction and breaking card-play ties by a cushion. */
+    private static Contestant combined(String id, int worlds, PassRule rule, int points, Loader loader) {
+        Personality personality = new Personality(worlds, Personality.REFERENCE.memory(),
+                Personality.REFERENCE.risk(), Personality.REFERENCE.aggression());
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() {
+                return "Belief, " + worlds + " worlds, adaptive bidding, ties broken by "
+                        + points + " points of cushion";
+            }
+            @Override public SkatAiProvider newProvider(long seed) {
+                return new SearchAiProvider(new GreedyAiProvider(), personality, seed,
+                        new BeliefWorldSource(loader.get()))
+                        .withAdaptiveBidding(rule).withMarginTiebreak(points);
             }
             @Override public String toString() { return id; }
         };

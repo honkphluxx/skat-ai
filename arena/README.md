@@ -2643,3 +2643,57 @@ guard against it becoming one.
 
 Wiring it into the app is one call in `Opponents.seat`:
 `.withAdaptiveBidding()` beside `.withBiddingBudget(...)`.
+
+### 2026-09-14, second: the pass rule is not the lever; a tiebreak is
+
+Two variants through the same four gates, three seeds, void mode, pooled.
+
+**`belief-32-adaptive-p1`** -- the adaptive bidder with a pass doubted on
+one jack over the implied count instead of two, everything else at the
+reference reading -- is the null result the previous entry asked for:
+
+| minus | adaptive (reference reading) | adaptive-p1 |
+| --- | --- | --- |
+| `belief-32` (exact pairing) | +0.14 [−0.49, +0.77] | +0.22 [−0.52, +0.95] |
+| `xskat` | −0.85 [−2.13, +0.43] | −0.78 [−2.06, +0.50] |
+| `go-skat` | +2.38 [+1.08, +3.68] | +2.48 [+1.16, +3.81] |
+| `jskat-new` | +10.94 [+9.70, +12.18] | +10.34 [+9.13, +11.56] |
+
+Paired on the same 900 boards against XSkat, p1 improves on belief-32 by
++0.47 [−0.28, +1.23] where the reference reading improves by +0.36
+[−0.31, +1.04]. Indistinguishable everywhere. So the other half of the
+dial's dividend is not on the pass side, and the reference reading stays:
+`PassRule.DEFAULT` is (2, 0.35), and nothing about it was fitted.
+
+**`belief-32-margin`** -- card play only: among cards that keep the game
+winnable in equally many worlds, the one that also holds the target with
+fifteen points to spare in the most worlds, instead of the cheapest card
+(`SearchAiProvider.withMarginTiebreak`). The vote itself is untouched; every
+world is asked a second null-window question. This is the one that moved:
+
+| belief-32-margin minus | pooled | 95% CI | reference (belief-32) | change |
+| --- | --- | --- | --- | --- |
+| `belief-32` (exact pairing) | **+1.10** | [+0.54, +1.67] **resolved** | 0 | +1.10, positive on all three seeds |
+| `xskat` | −0.44 | [−1.73, +0.85] | −1.31 | **+0.89 [+0.13, +1.64] paired, resolved** |
+| `go-skat` | +2.38 | [+0.98, +3.77] resolved | +2.21 | +0.16 [−0.65, +0.96] paired |
+| `jskat-new` | +10.74 | [+9.50, +11.99] resolved | ~+11 | unchanged |
+
+A point a game from a tiebreak. The reading: the sampled worlds are wrong
+often enough that a line which wins by one point in all of them is a line
+that loses on the real deal, and "wins by fifteen" is the cheap insurance
+against that. It is a robustness term, not an information term, which is
+why it pays in self-play *and* against the two outsiders alike -- it does not
+learn anything about anyone. Fifteen was chosen once and not swept, and
+should stay that way unless a sweep is judged against the whole field.
+
+**Next: both switches on.** `belief-32-adaptive-margin` is registered and in
+the overnight script, through the same four gates. The mechanisms are
+orthogonal (bidding, card play) and the sum predicts about +1.2 in exact
+pairing and roughly level with XSkat; if it lands there, that is the player
+for `Opponents.seat`, with `.withAdaptiveBidding().withMarginTiebreak(15)`.
+
+**Also new on the ladder: SkatZero**, a self-play reinforcement learner,
+seated at oracle contracts only (see `docs/external-bots.md`). In a container
+against `search`, 102 boards: +9.8 [+5.8, +13.8]. If that holds on the
+machine, it is about seven points above belief-32 at card play, and the first
+outsider on the ladder that is stronger than us at anything.

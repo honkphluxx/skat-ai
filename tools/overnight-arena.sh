@@ -434,9 +434,10 @@ for SEED in $SEEDS; do
     # oracle contracts, which is the only line where "stronger than XSkat" means
     # card play rather than taste in games. Nothing here runs on a checkout
     # without the binaries, and nothing fails because of it.
-    XSKAT=false; GOSKAT=false
+    XSKAT=false; GOSKAT=false; SKATZERO=false
     [ -x third_party/xskat/skatklar-xskat ] || [ -x third_party/xskat/skatklar-xskat.exe ] && XSKAT=true
     [ -x third_party/go-skat/skatklar-goskat ] || [ -x third_party/go-skat/skatklar-goskat.exe ] && GOSKAT=true
+    [ -f "${SKATKLAR_SKATZERO_DIR:-third_party/skatzero}/models/onnx/D_0.onnx" ] && SKATZERO=true
     if $XSKAT; then
         match xskat greedy    "$(boards 300)" "--passed-in=void"
         match xskat greedy    "$(boards 300)" "--fixed-contract $BIDDER"
@@ -513,6 +514,13 @@ for SEED in $SEEDS; do
             match belief-32-margin belief-32 "$(boards 300)" "--passed-in=void"
             match belief-32-margin xskat "$(boards 300)" "--passed-in=void"
             match belief-32-margin jskat-new "$(boards 300)" "--passed-in=void"
+            # Both switches on. The pass-rule tuning was a null result (p1 sat
+            # on top of the reference reading on every gate) and the cushion
+            # passed alone at +1.10 in self-play; this is the sum, and the
+            # candidate for the app if it lands where the sum predicts.
+            match belief-32-adaptive-margin belief-32 "$(boards 300)" "--passed-in=void"
+            match belief-32-adaptive-margin xskat "$(boards 300)" "--passed-in=void"
+            match belief-32-adaptive-margin jskat-new "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
@@ -528,11 +536,25 @@ for SEED in $SEEDS; do
             match belief-32-adaptive go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-adaptive-p1 go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-margin go-skat "$(boards 200)" "--passed-in=void"
+            match belief-32-adaptive-margin go-skat "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi
     if $XSKAT && $GOSKAT; then
         match xskat go-skat "$(boards 300)" "--passed-in=void"
+    fi
+    # SkatZero (tools/skatzero-bot.py): a self-play reinforcement learner and
+    # the strongest card play we can seat. It does not bid, so only oracle
+    # contracts mean anything. Measured in a container against search at
+    # +9.8 [+5.8, +13.8] over 102 boards; the first row repeats that here, the
+    # others place our best and the ship candidate against it. Needs Python
+    # with numpy and onnxruntime and a clone under third_party/skatzero.
+    if $SKATZERO; then
+        match search skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
+        if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
+            match belief-32 skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
+            match belief-32-adaptive-margin skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
+        fi
     fi
     # The honesty control, once a seed and small: every card re-asked under
     # eight reshuffles of what the seat cannot see. Zero is the expected answer
