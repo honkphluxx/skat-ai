@@ -500,6 +500,13 @@ for SEED in $SEEDS; do
             match belief-32-adaptive belief-32 "$(boards 300)" "--passed-in=void"
             match belief-32-adaptive xskat "$(boards 300)" "--passed-in=void"
             match belief-32-adaptive jskat-new "$(boards 300)" "--passed-in=void"
+            # Tuning the pass rule, one dimension: a pass doubted on one jack
+            # over the implied count instead of two. Same four gates, and it
+            # is read against belief-32-adaptive, not against the reference:
+            # it has to be non-negative everywhere the adaptive bidder was.
+            match belief-32-adaptive-p1 belief-32 "$(boards 300)" "--passed-in=void"
+            match belief-32-adaptive-p1 xskat "$(boards 300)" "--passed-in=void"
+            match belief-32-adaptive-p1 jskat-new "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
@@ -513,6 +520,7 @@ for SEED in $SEEDS; do
             # The aggression dial's third opponent; see the xskat block.
             match belief-32-a80 go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-adaptive go-skat "$(boards 200)" "--passed-in=void"
+            match belief-32-adaptive-p1 go-skat "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi

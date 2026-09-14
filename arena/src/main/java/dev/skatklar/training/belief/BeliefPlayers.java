@@ -3,6 +3,7 @@ package dev.skatklar.training.belief;
 import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.belief.BeliefModel;
 import dev.skatklar.demo.search.BeliefWorldSource;
+import dev.skatklar.demo.search.HandEvaluator.AuctionEvidence.PassRule;
 import dev.skatklar.demo.search.Personality;
 import dev.skatklar.demo.search.SearchAiProvider;
 import dev.skatklar.training.arena.Contestant;
@@ -134,7 +135,15 @@ public final class BeliefPlayers {
         // and -0.67 against belief-32; this is the player that is meant to
         // earn the first without paying the second, by being bold only when
         // the table is quiet. See SearchAiProvider.withAdaptiveBidding.
-        registry.register(adaptive("belief-32-adaptive", 32, loader));
+        registry.register(adaptive("belief-32-adaptive", 32, PassRule.DEFAULT, loader));
+        // The adaptive bidder passed its four gates (+0.14 self-play, +0.46
+        // over reference against xskat, +0.43 against go-skat) while declaring
+        // less than belief-32 does: the gain came from the hard jack floor,
+        // and the pass rule -- doubt a pass only on two jacks over what it
+        // implies, and then keep the world with weight 0.35 -- barely fired.
+        // One dimension of tuning, through the same four gates: doubt a pass
+        // on one jack over. Everything else is the reference reading.
+        registry.register(adaptive("belief-32-adaptive-p1", 32, new PassRule(1, PassRule.DEFAULT.weight()), loader));
         registry.register(alphaMu(registry, "alphamu-1", 1, loader));
         registry.register(alphaMu(registry, "alphamu", 2, loader));
         registry.register(alphaMu(registry, "alphamu-3", 3, loader));
@@ -162,18 +171,20 @@ public final class BeliefPlayers {
         };
     }
 
-    /** The belief player at the reference aggression, listening to the auction. */
-    private static Contestant adaptive(String id, int worlds, Loader loader) {
+    /** The belief player at the reference aggression, listening to the auction and reading a pass by {@code rule}. */
+    private static Contestant adaptive(String id, int worlds, PassRule rule, Loader loader) {
         Personality personality = new Personality(worlds, Personality.REFERENCE.memory(),
                 Personality.REFERENCE.risk(), Personality.REFERENCE.aggression());
         return new Contestant() {
             @Override public String id() { return id; }
             @Override public String displayName() {
-                return "Belief, " + worlds + " worlds, adaptive bidding";
+                return "Belief, " + worlds + " worlds, adaptive bidding"
+                        + (rule.equals(PassRule.DEFAULT) ? ""
+                        : ", pass doubted at +" + rule.margin() + " jacks, weight " + rule.weight());
             }
             @Override public SkatAiProvider newProvider(long seed) {
                 return new SearchAiProvider(new GreedyAiProvider(), personality, seed,
-                        new BeliefWorldSource(loader.get())).withAdaptiveBidding();
+                        new BeliefWorldSource(loader.get())).withAdaptiveBidding(rule);
             }
             @Override public String toString() { return id; }
         };

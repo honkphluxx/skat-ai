@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 
@@ -205,12 +206,13 @@ public final class SearchAiProvider implements SkatAiProvider {
                              WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
                              double temperature) {
         this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos,
-                temperature, false);
+                temperature, false, HandEvaluator.AuctionEvidence.PassRule.DEFAULT);
     }
 
     private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
                              WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
-                             double temperature, boolean adaptiveBidding) {
+                             double temperature, boolean adaptiveBidding,
+                             HandEvaluator.AuctionEvidence.PassRule passRule) {
         this.delegate = delegate;
         this.personality = personality;
         this.seed = seed;
@@ -219,6 +221,7 @@ public final class SearchAiProvider implements SkatAiProvider {
         this.biddingBudgetNanos = Math.max(0L, biddingBudgetNanos);
         this.temperature = Math.max(0, temperature);
         this.adaptiveBidding = adaptiveBidding;
+        this.passRule = Objects.requireNonNull(passRule, "passRule");
     }
 
     /**
@@ -244,10 +247,23 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     private final boolean adaptiveBidding;
 
+    /** How hard this player reads an opponent's pass; only consulted when {@link #adaptiveBidding}. */
+    private final HandEvaluator.AuctionEvidence.PassRule passRule;
+
     /** The same player, listening to the auction. A copy, for the reason {@link #withBiddingBudget} is. */
     public SearchAiProvider withAdaptiveBidding() {
+        return withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule.DEFAULT);
+    }
+
+    /**
+     * The same player, listening to the auction and reading a pass by
+     * {@code rule}. The arena's tuning entry: the reference reading is the one
+     * {@link #withAdaptiveBidding()} uses, and a harder one is a different
+     * contestant until it has passed the same gates.
+     */
+    public SearchAiProvider withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule rule) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, true);
+                biddingBudgetNanos, temperature, true, rule);
     }
 
     /**
@@ -268,7 +284,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withBiddingBudget(long nanos) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos,
-                temperature, adaptiveBidding);
+                temperature, adaptiveBidding, passRule);
     }
 
     /**
@@ -292,7 +308,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withTemperature(double temperature) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -526,7 +542,7 @@ public final class SearchAiProvider implements SkatAiProvider {
         private void reprice() {
             if (!adaptiveBidding || unevaluated) return;
             HandEvaluator.AuctionEvidence now = new HandEvaluator.AuctionEvidence(
-                    new EnumMap<>(highestBids), new EnumMap<>(passedAt));
+                    new EnumMap<>(highestBids), new EnumMap<>(passedAt), passRule);
             if (now.equals(pricedUnder)) return;
             price(now);
         }

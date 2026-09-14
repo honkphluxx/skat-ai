@@ -112,22 +112,48 @@ public final class HandEvaluator {
      * who does.
      *
      * <p>A pass is weaker evidence and is treated as such. A player who passed
-     * at L holding two more jacks than L implies could plainly have bid; the
-     * world is kept with a reduced weight rather than rejected, because
-     * cautious bidders exist. {@link #PASS_WEIGHT} is the one constant in
-     * this, and it is not to be fitted against any particular opponent.
+     * at L holding more jacks than L implies -- {@link PassRule#margin} more --
+     * could plainly have bid; the world is kept with a reduced weight rather
+     * than rejected, because cautious bidders exist. The {@link PassRule} is
+     * the one tunable in this, and it is not to be fitted against any
+     * particular opponent: a setting of it ships only when it is non-negative
+     * against the whole field, itself included.
      *
      * @param bids   the highest value each opponent has bid or held, by seat;
      *               absent or zero for a seat that has not bid
      * @param passes the value each opponent declined, by seat; absent or zero
      *               for a seat that has not passed
+     * @param rule   how hard a pass is read
      */
     public record AuctionEvidence(Map<SkatAi.Seat, Integer> bids,
-                                  Map<SkatAi.Seat, Integer> passes) {
+                                  Map<SkatAi.Seat, Integer> passes,
+                                  PassRule rule) {
         public static final AuctionEvidence NONE = new AuctionEvidence(Map.of(), Map.of());
 
+        /** Jacks over the implied count before a pass is doubted, at the reference reading. */
+        public static final int PASS_MARGIN = 2;
         /** How much of a world survives an opponent's pass at a level their jacks could have bid. */
         public static final double PASS_WEIGHT = 0.35;
+
+        /**
+         * How a pass is read: a world in which a passer holds at least
+         * {@code margin} jacks more than their pass implies survives with
+         * probability {@code weight}. Larger margins and weights read a pass
+         * more softly; {@link #DEFAULT} is the reference reading.
+         */
+        public record PassRule(int margin, double weight) {
+            public static final PassRule DEFAULT = new PassRule(PASS_MARGIN, PASS_WEIGHT);
+
+            public PassRule {
+                if (margin < 1) throw new IllegalArgumentException("margin must be at least one jack");
+                if (weight < 0 || weight > 1) throw new IllegalArgumentException("weight is a probability");
+            }
+        }
+
+        /** Evidence read under the reference {@link PassRule#DEFAULT}. */
+        public AuctionEvidence(Map<SkatAi.Seat, Integer> bids, Map<SkatAi.Seat, Integer> passes) {
+            this(bids, passes, PassRule.DEFAULT);
+        }
 
         public boolean isEmpty() {
             return bids.values().stream().allMatch(v -> v <= 0)
@@ -158,8 +184,8 @@ public final class HandEvaluator {
                 if (bid <= 0 && passedAt <= 0) continue;
                 int jacks = jacksHeld(hands.get(seat));
                 if (bid > 0 && jacks < jacksImplied(bid)) return false;
-                if (bid <= 0 && passedAt > 0 && jacks >= jacksImplied(passedAt) + 2
-                        && random.nextDouble() >= PASS_WEIGHT) return false;
+                if (bid <= 0 && passedAt > 0 && jacks >= jacksImplied(passedAt) + rule.margin()
+                        && random.nextDouble() >= rule.weight()) return false;
             }
             return true;
         }

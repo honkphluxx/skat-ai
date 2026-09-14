@@ -115,6 +115,28 @@ public final class AuctionEvidenceTest {
                 SkatAi.Seat.HUMAN, new Random(1)));
     }
 
+    @Test public void aHarderPassRuleDoubtsAPassOnOneJackOver() {
+        // The tuning dimension. Under the reference reading a pass at 18 on
+        // one jack is unremarkable; at margin one the same pass is doubted,
+        // and survives with the rule's weight, not always.
+        HandEvaluator.AuctionEvidence.PassRule harder =
+                new HandEvaluator.AuctionEvidence.PassRule(1, 0.35);
+        HandEvaluator.AuctionEvidence passed18 = new HandEvaluator.AuctionEvidence(
+                Map.of(), Map.of(SkatAi.Seat.OPPONENT_ONE, 18), harder);
+        Random random = new Random(11);
+        int kept = 0;
+        for (int i = 0; i < 2000; i++) {
+            if (passed18.consistent(world(oneMiddleJack(), noJacks()), SkatAi.Seat.HUMAN, random)) kept++;
+        }
+        assertEquals(0.35, kept / 2000.0, 0.04);
+        // A pass on no jacks is never doubted under any rule.
+        assertTrue(passed18.consistent(world(noJacks(), theJacks()), SkatAi.Seat.HUMAN, new Random(1)));
+        // The reference reading is the two-argument constructor, unchanged.
+        assertEquals(HandEvaluator.AuctionEvidence.PassRule.DEFAULT,
+                saidBy(SkatAi.Seat.OPPONENT_ONE, 0, 18).rule());
+        assertEquals(2, HandEvaluator.AuctionEvidence.PassRule.DEFAULT.margin());
+    }
+
     @Test public void theEmptyEvidenceConstrainsNothing() {
         assertTrue(HandEvaluator.AuctionEvidence.NONE.isEmpty());
         assertTrue(HandEvaluator.AuctionEvidence.NONE.consistent(
