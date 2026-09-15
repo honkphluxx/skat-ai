@@ -354,6 +354,26 @@ for SEED in $SEEDS; do
     # app and the arena both prefer, so guarding on the ONNX alone would silently
     # skip every belief match on a machine that has only the shipped weights.
     if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
+        # The app's ladder, as the phone seats it (app-<level> is built by
+        # Opponents.seat itself, belief and switches included), in the full
+        # game with passed-in boards voided. Four levels that are a level
+        # apart is the number the product needs, and since 2026-09-15 the
+        # two upper levels play with both switches while the two lower ones do
+        # not, so the steps have to be re-measured.
+        match app-beginner app-club    "$(boards 200)" "--passed-in=void"
+        match app-club     app-expert  "$(boards 200)" "--passed-in=void"
+        match app-expert   app-analyst "$(boards 200)" "--passed-in=void"
+        # The open question for the lower levels: the switches on, against
+        # the same level with them off, in exact pairing. At two and six
+        # worlds the top vote is tied on most decisions, so the cushion fires
+        # on most of them; nobody has measured whether that helps a player
+        # that guesses this much. Non-negative, and the switches go on there
+        # too; negative, and the ladder stays as it is.
+        match app-beginner-on app-beginner-off "$(boards 200)" "--passed-in=void"
+        match app-club-on     app-club-off     "$(boards 200)" "--passed-in=void"
+        # And the step above club with club switched on, so the ladder's
+        # spacing is known for either decision.
+        match app-club-on     app-expert       "$(boards 200)" "--passed-in=void"
         match belief search "$(boards 300)" "--fixed-contract $BIDDER"
         match belief search "$(boards 300)" ""
         # alpha-mu against the belief player it is built on, so the paired

@@ -134,6 +134,20 @@ public final class Opponents {
      */
     public static SkatAiProvider seat(Level level, WorldSource worlds, long seed,
                                       long biddingBudgetNanos) {
+        return seat(level, worlds, seed, biddingBudgetNanos, level.playsAdaptively());
+    }
+
+    /**
+     * The same seat, with the two shipped switches stated rather than taken
+     * from the level. For the arena, which measures a level with them on and
+     * off on the same boards; the app never calls this.
+     *
+     * @param adaptively the auction re-prices the hand and card-play ties are
+     *                   broken by the cushion, whatever {@link Level#playsAdaptively}
+     *                   says
+     */
+    public static SkatAiProvider seat(Level level, WorldSource worlds, long seed,
+                                      long biddingBudgetNanos, boolean adaptively) {
         WorldSource believed = level.usesBelief() && worlds != null ? worlds : WorldSource.UNIFORM;
         // One search player per seat, not one for the table. The engine seats a
         // single provider at every AI seat, and a search player keeps evidence on
@@ -150,7 +164,7 @@ public final class Opponents {
         return new PerSeatAiProvider(seat -> {
             SearchAiProvider player = new SearchAiProvider(new GreedyAiProvider(),
                     level.personality(), seed * 31L + seat.ordinal(), believed);
-            if (level.playsAdaptively()) {
+            if (adaptively) {
                 player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION);
             }
             return player.withBiddingBudget(biddingBudgetNanos);

@@ -9,6 +9,7 @@ import dev.skatklar.demo.search.SearchAiProvider;
 import dev.skatklar.training.arena.Contestant;
 import dev.skatklar.training.arena.PlayerRegistry;
 import dev.skatklar.demo.ai.GreedyAiProvider;
+import dev.skatklar.demo.ai.Opponents;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -159,6 +160,19 @@ public final class BeliefPlayers {
         // the effects should add, and "should" is what this row measures.
         // The candidate for Opponents.seat if it lands where the sum predicts.
         registry.register(combined("belief-32-adaptive-margin", 32, PassRule.DEFAULT, 15, loader));
+        // The app's ladder, built by Opponents.seat itself so that what the
+        // arena measures is what the phone seats: belief where the level has
+        // it, the two switches where Level.playsAdaptively says. The "-on" and
+        // "-off" variants state the switches instead, for the two lower levels
+        // whose strength with them nobody has measured: with two or six worlds
+        // the top vote is tied on most decisions, so the cushion fires on most
+        // of them, and the effect could go either way.
+        for (Opponents.Level level : Opponents.Level.values()) {
+            String name = level.name().toLowerCase();
+            registry.register(app("app-" + name, level, null, loader));
+            registry.register(app("app-" + name + "-on", level, true, loader));
+            registry.register(app("app-" + name + "-off", level, false, loader));
+        }
         registry.register(alphaMu(registry, "alphamu-1", 1, loader));
         registry.register(alphaMu(registry, "alphamu", 2, loader));
         registry.register(alphaMu(registry, "alphamu-3", 3, loader));
@@ -181,6 +195,28 @@ public final class BeliefPlayers {
             @Override public SkatAiProvider newProvider(long seed) {
                 return new SearchAiProvider(new GreedyAiProvider(), personality, seed,
                         new BeliefWorldSource(loader.get()));
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
+    /**
+     * A level of the app, exactly as {@link Opponents#seat} builds it.
+     *
+     * @param adaptively null for what the level ships with; true or false to
+     *                   state the two switches
+     */
+    private static Contestant app(String id, Opponents.Level level, Boolean adaptively, Loader loader) {
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() {
+                return "App level " + level + (adaptively == null ? " as shipped"
+                        : adaptively ? ", switches on" : ", switches off");
+            }
+            @Override public SkatAiProvider newProvider(long seed) {
+                BeliefWorldSource worlds = new BeliefWorldSource(loader.get());
+                boolean switches = adaptively != null ? adaptively : level.playsAdaptively();
+                return Opponents.seat(level, worlds, seed, Opponents.UNBOUNDED, switches);
             }
             @Override public String toString() { return id; }
         };
