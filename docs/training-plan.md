@@ -118,6 +118,46 @@ overall. **Phase A moves ahead of Phase D**, and the Null variants are the first
 thing in it — a Null that can only ever be bid to 23 is a contract we own on
 paper and never play.
 
+## 2.5 Where we stand after the ship run, 2026-09-15
+
+The shipped player is `belief-32-adaptive-margin`: the reference player with
+the auction allowed to re-price the hand and card-play ties broken by a
+fifteen-point cushion. Three seeds, 300 boards, void mode; details in
+[`../arena/README.md`](../arena/README.md), 2026-09-14 and 2026-09-15.
+
+| shipped minus | full game | change vs 2.4 |
+| --- | --- | --- |
+| `belief-32` (exact pairing) | **+1.07** [+0.32, +1.83] | — |
+| `xskat` | **−0.05** [−1.35, +1.26] | +1.18 [+0.20, +2.16] paired |
+| `go-skat` | **+2.57** [+1.18, +3.96] | +0.32 paired |
+| `jskat-new` | **+11.35** [+10.14, +12.55] | unchanged |
+| `skatzero` (card play, oracle) | **−3.58** [−4.85, −2.31] | new reference |
+
+- **Level with XSkat**, from −0.73 at 900 boards and −1.31 at 300. Both
+  mechanisms are structural -- a hard jack floor from the score sheet, a
+  robustness term on the vote -- and learn nothing about any opponent, which
+  is what the population constraint (§4) requires and why they passed every
+  gate at once.
+- **The pass side of the adaptive bidder is not a lever**: a harder reading
+  sat on top of the reference on every gate. The reference reading stays.
+- **SkatZero is the new card-play ceiling on the ladder**, 3.6 points above
+  our best at oracle contracts, honest by construction. Self-play deep Monte
+  Carlo, no inference, no search. The double-dummy cheat is not a ceiling in
+  its current form: it discards with `greedy` and wins only 85% of oracle
+  declarations, so both honest players measure level with it.
+- **In the app**, `EXPERT` and `ANALYST` play with both switches; `BEGINNER`
+  and `CLUB` keep their measured strength until the ladder is re-run with the
+  switches at every level, because with two or six worlds the cushion would
+  fire on most decisions and double card-play time at the default level.
+
+**Next, in order:** the ladder re-run with both switches at every level (one
+night; decides the two lower levels); the deterministic tiebreak rules below
+the cushion (position-aware: last to play and winning, take the trick;
+losing, give the least; otherwise the lowest of touching cards), one row,
+expected small; the cheat's discard fixed so the distance-to-omniscience row
+means what it says; then B2, the belief model retrained on a void-mode
+corpus that includes `xskat`, `go-skat` and `skatzero`.
+
 ## 2.4 Where we stand after the 900-board run, 2026-09-12
 
 Three seeds at 900 boards each, void mode, every outsider blind-checked. In

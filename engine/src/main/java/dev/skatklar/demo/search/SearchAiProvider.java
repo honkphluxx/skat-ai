@@ -239,9 +239,15 @@ public final class SearchAiProvider implements SkatAiProvider {
      * by this many points -- further for a declarer, lower for a defender --
      * and among the cards that tie on the first question, the one that holds
      * the shifted target in the most worlds is played. The second question is
-     * the same null-window search as the first, so it doubles the solver's
-     * work per decision and touches nothing else: the sampler, the count and
-     * the primary vote are as they were.
+     * the same null-window search as the first, asked only on the decisions
+     * where the first left a tie, and it touches nothing else: the sampler,
+     * the count and the primary vote are as they were.
+     *
+     * <p>Measured at fifteen, three seeds, void mode: +1.10 [+0.54, +1.67] in
+     * exact pairing against the same player without it, +0.89 [+0.13, +1.64]
+     * paired against XSkat, non-negative against go-skat and JSkat. Fifteen
+     * was chosen once as a round number below the Schneider step and has not
+     * been swept; a sweep would have to be judged against the whole field.
      */
     private final int marginPoints;
 
@@ -746,9 +752,17 @@ public final class SearchAiProvider implements SkatAiProvider {
             if (votes == null) {
                 votes = new LinkedHashMap<>();
                 for (Card card : legal) { votes.put(card, 0); cushion.put(card, 0); }
-                boolean withCushion = marginPoints > 0 && playsForCardPoints(context.game.contract);
-                for (WorldSampler.World sample : sampled) {
-                    castVotes(context, sample, votes, withCushion ? cushion : null);
+                for (WorldSampler.World sample : sampled) castVotes(context, sample, votes);
+                // The cushion is a tiebreak and only a tiebreak, so it is asked
+                // for only when there is a tie to break: the comparator below
+                // never reads it unless two cards share the top vote. Asking
+                // every time would double the solver's work on every decision
+                // for an answer that decides nothing on most of them; asking
+                // only here gives the same card every time, at the cost of the
+                // second question on the decisions that were close.
+                if (marginPoints > 0 && playsForCardPoints(context.game.contract)
+                        && topVoteIsShared(votes)) {
+                    for (WorldSampler.World sample : sampled) castCushion(context, sample, cushion);
                 }
             }
 
@@ -875,8 +889,17 @@ public final class SearchAiProvider implements SkatAiProvider {
             return scores.size() == context.legalCards.size() ? scores : null;
         }
 
+        private static boolean topVoteIsShared(Map<Card, Integer> votes) {
+            int best = Integer.MIN_VALUE;
+            int holders = 0;
+            for (int count : votes.values()) {
+                if (count > best) { best = count; holders = 1; } else if (count == best) holders++;
+            }
+            return holders > 1;
+        }
+
         private void castVotes(SkatAi.DecisionContext context, WorldSampler.World sample,
-                               Map<Card, Integer> votes, Map<Card, Integer> cushion) {
+                               Map<Card, Integer> votes) {
             SkatAi.Seat declarer = context.game.declarer;
             boolean iAmTheDeclarer = context.mySeat == declarer;
             List<Card> played = new ArrayList<>(3);
@@ -896,20 +919,31 @@ public final class SearchAiProvider implements SkatAiProvider {
                 return;
             }
 
-            int banked = context.derived.cardPoints.getOrDefault(declarer, 0)
-                    + SkatRules.cardPoints(sample.skat());
-            int target = personality.targetFor(banked);
-            tally(context, sample, played, target, iAmTheDeclarer, votes);
+            tally(context, sample, played, targetIn(context, sample), iAmTheDeclarer, votes);
+        }
 
-            // The second question, for the tiebreak: does the line hold with
-            // marginPoints to spare? A declarer wants the target and more; a
-            // defender wants the declarer held below the target and lower still.
-            // A shifted target nobody can reach, or nobody can miss, answers the
-            // same for every card and so decides nothing, which is correct.
-            if (cushion != null) {
-                int shifted = iAmTheDeclarer ? target + marginPoints : target - marginPoints;
-                if (shifted >= 1) tally(context, sample, played, shifted, iAmTheDeclarer, cushion);
-            }
+        /**
+         * The second question, for the tiebreak: does the line hold with
+         * {@link #marginPoints} to spare? A declarer wants the target and more;
+         * a defender wants the declarer held below the target and lower still.
+         * A shifted target nobody can reach, or nobody can miss, answers the
+         * same for every card and so decides nothing, which is correct.
+         */
+        private void castCushion(SkatAi.DecisionContext context, WorldSampler.World sample,
+                                 Map<Card, Integer> cushion) {
+            boolean iAmTheDeclarer = context.mySeat == context.game.declarer;
+            List<Card> played = new ArrayList<>(3);
+            for (SkatAi.PlayedCard play : context.currentTrick.plays) played.add(play.card);
+            int target = targetIn(context, sample);
+            int shifted = iAmTheDeclarer ? target + marginPoints : target - marginPoints;
+            if (shifted >= 1) tally(context, sample, played, shifted, iAmTheDeclarer, cushion);
+        }
+
+        /** The card points the declarer still needs in this world, by this player's risk. */
+        private int targetIn(SkatAi.DecisionContext context, WorldSampler.World sample) {
+            int banked = context.derived.cardPoints.getOrDefault(context.game.declarer, 0)
+                    + SkatRules.cardPoints(sample.skat());
+            return personality.targetFor(banked);
         }
 
         private void tally(SkatAi.DecisionContext context, WorldSampler.World sample,

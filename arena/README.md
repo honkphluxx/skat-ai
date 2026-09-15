@@ -2697,3 +2697,62 @@ seated at oracle contracts only (see `docs/external-bots.md`). In a container
 against `search`, 102 boards: +9.8 [+5.8, +13.8]. If that holds on the
 machine, it is about seven points above belief-32 at card play, and the first
 outsider on the ladder that is stronger than us at anything.
+
+### 2026-09-15: both switches on, and it ships; SkatZero placed; the cheat's discard
+
+**`belief-32-adaptive-margin`** -- the adaptive bidder at its reference
+reading plus the fifteen-point cushion -- through the four gates, three
+seeds, void mode, pooled, with the two halves alongside:
+
+| minus | adaptive | margin | **adaptive + margin** | reference |
+| --- | --- | --- | --- | --- |
+| `belief-32` (exact pairing) | +0.14 | +1.10 | **+1.07 [+0.32, +1.83] resolved** | 0 |
+| `xskat` | −0.85 | −0.44 | **−0.05 [−1.35, +1.26]** | −1.31 |
+| `go-skat` | +2.38 | +2.38 | **+2.57 [+1.18, +3.96] resolved** | +2.21 |
+| `jskat-new` | +10.94 | +10.74 | **+11.35 [+10.14, +12.55] resolved** | ~+11 |
+
+Paired on the same boards against belief-32's own matches: **+1.18
+[+0.20, +2.16]** better than the reference against XSkat (resolved) and
++0.32 [−0.78, +1.43] against go-skat. The sum predicted +1.2 in exact
+pairing and about level with XSkat; it landed at +1.07 and −0.05. **Level
+with XSkat for the first time**, from −1.31 a month ago, and every gate
+non-negative. It ships: `Opponents.seat` now applies both switches at
+`EXPERT` and `ANALYST`; see `Level.playsAdaptively` for why the two lower
+levels keep their measured strength until the ladder is re-run.
+
+One implementation note on the way in: the cushion is asked for only when
+the vote leaves a tie at the top, which is the only time the comparator
+reads it, so the shipped player makes the same choices the arena measured
+and pays the second solver question only on the close decisions.
+
+**SkatZero, on the machine.** Oracle contracts, 200 boards a seed, three
+seeds, native solver:
+
+| minus `skatzero` | pooled | seeds |
+| --- | --- | --- |
+| `search` | −5.04 [−6.26, −3.82] | −3.9, −5.9, −7.1 |
+| `belief-32` | **−3.58 [−4.85, −2.31]** | −2.5, −2.2, −5.7 |
+| `belief-32-adaptive-margin` | −3.58 [−4.79, −2.37] | −2.7, −2.2, −6.2 |
+
+Smaller than the container's −9.8 against `search` (one seed, 102 boards,
+seed 1 -- inside this spread's tail), and the shape is the same: SkatZero's
+card play is about **3.6 points a game above our best**, resolved on every
+seed, and the cushion does nothing against it (−0.28 paired). The seed
+spread is wide (−2.2 to −6.2 against belief-32), which says the gap is
+concentrated on some deals rather than spread thin. It is now the strongest
+card play on the ladder and the honest reference the population constraint
+wanted.
+
+**The cheat's discard is greedy, so the "distance to omniscience" row does
+not measure that.** `belief-32 − solver` at oracle contracts is −1.06
+[−2.70, +0.58] and `skatzero − solver` is −0.38 [−1.97, +1.22]: the cheat
+wins only 85% of its declarations at contracts the oracle said were
+makeable, because the oracle assumed the best discard and `SolverAiProvider`
+delegates the discard to `greedy` (its own javadoc says so; I read it after
+writing the row). belief-32 and SkatZero win 88-90% of theirs, with their
+own discards. So both honest players are level with a perfect card player
+that discards badly, which is a compliment to their discards and no ceiling
+at all. To make the row mean what it was meant to, the cheat needs the
+oracle's discard -- it is computed anyway when the contract is chosen -- or
+the same discard logic as its opponent. Until then the two rows stand as a
+curiosity, not a measurement.

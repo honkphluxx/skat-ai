@@ -70,6 +70,23 @@ public final class Opponents {
          */
         public boolean usesBelief() { return this != BEGINNER; }
 
+        /**
+         * Whether this level gets the two mechanisms the arena cleared on
+         * 2026-09-15: the auction re-pricing the hand, and card-play ties
+         * broken by a cushion. Both were measured on the top of the ladder
+         * only -- {@code belief-32}, which is {@link #ANALYST} -- where
+         * together they are +1.07 [+0.32, +1.83] in exact pairing and level
+         * with XSkat for the first time. {@link #EXPERT} is the same player
+         * with fewer worlds and a shorter memory, close enough to carry the
+         * result. The two lower levels keep their measured strength: with
+         * two or six worlds the top vote is tied on most decisions, so the
+         * cushion would fire on most of them, doubling the card-play cost at
+         * the level most people play and moving a step of the ladder that
+         * nobody has re-measured. When the ladder is re-run with the two
+         * switches on at every level, this is the line to change.
+         */
+        public boolean playsAdaptively() { return this == EXPERT || this == ANALYST; }
+
         public Personality personality() {
             switch (this) {
                 case BEGINNER: return Personality.beginner();
@@ -100,6 +117,9 @@ public final class Opponents {
     /** No ceiling on a bidding evaluation: the answer must not depend on the clock. */
     public static final long UNBOUNDED = 0L;
 
+    /** Card points of cushion the shipped tiebreak asks for; the arena's belief-32-margin. */
+    public static final int SHIPPED_CUSHION = 15;
+
     /**
      * The same seat, with a ceiling on what one hand's evaluation may cost.
      *
@@ -119,8 +139,21 @@ public final class Opponents {
         // single provider at every AI seat, and a search player keeps evidence on
         // the provider -- shared, the two AI seats would overwrite each other's
         // private knowledge of the Schieben. See PerSeatAiProvider.
-        return new PerSeatAiProvider(seat -> new SearchAiProvider(new GreedyAiProvider(),
-                level.personality(), seed * 31L + seat.ordinal(), believed)
-                .withBiddingBudget(biddingBudgetNanos));
+        // Both switches the arena cleared for shipping, where the ladder was
+        // measured with them: the auction re-prices the hand (+0.14 in exact
+        // pairing, about half a point better against both outside engines)
+        // and card-play ties are broken by a fifteen-point cushion (+1.10);
+        // together +1.07 [+0.32, +1.83] against the same player without them,
+        // level with XSkat for the first time, and non-negative against every
+        // outsider. See arena/README.md, 2026-09-14 and 2026-09-15, and
+        // Level.playsAdaptively for why not every level.
+        return new PerSeatAiProvider(seat -> {
+            SearchAiProvider player = new SearchAiProvider(new GreedyAiProvider(),
+                    level.personality(), seed * 31L + seat.ordinal(), believed);
+            if (level.playsAdaptively()) {
+                player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION);
+            }
+            return player.withBiddingBudget(biddingBudgetNanos);
+        });
     }
 }
