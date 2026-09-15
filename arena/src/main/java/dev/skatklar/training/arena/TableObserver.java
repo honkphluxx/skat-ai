@@ -19,4 +19,17 @@ public interface TableObserver {
 
     /** Called once per game, before the first card, with the engine being played. */
     void observe(GameEngine engine);
+
+    /**
+     * Called before a fixed-contract game starts, with the board and the
+     * contract it will be played at.
+     *
+     * <p>The engine asks the declarer to discard before it is told the
+     * contract, which is the right order for an honest player (the discard is
+     * where the contract is decided) and the wrong one for a reference that is
+     * supposed to discard perfectly: a perfect discard is a function of the
+     * contract. In a fixed-contract match the contract is already known, so the
+     * arena says so here. Auction games do not call this.
+     */
+    default void observeFixedContract(Board board, ContractSource.FixedContract fixed) {}
 }

@@ -153,9 +153,13 @@ fifteen-point cushion. Three seeds, 300 boards, void mode; details in
 **Next, in order:** the deterministic tiebreak rules below
 the cushion (position-aware: last to play and winning, take the trick;
 losing, give the least; otherwise the lowest of touching cards), one row,
-expected small; the cheat's discard fixed so the distance-to-omniscience row
-means what it says; then B2, the belief model retrained on a void-mode
-corpus that includes `xskat`, `go-skat` and `skatzero`.
+expected small -- built 2026-09-15 as `belief-32-adaptive-margin-ties`,
+queued in the overnight script, not yet measured; the cheat's discard fixed
+so the distance-to-omniscience row means what it says -- built the same
+day (`SolverAiProvider.solvedDiscard`), the two oracle rows to be
+re-measured with `--redo=vs-solver-oracle`; then B2, the belief model
+retrained on a void-mode corpus that includes `xskat`, `go-skat` and
+`skatzero`.
 
 ## 2.4 Where we stand after the 900-board run, 2026-09-12
 

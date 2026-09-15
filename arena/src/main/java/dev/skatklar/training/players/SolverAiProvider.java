@@ -1,6 +1,7 @@
 package dev.skatklar.training.players;
 
 import dev.skatklar.demo.Card;
+import dev.skatklar.demo.Contract;
 import dev.skatklar.demo.GameEngine;
 import dev.skatklar.demo.SkatRules;
 import dev.skatklar.demo.ai.GreedyAiProvider;
@@ -8,10 +9,18 @@ import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.ai.SkatAiSession;
 import dev.skatklar.demo.ramsch.RamschPolicy;
+import dev.skatklar.demo.search.Discards;
 import dev.skatklar.demo.solve.DoubleDummySolver;
+import dev.skatklar.demo.solve.NullSolver;
+import dev.skatklar.training.arena.Board;
+import dev.skatklar.training.arena.ContractSource;
 import dev.skatklar.training.arena.TableObserver;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * The par baseline: a player that sees every hand and plays perfectly.
@@ -26,11 +35,17 @@ import java.util.List;
  * an upper bound rather than a target:
  *
  * <ul>
- *   <li>It cheats <b>only in card play</b>. Bidding, the skat pickup and the
- *       discard are delegated to {@link GreedyAiProvider}, so those decisions are
- *       made blind like anyone else's. A perfect-information discard would mean
- *       66 full-deal solves per game, and it would confound the number: the point
- *       of a card-play ceiling is that only card play is optimal.</li>
+ *   <li>It cheats in card play and, when the contract is known before the
+ *       discard, in the discard. Bidding and the auction-game discard are
+ *       delegated to {@link GreedyAiProvider}, so those decisions are made blind
+ *       like anyone else's. In a fixed-contract match the arena tells it the
+ *       contract first ({@link TableObserver#observeFixedContract}) and it then
+ *       discards by the solver: the first of the 66 pairs that makes Schneider
+ *       against perfect defence, else the first that makes the game, else the
+ *       heuristic pair. Until 2026-09-15 the discard was always the heuristic's,
+ *       and the "distance to omniscience" it produced was not one: at oracle
+ *       contracts the cheat won only 85% of its declarations and both honest
+ *       players measured level with it.</li>
  *   <li>As a defender it plays as if <b>both defenders were one player</b> with a
  *       shared view of all 30 cards. That is the standard double-dummy treatment,
  *       and it flatters the defence beyond what any real pair can coordinate. A
@@ -44,6 +59,20 @@ public final class SolverAiProvider implements SkatAiProvider, TableObserver {
 
     private final SkatAiProvider delegate;
     private GameEngine engine;
+    private Board board;
+    private ContractSource.FixedContract fixed;
+
+    /**
+     * Discards already solved, by deal, declarer and contract. A duplicate
+     * match plays every board from all three seats, so the same twelve cards
+     * at the same contract come round three times per side; the solve is the
+     * expensive part of the game and there is no reason to repeat it.
+     */
+    private static final Map<String, Set<Card>> DISCARDS = new ConcurrentHashMap<>();
+    private static final int DISCARD_CACHE_LIMIT = 20_000;
+    /** Card points the declarer must reach, skat included; and to hold the defence to Schneider. */
+    private static final int WINNING_POINTS = 61;
+    private static final int SCHNEIDER_POINTS = 90;
 
     public SolverAiProvider() {
         this(new GreedyAiProvider());
@@ -67,6 +96,94 @@ public final class SolverAiProvider implements SkatAiProvider, TableObserver {
         this.engine = engine;
     }
 
+    @Override public void observeFixedContract(Board board, ContractSource.FixedContract fixed) {
+        this.board = board;
+        this.fixed = fixed;
+    }
+
+    /**
+     * The perfect-information discard for a known contract, or {@code null}
+     * when this player does not hold the contract (or was never told it).
+     *
+     * <p>Two null-window questions per candidate pair at most, and usually far
+     * fewer: the first pass asks every pair whether it makes Schneider, which is
+     * refuted almost at once on most of them, and only if none does is the
+     * second pass, "does it make the game", asked. The heuristic's own pair is
+     * asked first in each pass, so where several pairs are equally good the
+     * cheat keeps the honest choice, and a board it cannot win at all is played
+     * from the same ten cards an honest player would hold. Schwarz is not asked
+     * for; it is rare enough at a fixed contract not to move the ceiling.
+     */
+    private Set<Card> solvedDiscard(SkatAi.SkatExchangeContext context) {
+        ContractSource.FixedContract known = fixed;
+        Board table = board;
+        if (known == null || table == null || known.declarer() != context.mySeat) return null;
+        Contract contract = known.contract();
+        SkatAi.Seat declarer = context.mySeat;
+        SkatAi.Seat leader = table.round().forehand;
+        List<Card> twelve = new ArrayList<>(context.hand);
+        String key = twelve + "|" + table.deal().human + table.deal().opponentOne
+                + table.deal().opponentTwo + "|" + contract + "|" + declarer + "|" + leader;
+        Set<Card> cached = DISCARDS.get(key);
+        if (cached != null) return cached;
+
+        List<List<Card>> dealt = List.of(
+                new ArrayList<>(table.deal().human),
+                new ArrayList<>(table.deal().opponentOne),
+                new ArrayList<>(table.deal().opponentTwo));
+        List<Set<Card>> pairs = candidatePairs(contract, twelve);
+        Set<Card> answer = null;
+        if (contract.isNull()) {
+            for (Set<Card> pair : pairs) {
+                if (NullSolver.declarerSurvives(declarer, handsAfter(dealt, declarer, twelve, pair), leader)) {
+                    answer = pair;
+                    break;
+                }
+            }
+        } else {
+            for (int target : new int[] {SCHNEIDER_POINTS, WINNING_POINTS}) {
+                for (Set<Card> pair : pairs) {
+                    int buried = SkatRules.cardPoints(pair);
+                    if (DoubleDummySolver.declarerReaches(contract, declarer,
+                            handsAfter(dealt, declarer, twelve, pair), leader, target - buried)) {
+                        answer = pair;
+                        break;
+                    }
+                }
+                if (answer != null) break;
+            }
+        }
+        if (answer == null) answer = pairs.get(0);
+        if (DISCARDS.size() >= DISCARD_CACHE_LIMIT) DISCARDS.clear();
+        DISCARDS.put(key, answer);
+        return answer;
+    }
+
+    /** All 66 pairs of the twelve cards, the heuristic's pair first, the rest in hand order. */
+    private static List<Set<Card>> candidatePairs(Contract contract, List<Card> twelve) {
+        List<Set<Card>> pairs = new ArrayList<>(66);
+        Set<Card> heuristic = new LinkedHashSet<>(Discards.buried(contract, twelve));
+        pairs.add(heuristic);
+        for (int i = 0; i < twelve.size(); i++) {
+            for (int j = i + 1; j < twelve.size(); j++) {
+                Set<Card> pair = new LinkedHashSet<>(List.of(twelve.get(i), twelve.get(j)));
+                if (!pair.equals(heuristic)) pairs.add(pair);
+            }
+        }
+        return pairs;
+    }
+
+    private static List<List<Card>> handsAfter(List<List<Card>> dealt, SkatAi.Seat declarer,
+                                               List<Card> twelve, Set<Card> discard) {
+        List<Card> keep = new ArrayList<>(twelve);
+        keep.removeAll(discard);
+        List<List<Card>> hands = new ArrayList<>(3);
+        for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+            hands.add(seat == declarer ? keep : dealt.get(seat.ordinal()));
+        }
+        return hands;
+    }
+
     @Override public SkatAiSession createSession() {
         return new Session(delegate.createSession());
     }
@@ -86,8 +203,13 @@ public final class SolverAiProvider implements SkatAiProvider, TableObserver {
             return blind.pickUpSkat(context);
         }
 
-        @Override public java.util.Set<Card> discardSkat(SkatAi.SkatExchangeContext context) {
-            return blind.discardSkat(context);
+        @Override public Set<Card> discardSkat(SkatAi.SkatExchangeContext context) {
+            Set<Card> solved = solvedDiscard(context);
+            if (solved == null) return blind.discardSkat(context);
+            // The delegate still sees the exchange, so its own bookkeeping of
+            // the hand it will not be asked to play stays consistent.
+            try { blind.discardSkat(context); } catch (RuntimeException ignored) {}
+            return solved;
         }
 
         @Override public SkatAi.ContractAnnouncement announceContract(SkatAi.ContractContext context) {

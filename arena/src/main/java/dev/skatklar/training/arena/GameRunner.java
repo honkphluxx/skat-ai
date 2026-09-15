@@ -72,6 +72,9 @@ public final class GameRunner {
         GameEngine engine = GameEngine.headless(new Random(engineSeed),
                 SeatedAiProviders.of(seating));
         showTableTo(seating, engine);
+        for (SkatAiProvider provider : seating.values()) {
+            if (provider instanceof TableObserver observer) observer.observeFixedContract(board, fixed);
+        }
         try {
             engine.restartWithContract(board.deal(), board.round(), fixed.declarer(),
                     fixed.contract(), fixed.bidValue(), Collections.emptySet());

@@ -213,6 +213,15 @@ public final class SearchAiProvider implements SkatAiProvider {
                              WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
                              double temperature, boolean adaptiveBidding,
                              HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints) {
+        this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos,
+                temperature, adaptiveBidding, passRule, marginPoints, false);
+    }
+
+    private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
+                             WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
+                             double temperature, boolean adaptiveBidding,
+                             HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
+                             boolean ruleTies) {
         this.delegate = delegate;
         this.personality = personality;
         this.seed = seed;
@@ -223,6 +232,29 @@ public final class SearchAiProvider implements SkatAiProvider {
         this.adaptiveBidding = adaptiveBidding;
         this.passRule = Objects.requireNonNull(passRule, "passRule");
         this.marginPoints = Math.max(0, marginPoints);
+        this.ruleTies = ruleTies;
+    }
+
+    /**
+     * Whether the ties the vote and the cushion both leave are broken by the
+     * table's own rules rather than by the cheapest card.
+     *
+     * <p>Cards that tie on both questions are, in every sampled world, worth
+     * the same game: the search has nothing left to say about them, and what
+     * is left is the position. Last to play, a card that takes the trick banks
+     * its points now instead of in the worlds, so take it, with the card that
+     * brings the most home and then the least power spent; a trick that cannot
+     * be taken gets the fewest points, or the most when it is the partner's.
+     * Earlier in the trick, the fewest points and then the least power, which
+     * among touching cards is the lowest of them. None of this is learned or
+     * priced; it is what the score sheet says a trick is worth.
+     */
+    private final boolean ruleTies;
+
+    /** The same player, breaking the remaining ties by position. See {@link #ruleTies}. */
+    public SearchAiProvider withRuleTiebreak() {
+        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints, true);
     }
 
     /**
@@ -254,7 +286,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, breaking ties by cushion. See {@link #marginPoints}. */
     public SearchAiProvider withMarginTiebreak(int points) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points, ruleTies);
     }
 
     /**
@@ -296,7 +328,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule rule) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, true, rule, marginPoints);
+                biddingBudgetNanos, temperature, true, rule, marginPoints, ruleTies);
     }
 
     /**
@@ -317,7 +349,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withBiddingBudget(long nanos) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos,
-                temperature, adaptiveBidding, passRule, marginPoints);
+                temperature, adaptiveBidding, passRule, marginPoints, ruleTies);
     }
 
     /**
@@ -341,7 +373,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withTemperature(double temperature) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints, ruleTies);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -772,6 +804,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
             Comparator<Card> byCushion = Comparator.comparingInt(card -> held.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
+            Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context) : byCost.reversed();
             return legal.stream()
                     // Among cards that win equally often, the one that wins by
                     // the wider margin where a margin was asked for, and then
@@ -782,7 +815,7 @@ public final class SearchAiProvider implements SkatAiProvider {
                     // dial used to live.
                     .max(byVotes
                             .thenComparing(byCushion)
-                            .thenComparing(byCost.reversed())
+                            .thenComparing(rest)
                             .thenComparing(Comparator.comparing(Card::toString).reversed()))
                     .orElse(legal.get(0));
         }

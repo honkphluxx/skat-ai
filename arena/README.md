@@ -2794,3 +2794,52 @@ stays a level below expert (−5.95 [−7.38, −4.51]), so the spacing holds.
 `true`; the ladder the phone seats is the one in the first table with the
 two lower steps moved up by about a point and a half each, which the next
 ladder run will show as the record.
+
+### 2026-09-15, third: the rule tiebreak queued, and the cheat's discard fixed
+
+Two items from the queue in `docs/training-plan.md` §2.5, built and tested,
+not yet measured; the next run measures them.
+
+**The rule tiebreak.** `SearchAiProvider.withRuleTiebreak()`, registered as
+`belief-32-adaptive-margin-ties`: the shipped player with its last ties --
+the cards the vote and the cushion both leave level -- broken by the
+position in the trick instead of by the cheapest card. Last to play, a card
+that takes the trick banks its points now instead of in the worlds, so it is
+preferred, and among takers the one that brings the most home, then the one
+that spends the least power; a trick that cannot be taken gets the fewest
+points, or the most when the partner holds it. Earlier in the trick, the
+fewest points and then the least power, which among touching cards (the
+usual reason for a tie) is the lowest of them. `RuleTiebreak` holds the
+order, `RuleTiebreakTest` pins five positions, and a mutation that drops
+the last-to-play branch fails two of them. Nothing is learned or priced, so
+the four gates apply as they did to the cushion: exact pairing against
+`belief-32-adaptive-margin`, then `xskat`, `jskat-new` and `go-skat`, void
+mode. Expected small: it only decides what the search called a tie. An
+8-board smoke run in the container differed on one board, so it does fire.
+
+**The cheat's discard.** `SolverAiProvider` used to delegate the discard to
+`greedy`, whose heuristic is not the oracle's, so at oracle contracts the
+"perfect" player lost 15% of its own declarations and the distance-to-
+omniscience rows measured nothing. The arena now tells a `TableObserver`
+the fixed contract before the game starts
+(`TableObserver.observeFixedContract`, called from `GameRunner.playFixed`),
+and the solver discards for it: the first of the 66 pairs that makes
+Schneider against perfect defence, else the first that makes the game,
+else the heuristic pair -- two null-window questions per pair at most, the
+heuristic's pair asked first in each pass, and the answer cached per deal
+and contract because a duplicate board asks it three times a side. Cost in
+the container on the Java solver: about a second per declaration on
+oracle boards after the cache; the earlier estimate of 66 exact solves
+(6–15 s each here) was the reason it was never done, and the null window
+is why it is cheap now. `theSolverDiscardsForTheContractItWasTold` checks
+on six oracle boards that the solved pair makes the certified game; with
+the hook disabled it fails on the second board. Auction games are
+unchanged -- there the contract is not known at discard time, and the
+cheat stays a card-play ceiling with an honest discard, as before.
+
+The oracle rows against the solver in the logs (`belief-32` and `skatzero`,
+three seeds) were taken with the old discard and are superseded;
+`--redo=vs-solver-oracle` moves them aside and re-measures. The
+`--fixed-contract` rows with greedy's contracts (`expert-vs-solver`,
+`solver-vs-greedy`) also change meaning and are left as they are until
+somebody needs them.

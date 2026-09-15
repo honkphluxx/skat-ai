@@ -541,6 +541,15 @@ for SEED in $SEEDS; do
             match belief-32-adaptive-margin belief-32 "$(boards 300)" "--passed-in=void"
             match belief-32-adaptive-margin xskat "$(boards 300)" "--passed-in=void"
             match belief-32-adaptive-margin jskat-new "$(boards 300)" "--passed-in=void"
+            # The rule tiebreak under the cushion: the ties the search and the
+            # cushion both leave, broken by the position in the trick instead
+            # of by the cheapest card (SearchAiProvider.withRuleTiebreak). Read
+            # against the shipped player in exact pairing, then the outsiders
+            # as the check that it is not a fit to our own play. Expected
+            # small: it only decides what the search called a tie.
+            match belief-32-adaptive-margin-ties belief-32-adaptive-margin "$(boards 300)" "--passed-in=void"
+            match belief-32-adaptive-margin-ties xskat "$(boards 300)" "--passed-in=void"
+            match belief-32-adaptive-margin-ties jskat-new "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
@@ -557,6 +566,7 @@ for SEED in $SEEDS; do
             match belief-32-adaptive-p1 go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-margin go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-adaptive-margin go-skat "$(boards 200)" "--passed-in=void"
+            match belief-32-adaptive-margin-ties go-skat "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi
@@ -579,6 +589,14 @@ for SEED in $SEEDS; do
             # often the honest player makes an oracle-makeable contract against
             # perfect defence. The same row for belief-32 says how much of that
             # distance SkatZero has closed and how much is left for anyone.
+            #
+            # "By construction" was false until 2026-09-15: the cheat discarded
+            # with greedy's heuristic, not the oracle's, and won only 85% of
+            # its own declarations, so both honest players measured level with
+            # it. It now discards by the solver when the arena tells it the
+            # contract (SolverAiProvider.solvedDiscard), which is every
+            # fixed-contract row. Logs from before that date are the old
+            # instrument: --redo=vs-solver-oracle re-measures these two.
             match belief-32 solver "$(boards 200)" "--fixed-contract --contracts=solver"
             match skatzero solver "$(boards 200)" "--fixed-contract --contracts=solver"
         fi

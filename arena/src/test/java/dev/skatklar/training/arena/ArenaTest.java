@@ -254,6 +254,46 @@ public class ArenaTest {
         }
     }
 
+    /**
+     * The cheat's discard is a solved one when the arena tells it the contract.
+     *
+     * <p>The oracle certifies each contract by checking that the heuristic pair
+     * makes it against perfect defence, so on every oracle board at least one
+     * pair makes; the solver's pair must then make too -- the property that
+     * turns the "distance to omniscience" row into a ceiling. Before this, the
+     * cheat discarded with {@code greedy}'s heuristic, which is not the oracle's,
+     * and lost 15% of its own oracle declarations.
+     */
+    @Test public void theSolverDiscardsForTheContractItWasTold() {
+        SolverContractSource oracle = new SolverContractSource();
+        int checked = 0;
+        for (int index = 0; index < 12 && checked < 6; index++) {
+            Board board = Board.of(11L, index);
+            ContractSource.FixedContract fixed = oracle.contractFor(board);
+            if (fixed == null || fixed.contract().isNull()) continue;
+
+            Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
+            for (SkatAi.Seat seat : SkatAi.Seat.values()) seating.put(seat, new SolverAiProvider());
+            GameEngine engine = GameEngine.headless(new Random(1), SeatedAiProviders.of(seating));
+            for (SkatAiProvider provider : seating.values()) {
+                ((TableObserver) provider).observe(engine);
+                ((TableObserver) provider).observeFixedContract(board, fixed);
+            }
+            engine.restartWithContract(board.deal(), board.round(), fixed.declarer(),
+                    fixed.contract(), fixed.bidValue(), Set.of());
+            GameEngine.Snapshot start = engine.snapshot();
+            engine.close();
+
+            int buried = SkatRules.cardPoints(start.skat);
+            assertTrue("board " + index + " (" + fixed.contract() + "): the solved discard "
+                            + start.skat + " does not make the game the oracle certified",
+                    DoubleDummySolver.declarerReaches(fixed.contract(), fixed.declarer(),
+                            start.hands, SkatAi.Seat.values()[start.leader], 61 - buried));
+            checked++;
+        }
+        assertTrue("the oracle priced fewer than six of twelve boards", checked == 6);
+    }
+
     /** Lost, won, Schneider: what a Skat game is actually scored on. */
     private static int band(int declarerPoints) {
         if (declarerPoints >= 90) return 3;

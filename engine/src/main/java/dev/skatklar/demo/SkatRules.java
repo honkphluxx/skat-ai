@@ -504,6 +504,17 @@ public final class SkatRules {
         return follow.trump ? SkatAi.FollowClass.trump() : SkatAi.FollowClass.suit(follow.suit);
     }
 
+    /**
+     * Where a card stands in the contract's trick order: a jack above a trump
+     * above a plain card, and within each class the rank's own order. Two
+     * plain cards of different suits compare as if both had been led, which is
+     * the only sense in which they are comparable at all; a caller who needs
+     * to know who takes a trick asks {@link #beats}, not this.
+     */
+    public static int power(Contract contract, Card card) {
+        return strength(contract, card);
+    }
+
     private static int strength(Contract contract, Card card) {
         // Null keeps the jack in its own suit and puts the ten back where its
         // rank says it belongs, between the nine and the jack.

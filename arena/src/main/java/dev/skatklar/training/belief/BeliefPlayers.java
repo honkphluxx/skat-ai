@@ -160,6 +160,14 @@ public final class BeliefPlayers {
         // the effects should add, and "should" is what this row measures.
         // The candidate for Opponents.seat if it lands where the sum predicts.
         registry.register(combined("belief-32-adaptive-margin", 32, PassRule.DEFAULT, 15, loader));
+        // The shipped player with its last ties -- the cards the vote and the
+        // cushion both leave level -- broken by the position in the trick
+        // instead of by the cheapest card: last to play, take the trick if it
+        // can be taken, give the least if not and the most to the partner;
+        // otherwise the fewest points and the least power. Deterministic rules
+        // from the score sheet, nothing learned; see SearchAiProvider.withRuleTiebreak.
+        // Expected small: it only decides what the search called a tie.
+        registry.register(combined("belief-32-adaptive-margin-ties", 32, PassRule.DEFAULT, 15, true, loader));
         // The app's ladder, built by Opponents.seat itself so that what the
         // arena measures is what the phone seats: belief where the level has
         // it, the two switches where Level.playsAdaptively says. The "-on" and
@@ -224,18 +232,25 @@ public final class BeliefPlayers {
 
     /** The belief player listening to the auction and breaking card-play ties by a cushion. */
     private static Contestant combined(String id, int worlds, PassRule rule, int points, Loader loader) {
+        return combined(id, worlds, rule, points, false, loader);
+    }
+
+    /** As above, and with {@code rules} the ties the cushion leaves are broken by position. */
+    private static Contestant combined(String id, int worlds, PassRule rule, int points, boolean rules,
+                                       Loader loader) {
         Personality personality = new Personality(worlds, Personality.REFERENCE.memory(),
                 Personality.REFERENCE.risk(), Personality.REFERENCE.aggression());
         return new Contestant() {
             @Override public String id() { return id; }
             @Override public String displayName() {
                 return "Belief, " + worlds + " worlds, adaptive bidding, ties broken by "
-                        + points + " points of cushion";
+                        + points + " points of cushion" + (rules ? ", then by position" : "");
             }
             @Override public SkatAiProvider newProvider(long seed) {
-                return new SearchAiProvider(new GreedyAiProvider(), personality, seed,
+                SearchAiProvider player = new SearchAiProvider(new GreedyAiProvider(), personality, seed,
                         new BeliefWorldSource(loader.get()))
                         .withAdaptiveBidding(rule).withMarginTiebreak(points);
+                return rules ? player.withRuleTiebreak() : player;
             }
             @Override public String toString() { return id; }
         };
