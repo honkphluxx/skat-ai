@@ -145,13 +145,12 @@ fifteen-point cushion. Three seeds, 300 boards, void mode; details in
   Carlo, no inference, no search. The double-dummy cheat is not a ceiling in
   its current form: it discards with `greedy` and wins only 85% of oracle
   declarations, so both honest players measure level with it.
-- **In the app**, `EXPERT` and `ANALYST` play with both switches; `BEGINNER`
-  and `CLUB` keep their measured strength until the ladder is re-run with the
-  switches at every level, because with two or six worlds the cushion would
-  fire on most decisions and double card-play time at the default level.
+- **In the app, every level plays with both switches** (from the ladder
+  re-run of the same day: beginner +1.73 and club +1.23 over themselves
+  without, positive on every seed; the ladder stays four levels a level
+  apart). The worry about the cushion at few worlds did not materialise.
 
-**Next, in order:** the ladder re-run with both switches at every level (one
-night; decides the two lower levels); the deterministic tiebreak rules below
+**Next, in order:** the deterministic tiebreak rules below
 the cushion (position-aware: last to play and winning, take the trick;
 losing, give the least; otherwise the lowest of touching cards), one row,
 expected small; the cheat's discard fixed so the distance-to-omniscience row

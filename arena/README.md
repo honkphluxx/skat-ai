@@ -2756,3 +2756,41 @@ at all. To make the row mean what it was meant to, the cheat needs the
 oracle's discard -- it is computed anyway when the contract is chosen -- or
 the same discard logic as its opponent. Until then the two rows stand as a
 curiosity, not a measurement.
+
+### 2026-09-15, second: the app's ladder, and the switches go on everywhere
+
+Four new contestants, `app-beginner` .. `app-analyst`, are built by
+`Opponents.seat` itself, so for the first time the arena measures the exact
+players the phone seats: belief where the level has it, the two switches
+where `Level.playsAdaptively` says. Three seeds, 200 boards, void mode,
+pooled:
+
+| step, as shipped this morning | pooled | seeds |
+| --- | --- | --- |
+| `app-beginner` − `app-club` | **−4.23** [−5.82, −2.64] | −4.76, −3.52, −4.41 |
+| `app-club` − `app-expert` | **−6.58** [−8.05, −5.11] | −8.34, −5.74, −5.75 |
+| `app-expert` − `app-analyst` | **−2.55** [−3.73, −1.37] | −3.30, −2.12, −2.42 |
+
+Four levels a level apart, every step resolved. The club-expert step widened,
+which is the two switches showing at expert.
+
+**The open question for the lower levels, answered the other way round.**
+The worry was that with two or six worlds the top vote is tied on most
+decisions, so the cushion fires on most of them, and a player that guesses
+that much might be hurt by it. In exact pairing, switches on against off:
+
+| level | on − off | seeds |
+| --- | --- | --- |
+| `app-beginner` | **+1.73** [+0.11, +3.34] resolved | +1.97, +1.27, +1.81 |
+| `app-club` | +1.23 [−0.36, +2.82] | +3.23, +0.64, +0.20 |
+
+Positive on every seed at both levels. The mechanism is in the declaring
+rates: club with the switches declares 27% of games instead of 33% and wins
+79% of them instead of 71% -- the jack floor saving the weak player from
+declarations it loses -- and the cushion does no harm. Club switched on
+stays a level below expert (−5.95 [−7.38, −4.51]), so the spacing holds.
+
+**So the switches go on at every level.** `Level.playsAdaptively` is now
+`true`; the ladder the phone seats is the one in the first table with the
+two lower steps moved up by about a point and a half each, which the next
+ladder run will show as the record.

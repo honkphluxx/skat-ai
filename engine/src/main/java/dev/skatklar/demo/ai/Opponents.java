@@ -73,19 +73,25 @@ public final class Opponents {
         /**
          * Whether this level gets the two mechanisms the arena cleared on
          * 2026-09-15: the auction re-pricing the hand, and card-play ties
-         * broken by a cushion. Both were measured on the top of the ladder
-         * only -- {@code belief-32}, which is {@link #ANALYST} -- where
-         * together they are +1.07 [+0.32, +1.83] in exact pairing and level
-         * with XSkat for the first time. {@link #EXPERT} is the same player
-         * with fewer worlds and a shorter memory, close enough to carry the
-         * result. The two lower levels keep their measured strength: with
-         * two or six worlds the top vote is tied on most decisions, so the
-         * cushion would fire on most of them, doubling the card-play cost at
-         * the level most people play and moving a step of the ladder that
-         * nobody has re-measured. When the ladder is re-run with the two
-         * switches on at every level, this is the line to change.
+         * broken by a cushion. Every level does, since the ladder re-run of
+         * the same day. They were first measured on the top of the ladder
+         * only ({@code belief-32}, which is {@link #ANALYST}: +1.07 [+0.32,
+         * +1.83] in exact pairing, level with XSkat), and shipped at
+         * {@link #EXPERT} and above while the two lower levels waited for a
+         * measurement, on the worry that with two or six worlds the top vote
+         * is tied on most decisions and a cushion firing on most of them might
+         * hurt a player that guesses this much. It does the opposite:
+         * {@link #BEGINNER} with the switches beats itself without them by
+         * +1.73 [+0.11, +3.34], {@link #CLUB} by +1.23 [−0.36, +2.82], both
+         * positive on every seed, and the mechanism is visible in the
+         * declaring rates -- club declares 27% of games instead of 33% and wins
+         * 79% of them instead of 71%, the jack floor saving the weak player
+         * from declarations it loses. The ladder stays four levels a level
+         * apart with the switches on everywhere. The cost worry was real but
+         * small: the cushion is asked for only on the decisions where the
+         * vote left a tie, and at six worlds those decisions are cheap.
          */
-        public boolean playsAdaptively() { return this == EXPERT || this == ANALYST; }
+        public boolean playsAdaptively() { return true; }
 
         public Personality personality() {
             switch (this) {
