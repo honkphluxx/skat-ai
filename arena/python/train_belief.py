@@ -120,7 +120,11 @@ def main():
 
     torch.manual_seed(args.seed)
     corpus = Corpus(args.data)
-    x, target, mask, board = corpus.load()
+    # Packed: the features stay the bytes on disk and are unpacked a batch at
+    # a time. A night's corpus is five million records, which as float32 is
+    # 6 GB before the first copy; as bytes it is 1.6 GB, and nothing below
+    # ever holds more than the held-out tenth as floats.
+    x, target, mask, board = corpus.load(packed=True)
     if args.limit:
         x, target, mask, board = (a[:args.limit] for a in (x, target, mask, board))
     train, val = corpus.split_by_board(board, args.val_fraction, seed=args.seed)
@@ -128,8 +132,12 @@ def main():
     print(f"{len(train):,} training records, {len(val):,} held out "
           f"({len(np.unique(board[val])):,} whole boards)")
 
-    baseline = np.repeat(uniform_baseline(corpus, x[val])[:, None, :], CARDS, axis=1)
-    base_accuracy, base_nll = score(baseline, target[val], mask[val])
+    x_val = corpus.unpack(x[val])
+    target_val = target[val].astype(np.int64)
+    mask_val = mask[val]
+    baseline = np.repeat(uniform_baseline(corpus, x_val)[:, None, :], CARDS, axis=1)
+    base_accuracy, base_nll = score(baseline, target_val, mask_val)
+    del baseline
     print(f"uniform sampler baseline: {base_accuracy:.1%} correct, nll {base_nll:.4f}")
     print()
 
@@ -156,7 +164,7 @@ def main():
 
     if args.export_only:
         model.load_state_dict(torch.load(out / "belief.pt"))
-        accuracy, nll = evaluate(model, x[val], target[val], mask[val], device)
+        accuracy, nll = evaluate(model, x_val, target_val, mask_val, device)
         export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll)
         print(f"exported from belief.pt: {accuracy:.1%} correct, nll {nll:.4f}")
         return
@@ -174,9 +182,9 @@ def main():
             # Forgetting is applied here rather than in the corpus, so one
             # generated set of shards serves every personality and the dropout
             # distribution stays a knob rather than a property of the files.
-            forgotten, _ = forgetting.apply(x[rows])
+            forgotten, _ = forgetting.apply(corpus.unpack(x[rows]))
             xb = torch.from_numpy(forgotten).to(device)
-            tb = torch.from_numpy(target[rows]).to(device)
+            tb = torch.from_numpy(target[rows].astype(np.int64)).to(device)
             mb = torch.from_numpy(mask[rows]).to(device)
 
             loss = masked_loss(model(xb), tb, mb)
@@ -188,7 +196,7 @@ def main():
             running += loss.item()
             steps += 1
 
-        accuracy, nll = evaluate(model, x[val], target[val], mask[val], device)
+        accuracy, nll = evaluate(model, x_val, target_val, mask_val, device)
         print(f"epoch {epoch:3d}  train {running / max(steps, 1):.4f}   "
               f"val {accuracy:.1%} / {nll:.4f}   "
               f"over baseline {accuracy - base_accuracy:+.1%}   "
@@ -243,7 +251,7 @@ def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll):
     # loader replays these on startup: a model and a runtime that disagree about
     # the same input is the failure this whole file format exists to prevent, and
     # it is otherwise invisible until the player is mysteriously weak.
-    x, _, _, _ = corpus.load()
+    x, _, _, _ = corpus.load(limit=16)
     sample = torch.from_numpy(x[:16]).to(dummy.device)
     with torch.no_grad():
         logits = model(sample).cpu().numpy()

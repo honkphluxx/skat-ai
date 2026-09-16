@@ -70,20 +70,50 @@ class Corpus:
         offset, width = self.field(name)
         return x[..., offset:offset + width]
 
-    def load(self):
-        """Every shard, as one block. Returns features, target, mask, board."""
-        raw = np.concatenate([
-            np.fromfile(shard, dtype=np.uint8).reshape(-1, self.record_bytes)
-            for shard in self.shards])
+    def load(self, limit=None, packed=False):
+        """Every shard, as one block. Returns features, target, mask, board.
+
+        With ``packed``, the features come back as the bytes on disk (uint8,
+        unscaled: divide by ``scale`` to get the floats) and the labels as
+        int8, a quarter of the memory. A five-million-record night is 6 GB of
+        float32 features and 1.6 GB of bytes; a caller that unpacks one batch
+        at a time (:func:`unpack`) never needs the floats all at once.
+
+        With ``limit``, only as many whole shards as it takes to reach that
+        many records, then truncated: a bounded sample from the front of the
+        corpus, for a check that does not need all of it. The records of one
+        shard are consecutive boards, so a sample of two shards is a sample of
+        the same games the rest are, not a slice of one.
+        """
+        blocks = []
+        loaded = 0
+        for shard in self.shards:
+            blocks.append(np.fromfile(shard, dtype=np.uint8).reshape(-1, self.record_bytes))
+            loaded += len(blocks[-1])
+            if limit is not None and loaded >= limit:
+                break
+        raw = np.concatenate(blocks)
+        if limit is not None:
+            raw = raw[:limit]
         size = self.size
-        features = raw[:, :size].astype(np.float32) / self.scale
-        target = raw[:, size:size + LABEL_BYTES].astype(np.int64)
+        if packed:
+            features = np.ascontiguousarray(raw[:, :size])
+            target = raw[:, size:size + LABEL_BYTES].astype(np.int8)
+        else:
+            features = raw[:, :size].astype(np.float32) / self.scale
+            target = raw[:, size:size + LABEL_BYTES].astype(np.int64)
         mask = raw[:, size + LABEL_BYTES:size + LABEL_BYTES + MASK_BYTES].astype(np.float32)
         board_at = size + LABEL_BYTES + MASK_BYTES + SEATING_BYTES
         board = raw[:, board_at:board_at + BOARD_BYTES].astype(np.uint32)
         board = (board[:, 0] | (board[:, 1] << 8)
                  | (board[:, 2] << 16) | (board[:, 3] << 24))
         return features, target, mask, board
+
+    def unpack(self, features):
+        """Packed bytes (or a batch of them) as the floats the model reads."""
+        if features.dtype == np.float32:
+            return features
+        return features.astype(np.float32) / self.scale
 
     def split_by_board(self, board, fraction=0.1, seed=0):
         """

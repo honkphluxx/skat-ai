@@ -5,6 +5,14 @@ Run it against any corpus directory; it takes seconds and it is the thing to run
 before starting a night of training:
 
     python3 check_data.py ../../belief-data
+    python3 check_data.py ../../belief-data --limit 1000000
+
+It reads a bounded sample from the front of the corpus (a million records by
+default, about two shards of a full night) rather than the whole of it: every
+check here is about the shape of a record, a block or a split, and the
+forgetting checks make four full copies of whatever they are given -- on a
+five-million-record corpus that is thirty gigabytes and a MemoryError at
+noon, which is how the limit came to exist. The trainer reads everything.
 
 What it is really guarding is the class of bug that does not announce itself. A
 feature read at the wrong offset, a validation split that leaks whole deals, a
@@ -28,12 +36,13 @@ def check(name, condition, detail=""):
     return condition
 
 
-def main(directory):
+def main(directory, limit=1_000_000):
     corpus = Corpus(directory)
-    x, target, mask, board = corpus.load()
+    x, target, mask, board = corpus.load(limit=limit)
     print(f"encoding v{corpus.version}: {corpus.size} inputs, "
-          f"{corpus.record_bytes} bytes a record")
-    print(f"{len(x):,} records from {len(np.unique(board)):,} boards")
+          f"{corpus.record_bytes} bytes a record, {len(corpus.shards)} shards")
+    print(f"{len(x):,} records from {len(np.unique(board)):,} boards"
+          + (f" (the first {limit:,} records of the corpus)" if limit else ""))
     print()
 
     good = True
@@ -129,4 +138,10 @@ def main(directory):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "../../belief-data"))
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("directory", nargs="?", default="../../belief-data")
+    parser.add_argument("--limit", type=int, default=1_000_000,
+                        help="records to check, from the front of the corpus; 0 for all")
+    args = parser.parse_args()
+    sys.exit(main(args.directory, args.limit or None))

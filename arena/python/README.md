@@ -12,6 +12,7 @@ instead of drawing them uniformly.
 ./gradlew :arena:export --args="--boards=100000 --threads=8 --out=belief-data"
 
 # 2. Check it before spending a night on it. Seconds, and no GPU needed.
+#    Reads the first million records; --limit 0 reads all of them.
 cd arena/python && python3 check_data.py ../../belief-data
 
 # 3. Train, from an interpreter that has a CUDA torch (see requirements.txt)
