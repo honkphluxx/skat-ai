@@ -12,6 +12,10 @@ STOP
 # Generated training data. A night of it is gigabytes.
 belief-data/
 belief-data-probe/
+# The retraining's corpus and candidate model (tools/belief-v2.sh), scratch
+# until a candidate wins and is copied over belief-model/.
+belief-data-v2*/
+belief-model-v2*/
 
 # The model directory is scratch by default -- whatever was last trained lands
 # here and must not drift into the history. The four files a clone actually

@@ -41,6 +41,16 @@ public final class BeliefPlayers {
     /** Overrides where the model is looked for; otherwise the candidates below. */
     public static final String DIRECTORY_PROPERTY = "belief.model.dir";
 
+    /**
+     * A second model, seated as {@code belief-32-candidate} and
+     * {@code belief-32-adaptive-margin-ties-candidate}: the same players as
+     * the shipped ones with only the belief swapped, so that a retrained model
+     * meets the model it would replace on the same boards in the same process.
+     * Looked for in {@code belief-model-v2} when the property is not set;
+     * nothing is registered when no such directory holds a model.
+     */
+    public static final String CANDIDATE_PROPERTY = "belief.model.candidate.dir";
+
     private BeliefPlayers() {}
 
     /**
@@ -184,6 +194,26 @@ public final class BeliefPlayers {
         registry.register(alphaMu(registry, "alphamu-1", 1, loader));
         registry.register(alphaMu(registry, "alphamu", 2, loader));
         registry.register(alphaMu(registry, "alphamu-3", 3, loader));
+
+        Path candidate = locateCandidate();
+        if (candidate != null) {
+            Loader other = new Loader(candidate);
+            registry.register(renamed(worlds("belief-32-candidate", 32, other),
+                    "Belief, 32 worlds a decision, candidate model " + candidate));
+            registry.register(renamed(combined("belief-32-adaptive-margin-ties-candidate", 32,
+                    PassRule.DEFAULT, 15, true, other),
+                    "The shipped player with the candidate model " + candidate));
+        }
+    }
+
+    /** The same contestant under a display name that says which model it carries. */
+    private static Contestant renamed(Contestant inner, String displayName) {
+        return new Contestant() {
+            @Override public String id() { return inner.id(); }
+            @Override public String displayName() { return displayName; }
+            @Override public SkatAiProvider newProvider(long seed) { return inner.newProvider(seed); }
+            @Override public String toString() { return inner.id(); }
+        };
     }
 
     /**
@@ -361,6 +391,19 @@ public final class BeliefPlayers {
         }
         for (Path candidate : List.of(Path.of("belief-model"), Path.of("..", "belief-model"),
                 Path.of("..", "..", "belief-model"))) {
+            if (holdsAModel(candidate)) return candidate;
+        }
+        return null;
+    }
+
+    private static Path locateCandidate() {
+        String override = System.getProperty(CANDIDATE_PROPERTY);
+        if (override != null && !override.isBlank()) {
+            Path named = Path.of(override);
+            return holdsAModel(named) ? named : null;
+        }
+        for (Path candidate : List.of(Path.of("belief-model-v2"), Path.of("..", "belief-model-v2"),
+                Path.of("..", "..", "belief-model-v2"))) {
             if (holdsAModel(candidate)) return candidate;
         }
         return null;

@@ -2911,3 +2911,18 @@ it fails on the first trick. The two solver rows above were taken before
 this fix; the Null share of them is about 2.5% of boards, so the ceiling
 moves by a tenth of a point at most, and the rows are re-measured with the
 next `--redo=vs-solver-oracle` rather than tonight.
+
+**The candidate slot and the script for B2's cheap half** (added the same
+day). `BeliefPlayers` registers `belief-32-candidate` and
+`belief-32-adaptive-margin-ties-candidate` when `-Dbelief.model.candidate.dir`
+names a directory holding a model (default `belief-model-v2` if present):
+the same two players as the shipped ones with only the belief swapped, so a
+retrained model meets the model it would replace in one process on the same
+boards. Wired identically -- with the candidate pointing at the shipped
+model the two score exactly 0.000 against each other over 18 games.
+`tools/belief-v2.sh` runs the five steps (export a void-mode corpus from
+`greedy, search-4, club, expert, jskat-new, xskat-blind, go-skat`;
+`check_data.py`; `train_belief.py`; `export_weights.py`; the gates on three
+seeds), each skipped when its output exists, `--quick` for a rehearsal into
+its own directories. The row that decides is the shipped combination
+against itself with the belief swapped, in exact pairing.
