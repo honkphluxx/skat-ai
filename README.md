@@ -41,8 +41,10 @@ skat-ai/
   engine/     the rules, the double-dummy solver, the players     no dependencies
   arena/      duplicate matches, the belief trainer's Java side, the players
   jskat-ai/   an adapter that seats JSkat's players at this table
+  external/   the drivers that seat XSkat and go-skat, as helper processes
+  tools/      the overnight measurement run, the engine builds, the SkatZero driver
   native/     the same solver again in C++, for when Java is too slow
-  docs/       the rules canon, the design record, the native solver
+  docs/       the rules canon, the design record, the native solver, the outside engines
 ```
 
 ## The short version of why this exists
@@ -82,7 +84,8 @@ Java 17 or newer. Nothing else is required: the engine has no third-party
 dependency at all, and the arena needs only ONNX Runtime and JUnit, which Gradle
 fetches. A trained belief model is in the repository, so the strongest players
 work out of the box. Without `--recurse-submodules` everything still builds — you
-simply have no JSkat opponents to measure against.
+simply have no JSkat opponents to measure against; the other outside engines are
+fetched separately, see below.
 
 ### Play a hand
 
@@ -92,9 +95,9 @@ simply have no JSkat opponents to measure against.
 
 You are dealt ten cards, you bid, you pick up the skat and you play, on the
 terminal. The opponent is named by its *arena id*, which is the same object the
-measurements are about: `club` is the shipped middle level, `belief` is the one
-that is level with JSkat's transformer, `greedy` is the heuristic baseline you
-should be able to beat. A person is seated through the same `SkatAiProvider`
+measurements are about: `club` is the shipped middle level, `analyst` the top
+one (the same player the arena calls `belief-32-adaptive-margin-ties`), `greedy`
+the heuristic baseline you should be able to beat. A person is seated through the same `SkatAiProvider`
 interface as every AI, so your cards are checked by the same legality rules and
 your hand is scored by the same code.
 
@@ -159,35 +162,65 @@ The network ships as `belief.bin`, a plain array of numbers read by
 The arena measures that same implementation rather than the trainer's, because a
 measurement of code you do not ship is a measurement of nothing.
 
+**Three rules from the score sheet**, on top. The auction re-prices the hand
+against only the worlds consistent with what the other seats said (an
+opponent who held 44 holds the jacks in every world that survives); among
+cards that win in equally many worlds, the one that wins by fifteen points
+of cushion in the most worlds is played, because the worlds are guesses; and
+the ties that leaves are broken by the position in the trick rather than by
+the cheapest card. None of them learns anything about any opponent, which is
+what lets them be measured against the whole field, and together they are
+worth about two game points a game over the same player without them.
+
 ## Where it stands
 
-Pooled over three seeds by inverse variance, with the auction played:
+The shipped player, `belief-32-adaptive-margin-ties`, against the field.
+Three seeds pooled by inverse variance, 300 boards a seed (200 against
+go-skat), the auction played, passed-in boards voided; 2026-09-16.
 
 | Match | game pts/game | 95% CI |
 | --- | --- | --- |
-| belief − search | **+2.12** | [+1.45, +2.79] |
-| belief − JSkat AlgorithmAI | **+12.58** | [+10.92, +14.24] |
-| belief-32 − JSkat MLPlayerPro (forced contracts) | **+0.19** | [−0.95, +1.33] |
-| search − double-dummy solver (which sees everything) | +2.65 | [+0.39, +4.91] |
+| shipped − XSkat | +0.72 | [−0.64, +2.07] |
+| shipped − go-skat | **+3.01** | [+1.61, +4.41] |
+| shipped − JSkat AlgorithmAI | **+11.72** | [+10.48, +12.95] |
+| the first two rules − the reference player without them | **+1.07** | [+0.32, +1.83] |
+| the third rule, on top of the two | +0.23 | [−0.19, +0.66] |
 
-The third line is the one to read carefully: at 32 sampled worlds this player is
-**level with JSkat's transformer**, not ahead of it — the interval contains zero
-and was never going to resolve at this sample size. The fourth is a joke at the
-solver's expense and a real result: perfect card sight loses the full game to a
-calibrated bidding rule, because the solver declares 42% of boards and this
-player declares 15%.
+Card play alone, at the objectively best makeable contract on each board
+(`--fixed-contract --contracts=solver`), which is the only line where "stronger
+than X" means card play rather than taste in games:
 
-The ladder a product would ship, each step resolved:
+| Match | game pts/game | 95% CI |
+| --- | --- | --- |
+| belief-32 − SkatZero | **−3.58** | [−4.85, −2.31] |
+| belief-32 − double-dummy solver (which sees everything) | **−5.38** | [−6.61, −4.14] |
+| SkatZero − double-dummy solver | **−5.20** | [−6.50, −3.90] |
+
+The first table says the player is level with XSkat and ahead of the rest.
+The second says where the remaining points are: SkatZero, a self-play
+reinforcement learner, is 3.6 points better at card play, yet paired board by
+board through the common opponent the two are the *same* distance from
+perfect play (+0.23 [−1.34, +1.80] between them). Both make about the same
+amount of what perfect play punishes; SkatZero's edge is made against an
+imperfect opponent, which is the part a determinized search cannot see
+(it assumes an opponent who knows what it knows) and the part a policy trained
+under the fog can. That is the open problem this repository is working on.
+
+The ladder the app ships, every step resolved, full game (2026-09-15, taken
+before the rules went on at the two lower levels too; that narrows the two
+lower steps by about half a point and a point, and the next ladder run records
+the exact spacing):
 
 | Step | game pts/game |
 | --- | --- |
-| beginner → club | 3.4 |
-| club → expert | 5.9 |
-| expert → analyst | 3.2 |
+| beginner → club | 4.2 |
+| club → expert | 6.6 |
+| expert → analyst | 2.6 |
 
 [`arena/README.md`](arena/README.md) is the lab notebook behind all of it,
 including the measurements that came out flat (an alpha-mu search: correct,
-+0.006, kept and unused) and the ones that were wrong the first time.
++0.006, kept and unused), the ones that were wrong the first time, and the
+ceiling that was not one until the cheating player learned to discard.
 
 ## The trained model, and training your own
 
@@ -214,41 +247,75 @@ only as a player that is mysteriously weak. The shipped model carries its parity
 file for the same reason: you should not have to take these weights on trust
 either.
 
-## JSkat
+## The outside opponents
 
-[JSkat](https://github.com/b0n541/jskat-multimodule) is the only outside opponent this
-project can measure itself against, and `jskat-ai/` adapts its players to this
-engine's table so the arena can seat them. Nothing derived from it is part of the
-engine or of anything that ships.
+Four programs that are not ours can sit at the arena's table, and every
+mechanism that ships has had to be non-negative against all of them: a rule
+that beats one bot and loses to another has learned that bot, not Skat. None of
+them is redistributed here and nothing derived from any of them is part of the
+engine. [`docs/external-bots.md`](docs/external-bots.md) is the full account;
+[`docs/xskat.md`](docs/xskat.md) the licence question and the survey of what
+else exists.
 
-The submodule under `third_party/jskat` points at a **modified fork**,
-[honkphluxx/jskat](https://github.com/honkphluxx/jskat), branch `skatklar`. The five changes are
-listed in that repository's `CHANGES.md`, which is where the Apache licence asks
-for them. Two are the reason a fork exists at all rather than a matter of taste:
-the arena cannot run duplicate deals against players whose shared random
-generators cannot be seeded, and upstream's `getSuitMultiplier` loops forever on
-a holding with no trumps -- it froze a 1500-board run for 31 minutes at 100% of a
-core. Those two are upstream defects and belong back there as pull requests.
+| id | what it is | licence | seated for |
+| --- | --- | --- | --- |
+| `jskat-new`, `jskat-ml-pro` | [JSkat](https://github.com/b0n541/jskat-multimodule): a rule-based player and a transformer trained on ISS games | Apache 2.0 | the full game; card play |
+| `xskat`, `xskat-blind` | [XSkat 4.0](https://github.com/mfrasca/xskat) (Gunter Gerhardt, C, 2004): heuristic tables, the classic X11 program | custom permissive, not GPL | the full game |
+| `go-skat` | [go-skat](https://github.com/dranidis/go-skat) (Dimitris Dranidis, Go, 2022): heuristics plus a sampled alpha-beta | MIT | the full game |
+| `skatzero` | [SkatZero](https://github.com/Jimboom7/SkatZero): deep Monte Carlo self-play, nine networks, first on the ISS leaderboard by its author's account | MIT | card play only |
 
-If you cloned without submodules:
+**JSkat** is a Gradle submodule under `third_party/jskat`, adapted by
+`jskat-ai/`. It points at a **modified fork**,
+[honkphluxx/jskat](https://github.com/honkphluxx/jskat), branch `skatklar`; the
+five changes are listed in that repository's `CHANGES.md`, where the Apache
+licence asks for them. Two are the reason a fork exists: the arena cannot run
+duplicate deals against players whose shared random generators cannot be
+seeded, and upstream's `getSuitMultiplier` loops forever on a holding with no
+trumps — it froze a 1500-board run for 31 minutes at 100% of a core. The
+learned players need models that are **not in JSkat's repository**, about
+113 MB from [skat-ml-models](https://github.com/avaskys/skat-ml-models):
 
 ```bash
 git submodule update --init third_party/jskat
-```
-
-One more step is needed for the *learned* JSkat players, and it is easy to miss:
-`jskat-ml-pro` and `jskat-ml` load ONNX models that are **not in JSkat's
-repository** -- they are downloaded from
-[skat-ml-models](https://github.com/avaskys/skat-ml-models) releases, about
-113 MB of them, into `third_party/jskat/.jskat/models`.
-
-```bash
 cd third_party/jskat && ./gradlew :jskat-base:downloadMlModels
 ```
 
-Without them those two contestants are absent, exactly as if the submodule were
-missing: the registry finds no adapter and says so once. `jskat-new`, the
-algorithmic player, needs no download.
+**XSkat and go-skat** are C and Go programs with no "given this position, play
+a card" entry point, so each runs as a helper process that plays a whole game
+of its own, with the arena supplying the other two seats' cards where a human
+used to; the protocol is a dozen lines a game (`HELLO`, `GAME`, `PLAY`,
+`PLAYED`, …) and is documented in `docs/external-bots.md`. That means handing
+the helper cards its seat should not see, which is treated as a risk to be
+measured: `-Dskat.probe=<n>` asks the helper for every card again with the
+unseen cards reshuffled, and a player reading only its own hand answers the
+same card every time (XSkat reads the skat; `xskat-blind` is dealt a sampled
+one instead, and the two are within 0.01 of each other). Both are fetched into
+`third_party/` and built in place, no upstream file modified:
+
+```bash
+# XSkat 4.0: xskat.de is gone; Debian's pool has the pristine tarball
+mkdir -p third_party/xskat && curl -L http://deb.debian.org/debian/pool/main/x/xskat/xskat_4.0.orig.tar.gz | tar xz -C third_party/xskat --strip-components=1
+git clone https://github.com/dranidis/go-skat third_party/go-skat
+./tools/build-external-bots.sh          # needs a C compiler and Go
+```
+
+**SkatZero** is a different kind of opponent: no search, no rules knowledge,
+a six-layer network plus an LSTM over the history, trained by self-play over
+about 1.5 billion games per model. Its bidding is a heuristic bolted on
+afterwards, so `tools/skatzero-bot.py` does not bid and it is measured at
+fixed contracts only. It is honest by construction — the driver keeps only
+the seat's own cards, so the probe has nothing to find — and it is the
+strongest card play on the ladder, the reference the training plan's
+population constraint wanted: a player whose style owes nothing to ours.
+
+```bash
+git clone https://github.com/Jimboom7/SkatZero third_party/skatzero   # models included, 52 MB
+python -m pip install numpy onnxruntime
+```
+
+A checkout that has fetched none of them builds and runs exactly as before:
+the contestants are registered from hooks that look for the binaries, and a
+missing engine costs the arena an opponent rather than a run.
 
 ## Contributing, and the one house rule
 
