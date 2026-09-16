@@ -118,6 +118,47 @@ overall. **Phase A moves ahead of Phase D**, and the Null variants are the first
 thing in it — a Null that can only ever be bid to 23 is a contract we own on
 paper and never play.
 
+## 2.6 Where we stand after the tiebreak run, 2026-09-16
+
+The shipped player is `belief-32-adaptive-margin-ties`: the reference
+player with the auction allowed to re-price the hand, card-play ties
+broken by a fifteen-point cushion, and the ties that leaves broken by the
+position in the trick. Three seeds, void mode; details in
+[`../arena/README.md`](../arena/README.md), 2026-09-16.
+
+| shipped minus | full game | change vs 2.5, paired by board |
+| --- | --- | --- |
+| `belief-32-adaptive-margin` (exact pairing) | +0.23 [−0.19, +0.66] | — |
+| `xskat` | +0.72 [−0.64, +2.07] | **+0.80** [+0.26, +1.34] |
+| `jskat-new` | **+11.72** [+10.48, +12.95] | +0.38 [−0.48, +1.24] |
+| `go-skat` | **+3.01** [+1.61, +4.41] | +0.45 [−0.31, +1.22] |
+| `solver` (oracle, `belief-32`) | **−5.38** [−6.61, −4.14] | the ceiling, now honest |
+
+- **The rule tiebreak is small and non-negative everywhere**, resolved
+  against XSkat when paired by board. Same standard as the adaptive bidder;
+  shipped at every level. The ladder has not been re-measured with it.
+- **The ceiling is honest now** (the cheat discards for its contract and
+  plays Null with the Null solver) and it says something new: `belief-32`
+  and `skatzero` are the same distance from perfect play (+0.23 [−1.34,
+  +1.80] between them through the solver), while SkatZero beats belief-32
+  by 3.6 head to head. The gap between the two honest players is made
+  against imperfect opponents, which is the part determinized search
+  cannot see and a policy trained under the fog can. The 5.4 points to
+  omniscience are nobody's to teach yet.
+- **The deterministic levers are used up.** Jack floor, cushion, position:
+  each was structural, each passed the gates, together they are worth
+  about two points over the reference. What is left in card play is the
+  fog, and that is a learned player (§B2 for the belief, the pilot's
+  imitation-then-anchored-PPO for the policy), not another rule.
+
+**Next, in order:** B2's cheap half first -- a void-mode corpus from the
+wider population (`greedy, search-4, club, expert, jskat-new, xskat-blind,
+go-skat`; `skatzero` only once it has a delegate bidder, since as seated it
+never bids and would teach the model that a pass means nothing), the same
+model retrained, Null still guarded -- to learn whether the population
+matters before the Null work is paid for; then the ladder re-run with the
+three switches; then, if the population moved the belief, the rest of B2.
+
 ## 2.5 Where we stand after the ship run, 2026-09-15
 
 The shipped player is `belief-32-adaptive-margin`: the reference player with

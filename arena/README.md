@@ -2843,3 +2843,71 @@ three seeds) were taken with the old discard and are superseded;
 `--fixed-contract` rows with greedy's contracts (`expert-vs-solver`,
 `solver-vs-greedy`) also change meaning and are left as they are until
 somebody needs them.
+
+### 2026-09-16: the rule tiebreak passes its gates and ships; the ceiling is honest; a Null hole in the cheat
+
+Three seeds, void mode, 300 boards (200 against go-skat), the run of
+2026-09-15/16 with `--redo=vs-solver-oracle`.
+
+**The rule tiebreak.** `belief-32-adaptive-margin-ties` against the shipped
+player and the field; the "paired" column is board by board against the
+shipped player's own logs on the same seeds, which the identical boards
+allow (`~/paired.py`):
+
+| ties minus | pooled | seeds | paired by board vs shipped |
+| --- | --- | --- | --- |
+| `belief-32-adaptive-margin` (exact pairing) | +0.23 [−0.19, +0.66] | +0.33, −0.17, +0.58 | — |
+| `xskat` | +0.72 [−0.64, +2.07] | +2.47, −1.10, +0.33 | **+0.80** [+0.26, +1.34], 194 of 900 boards differ |
+| `jskat-new` | **+11.72** [+10.48, +12.95] | +11.18, +10.98, +13.19 | +0.38 [−0.48, +1.24] |
+| `go-skat` | **+3.01** [+1.61, +4.41] | +3.41, +2.53, +3.06 | +0.45 [−0.31, +1.22] |
+
+Small, as expected of a rule that only decides what the search called a
+tie, and non-negative on all four gates: the same standard the adaptive
+bidder shipped on (+0.14 unresolved in self-play, non-negative elsewhere),
+and stronger than that in one place -- against XSkat the board-paired gain
+is resolved. It fires on about a fifth of boards against XSkat (194 of 900
+scored differently) and on two fifths against JSkat. It learns nothing and
+prices nothing, so the population constraint is satisfied by construction.
+**Shipped**: `Opponents.seat` adds `.withRuleTiebreak()` after the cushion
+at every level; the app's ladder has not been re-measured with it and the
+next ladder run records that.
+
+**The ceiling, re-measured with the solved discard.** The cheat now wins
+every trump declaration it is handed (100% at Diamonds through Grand on
+every seed, against 85% before), and the rows read as a distance at last:
+
+| honest minus `solver`, oracle contracts | pooled | seeds |
+| --- | --- | --- |
+| `belief-32` | **−5.38** [−6.61, −4.14] | −5.68, −4.65, −5.95 |
+| `skatzero` | **−5.20** [−6.50, −3.90] | −4.46, −8.00, −4.58 |
+
+And a finding in the pairing. Board by board through the common opponent,
+`(belief-32 − solver) − (skatzero − solver) = +0.23 [−1.34, +1.80]` over
+525 boards: **against perfect play the two honest players are the same
+distance from the ceiling**, while head to head SkatZero beats belief-32 by
+3.58 [2.31, 4.85] on the same kind of boards. Both make about the same
+amount of what perfect play punishes; the 3.6 points between them are
+made against an imperfect opponent -- SkatZero exploiting belief-32's
+play, or belief-32 failing to exploit SkatZero's, or both. That is the
+part of the game a determinized search cannot see (strategy fusion: it
+assumes an opponent who knows what it knows) and the part a policy
+trained under the fog learns, which is what the Mini-Skat pilot found from
+the other side. It also says the remaining 5.4 points to omniscience are
+not SkatZero's to teach: it has none of them either.
+
+**The Null hole.** The one place the cheat still lost was Null: 1 of 5,
+1 of 5 and 3 of 8 of its own oracle Nulls, against 80% for `belief-32` on
+the same boards. `DoubleDummySolver` refuses Null by design and
+`SolverAiProvider` asked it anyway; without the native library that throws
+and the engine plays a fallback card, with it the native points search
+answered something meaningless. Fixed: the cheat now plays Null with
+`NullSolver.movesSurviving` -- the declarer a card that keeps it alive, a
+defender a card after which it does not survive, the delegate's card when
+nothing changes the verdict. `theSolverPlaysNullWithTheNullSolver` deals a
+survivable Null with the declarer's high cards first, so that the fallback
+card is the wrong one, plays it with the solver in every seat and checks
+every decision against the Null solver's verdicts; with the branch removed
+it fails on the first trick. The two solver rows above were taken before
+this fix; the Null share of them is about 2.5% of boards, so the ceiling
+moves by a tenth of a point at most, and the rows are re-measured with the
+next `--redo=vs-solver-oracle` rather than tonight.

@@ -23,6 +23,7 @@ import dev.skatklar.demo.ai.GreedyAiProvider;
 import dev.skatklar.training.players.SolverAiProvider;
 import java.util.EnumMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -292,6 +293,89 @@ public class ArenaTest {
             checked++;
         }
         assertTrue("the oracle priced fewer than six of twelve boards", checked == 6);
+    }
+
+    /**
+     * The cheat plays Null with the Null solver, not with a points search.
+     *
+     * <p>A survivable Null, dealt by hand with the declarer's high cards first
+     * so that "the first legal card" is the wrong one, played by the solver in
+     * every seat: at every declarer turn the card played must keep the
+     * declarer alive whenever any card does, at every defender turn it must
+     * kill the declarer whenever any card does, and the declarer must win.
+     * Before the Null branch, the double-dummy solver refused the contract
+     * and the cheat played a fallback card: it won a fifth of its oracle
+     * Nulls.
+     */
+    @Test public void theSolverPlaysNullWithTheNullSolver() {
+        List<Card> ordered = new java.util.ArrayList<>();
+        for (Card.Suit suit : List.of(Card.Suit.CLUBS, Card.Suit.SPADES, Card.Suit.HEARTS)) {
+            for (Card.Rank rank : List.of(Card.Rank.NINE, Card.Rank.EIGHT, Card.Rank.SEVEN)) {
+                ordered.add(new Card(suit, rank));
+            }
+        }
+        ordered.add(new Card(Card.Suit.DIAMONDS, Card.Rank.SEVEN));          // the declarer's ten
+        for (Card.Suit suit : List.of(Card.Suit.CLUBS, Card.Suit.SPADES)) {  // opponent one
+            for (Card.Rank rank : List.of(Card.Rank.TEN, Card.Rank.JACK, Card.Rank.QUEEN, Card.Rank.KING, Card.Rank.ACE)) {
+                ordered.add(new Card(suit, rank));
+            }
+        }
+        for (Card.Rank rank : List.of(Card.Rank.TEN, Card.Rank.JACK, Card.Rank.QUEEN, Card.Rank.KING, Card.Rank.ACE)) {
+            ordered.add(new Card(Card.Suit.HEARTS, rank));                    // opponent two
+        }
+        for (Card.Rank rank : List.of(Card.Rank.EIGHT, Card.Rank.NINE, Card.Rank.TEN, Card.Rank.JACK, Card.Rank.QUEEN)) {
+            ordered.add(new Card(Card.Suit.DIAMONDS, rank));
+        }
+        ordered.add(new Card(Card.Suit.DIAMONDS, Card.Rank.KING));           // the skat
+        ordered.add(new Card(Card.Suit.DIAMONDS, Card.Rank.ACE));
+        Board board = new Board(0, dev.skatklar.demo.SkatDeck.dealFrom(ordered),
+                new SkatAi.RoundPosition(0, SkatAi.Seat.HUMAN));
+        ContractSource.FixedContract fixed =
+                new ContractSource.FixedContract(SkatAi.Seat.HUMAN, Contract.NULL, 0);
+
+        Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
+        for (SkatAi.Seat seat : SkatAi.Seat.values()) seating.put(seat, new SolverAiProvider());
+        GameEngine engine = GameEngine.headless(new Random(1), SeatedAiProviders.of(seating));
+        for (SkatAiProvider provider : seating.values()) {
+            ((TableObserver) provider).observe(engine);
+            ((TableObserver) provider).observeFixedContract(board, fixed);
+        }
+        engine.restartWithContract(board.deal(), board.round(), fixed.declarer(),
+                fixed.contract(), fixed.bidValue(), Set.of());
+
+        for (int step = 0; step < 128; step++) {
+            GameEngine.Snapshot snapshot = engine.snapshot();
+            if (snapshot.gameComplete()) break;
+            if (snapshot.trickComplete()) { engine.finishCompletedTrick(); continue; }
+            SkatAi.Seat toPlay = SkatAi.Seat.values()[snapshot.currentPlayer];
+            List<Card> trickSoFar = new java.util.ArrayList<>();
+            for (SkatAi.PlayedCard play : snapshot.trick) trickSoFar.add(play.card);
+            boolean declaring = toPlay == fixed.declarer();
+            boolean canHaveItsWay = false;
+            for (dev.skatklar.demo.solve.NullSolver.Verdict verdict
+                    : dev.skatklar.demo.solve.NullSolver.movesSurviving(fixed.declarer(), toPlay,
+                    snapshot.hands, SkatAi.Seat.values()[snapshot.leader], trickSoFar)) {
+                if (verdict.declarerSurvives() == declaring) canHaveItsWay = true;
+            }
+            Card played = engine.playAiCard();
+            if (!canHaveItsWay) continue;
+            List<List<Card>> after = new java.util.ArrayList<>();
+            for (List<Card> hand : snapshot.hands) after.add(new java.util.ArrayList<>(hand));
+            after.get(toPlay.ordinal()).remove(played);
+            boolean survivesAfter = false;
+            for (dev.skatklar.demo.solve.NullSolver.Verdict verdict
+                    : dev.skatklar.demo.solve.NullSolver.movesSurviving(fixed.declarer(), toPlay,
+                    snapshot.hands, SkatAi.Seat.values()[snapshot.leader], trickSoFar)) {
+                if (verdict.card().equals(played)) survivesAfter = verdict.declarerSurvives();
+            }
+            assertEquals(toPlay + " played " + played + " at trick " + (snapshot.completedTricks + 1)
+                    + " when a card that " + (declaring ? "survives" : "kills") + " existed",
+                    declaring, survivesAfter);
+        }
+        assertTrue("the survivable Null was lost", engine.snapshot().result.declarerWon);
+        assertTrue("the cheat tripped the legality guard: " + engine.ruleViolations(),
+                engine.ruleViolations().isEmpty());
+        engine.close();
     }
 
     /** Lost, won, Schneider: what a Skat game is actually scored on. */

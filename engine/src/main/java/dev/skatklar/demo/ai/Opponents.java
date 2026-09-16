@@ -149,8 +149,8 @@ public final class Opponents {
      * off on the same boards; the app never calls this.
      *
      * @param adaptively the auction re-prices the hand and card-play ties are
-     *                   broken by the cushion, whatever {@link Level#playsAdaptively}
-     *                   says
+     *                   broken by the cushion and then by position, whatever
+     *                   {@link Level#playsAdaptively} says
      */
     public static SkatAiProvider seat(Level level, WorldSource worlds, long seed,
                                       long biddingBudgetNanos, boolean adaptively) {
@@ -159,19 +159,23 @@ public final class Opponents {
         // single provider at every AI seat, and a search player keeps evidence on
         // the provider -- shared, the two AI seats would overwrite each other's
         // private knowledge of the Schieben. See PerSeatAiProvider.
-        // Both switches the arena cleared for shipping, where the ladder was
+        // The switches the arena cleared for shipping, where the ladder was
         // measured with them: the auction re-prices the hand (+0.14 in exact
         // pairing, about half a point better against both outside engines)
         // and card-play ties are broken by a fifteen-point cushion (+1.10);
         // together +1.07 [+0.32, +1.83] against the same player without them,
         // level with XSkat for the first time, and non-negative against every
-        // outsider. See arena/README.md, 2026-09-14 and 2026-09-15, and
-        // Level.playsAdaptively for why not every level.
+        // outsider. The ties the cushion still leaves are broken by the
+        // position in the trick (2026-09-16: +0.23 [-0.19, +0.66] in exact
+        // pairing on top of the two, +0.80 [+0.26, +1.34] paired by board
+        // against XSkat, non-negative against JSkat and go-skat). See
+        // arena/README.md, 2026-09-14 to 2026-09-16, and Level.playsAdaptively.
         return new PerSeatAiProvider(seat -> {
             SearchAiProvider player = new SearchAiProvider(new GreedyAiProvider(),
                     level.personality(), seed * 31L + seat.ordinal(), believed);
             if (adaptively) {
-                player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION);
+                player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION)
+                        .withRuleTiebreak();
             }
             return player.withBiddingBudget(biddingBudgetNanos);
         });

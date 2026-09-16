@@ -236,6 +236,25 @@ public final class SolverAiProvider implements SkatAiProvider, TableObserver {
             List<Card> trickSoFar = new ArrayList<>(3);
             for (SkatAi.PlayedCard play : snapshot.trick) trickSoFar.add(play.card);
 
+            // Null is a different game: the double-dummy solver refuses it
+            // (and the native one, asked anyway, answered with a points
+            // search that means nothing there -- the cheat won a fifth of
+            // its oracle Nulls before this branch existed). The Null solver
+            // says, per card, whether the declarer still survives; the
+            // declarer plays one that does and a defender one after which
+            // it does not, and where no card changes the verdict the choice
+            // does not matter and the delegate's will do.
+            if (context.game.contract.isNull()) {
+                boolean declaring = context.mySeat == context.game.declarer;
+                for (NullSolver.Verdict verdict : NullSolver.movesSurviving(context.game.declarer,
+                        context.mySeat, snapshot.hands, SkatAi.Seat.values()[snapshot.leader], trickSoFar)) {
+                    if (verdict.declarerSurvives() == declaring && context.legalCards.contains(verdict.card())) {
+                        return verdict.card();
+                    }
+                }
+                return blind.chooseCard(context);
+            }
+
             // What the declarer has already banked, skat included -- the engine
             // credits the skat to the declarer at settlement, so a solver that
             // ignored it would defend the wrong threshold by up to 22 points.

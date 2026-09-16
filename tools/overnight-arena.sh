@@ -595,8 +595,10 @@ for SEED in $SEEDS; do
             # its own declarations, so both honest players measured level with
             # it. It now discards by the solver when the arena tells it the
             # contract (SolverAiProvider.solvedDiscard), which is every
-            # fixed-contract row. Logs from before that date are the old
-            # instrument: --redo=vs-solver-oracle re-measures these two.
+            # fixed-contract row, and since 2026-09-16 it plays Null with the
+            # Null solver instead of losing four Nulls in five. Logs from
+            # before either date are the old instrument:
+            # --redo=vs-solver-oracle re-measures these two.
             match belief-32 solver "$(boards 200)" "--fixed-contract --contracts=solver"
             match skatzero solver "$(boards 200)" "--fixed-contract --contracts=solver"
         fi
