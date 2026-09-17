@@ -143,11 +143,15 @@ details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
   JSkat; card play 3.6 behind SkatZero at oracle contracts and 5.4 behind
   the honest ceiling, both taken with the v1 belief.
 
-**Next, in order:** the ladder re-run (three switches at every level, v2
-belief) so the product's spacing is on record; the two oracle rows
-against `solver` and `skatzero` with the v2 belief, so the card-play
-standing is current; then the rest of B2, starting with the longer run
-(cheap, the corpus exists) and Null in the model.
+- **The ladder is on record** (2026-09-17, second entry): −3.76 / −5.91 /
+  −2.91, every step resolved on every seed; the rules are worth +2.85 at
+  beginner and +1.69 at club, both resolved now.
+
+**Next, in order:** the two oracle rows against `solver` and `skatzero`
+with the v2 belief, so the card-play standing is current
+(`--redo=vs-solver-oracle` and `--redo=vs-skatzero-oracle`); then the rest
+of B2, starting with the longer run (cheap, the corpus exists) and Null in
+the model.
 
 ## 2.6 Where we stand after the tiebreak run, 2026-09-16
 

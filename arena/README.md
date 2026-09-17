@@ -2979,3 +2979,35 @@ validation loss invites. The full B2 is those three. The shipped player is
 now `belief-32-adaptive-margin-ties` on the v2 belief; the ladder has not
 been re-measured with either the rules at the lower levels or the new
 belief, and the next ladder run records both.
+
+### 2026-09-17, second: the ladder as the app now ships it
+
+`--redo=app-`, three seeds, 200 boards a seed, full game, void mode; every
+level with the three rules (jack floor, cushion, position) and the v2
+belief where the level uses one. This is the spacing the phone seats today.
+
+| step | pooled | seeds | declarer wins |
+| --- | --- | --- | --- |
+| `app-beginner` − `app-club` | **−3.76** [−5.40, −2.12] | −2.77, −4.38, −3.84 | 62% vs 73% |
+| `app-club` − `app-expert` | **−5.91** [−7.31, −4.52] | −5.94, −5.79, −6.04 | 63% vs 85% |
+| `app-expert` − `app-analyst` | **−2.91** [−4.07, −1.75] | −4.33, −2.23, −2.85 | 69% vs 86% |
+
+Four levels a level apart, every step resolved, every seed the right way
+round. Against the ladder of 2026-09-15 (−4.23 / −6.58 / −2.55) the two
+lower steps narrowed by about half a point, as switching the rules on at the
+two lower levels predicted, and the top step widened by a third: the belief
+gain lands at the levels that carry a belief.
+
+The rules at the lower levels, re-measured with the third one in and the
+new belief on both sides, are now resolved where they were not:
+
+| level | on − off | seeds |
+| --- | --- | --- |
+| `app-beginner` | **+2.85** [+1.20, +4.49] | +1.81, +4.05, +2.91 |
+| `app-club` | **+1.69** [+0.24, +3.15] | +1.07, +2.81, +0.81 |
+
+Two and a half points at beginner and one and a half at club, from rules
+that were designed on the analyst's 32 worlds; the fewer worlds a level
+samples, the more of its decisions are ties, and the more the tiebreaks
+decide. (`app-club-on` is now the same player as `app-club`, so its row
+against `app-expert` is the second step repeated, byte for byte.)

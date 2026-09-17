@@ -86,10 +86,15 @@ public final class Opponents {
          * positive on every seed, and the mechanism is visible in the
          * declaring rates -- club declares 27% of games instead of 33% and wins
          * 79% of them instead of 71%, the jack floor saving the weak player
-         * from declarations it loses. The ladder stays four levels a level
-         * apart with the switches on everywhere. The cost worry was real but
-         * small: the cushion is asked for only on the decisions where the
-         * vote left a tie, and at six worlds those decisions are cheap.
+         * from declarations it loses. Re-measured on 2026-09-17 with the
+         * third rule (the position tiebreak) and the v2 belief: +2.85
+         * [+1.20, +4.49] at beginner and +1.69 [+0.24, +3.15] at club, both
+         * resolved -- the fewer worlds a level samples, the more of its
+         * decisions are ties, and the more the tiebreaks decide. The ladder
+         * stays four levels a level apart with the switches on everywhere
+         * (3.8 / 5.9 / 2.9). The cost worry was real but small: the cushion
+         * is asked for only on the decisions where the vote left a tie, and
+         * at six worlds those decisions are cheap.
          */
         public boolean playsAdaptively() { return true; }
 
