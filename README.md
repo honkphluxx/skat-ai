@@ -208,16 +208,13 @@ imperfect opponent, which is the part a determinized search cannot see
 (it assumes an opponent who knows what it knows) and the part a policy trained
 under the fog can. That is the open problem this repository is working on.
 
-The ladder the app ships, every step resolved, full game (2026-09-15, taken
-before the rules went on at the two lower levels too; that narrows the two
-lower steps by about half a point and a point, and the next ladder run records
-the exact spacing):
+The ladder the app ships, every step resolved, full game (2026-09-17):
 
 | Step | game pts/game |
 | --- | --- |
-| beginner → club | 4.2 |
-| club → expert | 6.6 |
-| expert → analyst | 2.6 |
+| beginner → club | 3.8 |
+| club → expert | 5.9 |
+| expert → analyst | 2.9 |
 
 [`arena/README.md`](arena/README.md) is the lab notebook behind all of it,
 including the measurements that came out flat (an alpha-mu search: correct,
