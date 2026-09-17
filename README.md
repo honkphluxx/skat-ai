@@ -194,19 +194,22 @@ than X" means card play rather than taste in games:
 
 | Match | game pts/game | 95% CI |
 | --- | --- | --- |
-| belief-32 − SkatZero | **−3.58** | [−4.85, −2.31] |
-| belief-32 − double-dummy solver (which sees everything) | **−5.38** | [−6.61, −4.14] |
-| SkatZero − double-dummy solver | **−5.20** | [−6.50, −3.90] |
+| shipped − SkatZero | **−2.57** | [−3.85, −1.28] |
+| belief-32 − double-dummy solver (which sees everything) | **−7.04** | [−8.39, −5.69] |
+| SkatZero − double-dummy solver | **−5.84** | [−7.09, −4.58] |
 
 The first table says the player is level with XSkat and ahead of the rest.
-The second says where the remaining points are: SkatZero, a self-play
-reinforcement learner, is 3.6 points better at card play, yet paired board by
-board through the common opponent the two are the *same* distance from
-perfect play (+0.23 [−1.34, +1.80] between them). Both make about the same
-amount of what perfect play punishes; SkatZero's edge is made against an
-imperfect opponent, which is the part a determinized search cannot see
-(it assumes an opponent who knows what it knows) and the part a policy trained
-under the fog can. That is the open problem this repository is working on.
+The second says where the remaining points are, and it decomposes in a way
+that took a while to see. Counting games lost to the cheat at each contract:
+of 507 oracle trump games `belief-32` loses 56 and SkatZero 61, so at trump
+contracts **a determinized search is level with a self-play reinforcement
+learner**; of 18 Null games we lose 11 and it loses 4, and that one column is
+the whole of the difference. Null is the corner nothing here has ever
+trained on -- no player in the population announces one, so the belief model
+has seen zero Null positions and the sampler falls back to uniform worlds.
+The rest of the distance to the cheat, five or six points of it, is the fog:
+what a player gives away by not knowing where the cards are. That is the open
+problem this repository is working on.
 
 The ladder the app ships, every step resolved, full game (2026-09-17):
 

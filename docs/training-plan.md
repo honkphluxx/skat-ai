@@ -147,11 +147,25 @@ details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
   −2.91, every step resolved on every seed; the rules are worth +2.85 at
   beginner and +1.69 at club, both resolved now.
 
-**Next, in order:** the two oracle rows against `solver` and `skatzero`
-with the v2 belief, so the card-play standing is current
-(`--redo=vs-solver-oracle` and `--redo=vs-skatzero-oracle`); then the rest
-of B2, starting with the longer run (cheap, the corpus exists) and Null in
-the model.
+- **Card play is level with SkatZero at trump contracts** (2026-09-17,
+  third entry): of 507 oracle trump games, `belief-32` loses 56 to the
+  cheat and `skatzero` 61; of 18 Nulls, we lose 11 and it loses 4. The
+  head-to-head deficit is a Null deficit. The shipped player is
+  −2.57 [−3.85, −1.28] against SkatZero, a point closer than the
+  2026-09-15 player was.
+- **Null is the one unvisited corner left.** The v2 corpus has 0 Null
+  decision points in 511,816 records, for the same reason the v1 corpus
+  did: nothing in the population announces Null. The belief guard is
+  therefore still correct, and Null is played on uniform worlds.
+
+**Next, in order:** Null card play, which is now the largest measured
+weakness and the cheapest to attack -- more worlds for Null (its solves
+are an order of magnitude cheaper than a trump game's, so 128 or 256
+worlds costs little), and a Null-declaring member of the export
+population so the model can stop being blind there; then the rest of B2
+(the longer or wider training run, the true-world-share diagnostic);
+then, if it still looks worth it, the opponent-modelling cheat as a
+second ceiling instrument (see below).
 
 ## 2.6 Where we stand after the tiebreak run, 2026-09-16
 

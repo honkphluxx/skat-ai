@@ -584,7 +584,7 @@ for SEED in $SEEDS; do
         match search skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
         if [ -f belief-model/belief.bin ] || [ -f belief-model/belief.onnx ]; then
             match belief-32 skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
-            match belief-32-adaptive-margin-ties skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
+            match belief-32-adaptive-margin skatzero "$(boards 200)" "--fixed-contract --contracts=solver"
             # Distance to omniscience. At oracle contracts the cheat makes every
             # game it declares by construction, so this row is one number: how
             # often the honest player makes an oracle-makeable contract against
@@ -601,6 +601,7 @@ for SEED in $SEEDS; do
             # before either date are the old instrument:
             # --redo=vs-solver-oracle re-measures these two.
             match belief-32 solver "$(boards 200)" "--fixed-contract --contracts=solver"
+            match belief-32-adaptive-margin-ties solver "$(boards 200)" "--fixed-contract --contracts=solver"
             match skatzero solver "$(boards 200)" "--fixed-contract --contracts=solver"
         fi
     fi

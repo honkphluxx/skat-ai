@@ -3011,3 +3011,56 @@ that were designed on the analyst's 32 worlds; the fewer worlds a level
 samples, the more of its decisions are ties, and the more the tiebreaks
 decide. (`app-club-on` is now the same player as `app-club`, so its row
 against `app-expert` is the second step repeated, byte for byte.)
+
+### 2026-09-17, third: the honest ceiling, and where the SkatZero gap actually is
+
+`--redo=vs-skatzero-oracle`, which also picked up the twelve solver logs an
+earlier redo had moved aside. Three seeds, 200 boards, oracle contracts, the
+v2 belief on our side and the cheat discarding and playing Null properly.
+
+| oracle contracts | pooled | seeds | before |
+| --- | --- | --- | --- |
+| `search` − `skatzero` | **−5.04** [−6.26, −3.82] | −3.91, −5.92, −7.13 | −5.04, identical |
+| `belief-32` − `skatzero` | **−3.82** [−5.06, −2.59] | −3.80, −2.68, −5.06 | −3.58 (v1 belief) |
+| shipped − `skatzero` | **−2.57** [−3.85, −1.28] | −1.63, −2.87, −3.67 | −3.58 for the 2026-09-15 shipped player |
+| `belief-32` − `solver` | **−7.04** [−8.39, −5.69] | −7.09, −7.43, −6.82 | −5.38, before the cheat's Null fix |
+| `skatzero` − `solver` | **−5.84** [−7.09, −4.58] | −4.97, −8.40, −5.51 | −5.20, same caveat |
+
+`search` carries no belief, so changing the belief must not move it, and it
+did not: the same five digits as the run of two days ago. That is the
+arena's reproducibility control passing on a row nobody arranged.
+
+**The two ceiling rows are not comparable with 2026-09-16's.** The cheat now
+wins 100% of its oracle Nulls where it won 20–38%, and defends Null with the
+Null solver as well, so both honest players are further from it than they
+were. The ceiling moved, not the players.
+
+**Where the gap is.** Counting games lost to the cheat at each contract, 525
+games a side over three seeds:
+
+| contract | `belief-32` loses | `skatzero` loses | of |
+| --- | --- | --- | --- |
+| Diamonds, Hearts, Spades, Clubs, Grand | **56** | **61** | 507 |
+| Null | **11** | **4** | 18 |
+
+**In trump games the two are level** -- if anything ours is a shade ahead --
+and the whole of the difference is Null, where we win 39% of contracts the
+oracle certified as makeable and SkatZero wins 78%. Null is 3.4% of oracle
+boards, and the arithmetic of those seven games is about a point a game,
+which is the whole of the difference between the two ceiling rows. So "the
+learned player is better at card play" was too broad a reading of the
+head-to-head: it is better at Null, and level at everything else.
+
+**Why our Null is weak, measured rather than guessed.** The v2 corpus has
+**0 Null decision points in 511,816 records**, exactly as the v1 corpus did:
+no player in the population ever announces Null, which the auction reports
+confirm -- in 300 boards against XSkat neither side declares a single one.
+So `BeliefWorldSource` still hands Null to the uniform sampler (its guard is
+correct and stays), and a Null is played on 32 uniformly drawn worlds. The
+fix is not a better network; it is a population that declares Null, or more
+worlds for a contract whose solves are an order of magnitude cheaper than a
+trump game's, or both. Queued as its own item.
+
+A caveat on what is missing: there is no shipped-player-against-`solver` row,
+so the distance to the ceiling is only known for `belief-32`. The overnight
+script now has that row.
