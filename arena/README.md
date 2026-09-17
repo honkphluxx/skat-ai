@@ -2926,3 +2926,56 @@ model the two score exactly 0.000 against each other over 18 games.
 seeds), each skipped when its output exists, `--quick` for a rehearsal into
 its own directories. The row that decides is the shipped combination
 against itself with the belief swapped, in exact pairing.
+
+### 2026-09-17: B2's cheap half pays; the belief is retrained and ships
+
+`tools/belief-v2.sh`, one run: 200,000 void-mode boards from `greedy,
+search-4, club, expert, jskat-new, xskat-blind, go-skat` (5,101,180 records,
+4 h 05 min at 346 records a second on 16 threads), `check_data` PASS on the
+first million records, 20 epochs in seven minutes on the GPU, then the
+gates on three seeds. The population is the only thing that changed:
+same encoding, same 306×512×3 network, same trainer, Null still guarded.
+
+**The model.** Held out on its own corpus, 66.3% of unseen cards placed
+correctly against the 46.7% uniform baseline (+19.6 points; nll 0.653),
+where the shipped model scored 64.6% on its own, narrower corpus. Still
+improving at epoch 20 (train 0.673, val 0.653), so a longer run has room.
+
+**The gates**, void mode, three seeds, pooled by inverse variance; the
+paired column is board by board against the shipped player's own logs:
+
+| candidate minus | pooled | seeds | paired by board |
+| --- | --- | --- | --- |
+| shipped player, belief swapped (exact pairing) | **+0.69** [+0.04, +1.33] | +0.65, +0.66, +0.75 | — |
+| `belief-32` (model alone, full game) | +0.40 [−0.27, +1.06] | +0.56, +0.32, +0.23 | — |
+| `belief-32` (model alone, greedy contracts, card play) | −0.61 [−1.82, +0.60] | −0.87, −1.15, +0.17 | — |
+| `xskat` | +0.83 [−0.49, +2.15] | +2.32, −0.13, −0.36 | +0.04 [−0.98, +1.07] |
+| `jskat-new` | **+12.52** [+11.30, +13.74] | +13.22, +11.94, +12.30 | +0.70 [−0.39, +1.79] |
+| `go-skat` | **+3.07** [+1.72, +4.43] | +4.47, +3.30, +1.73 | +0.17 [−0.92, +1.26] |
+
+The row that decides is resolved and its three seeds agree to a tenth of a
+point, which is the signature of a real effect rather than a lucky seed.
+Every outsider row is non-negative in both readings. **Shipped**: the four
+files copied over `belief-model/` and the two the app carries into
+`app/src/main/assets/`; the server picks the new weights up from
+`belief-model/` at its next deployment.
+
+Two readings worth writing down. The greedy-contract card-play row is not
+evidence against the model: at greedy's contracts both sides score −11 a
+game and the interval needs 38,000 boards, so it measures nothing either
+way; the full-game rows are where a belief shows, because the auction and
+the discard are what it reads. And the population mattered by about the
+same amount as each of the three rules did (+0.4 to +1.1 each): the
+belief had been learning where five of our own players put their cards,
+and two outside styles in the corpus are worth two thirds of a point
+against everyone, including against those same two styles' cousins on the
+other side of the table. That is the population constraint of the plan
+earning its keep from the training side.
+
+**What it does not say**: nothing about Null (still guarded off), nothing
+about the true-world share in play (the diagnostic is not built), and
+nothing about a bigger network or a longer run, which the still-falling
+validation loss invites. The full B2 is those three. The shipped player is
+now `belief-32-adaptive-margin-ties` on the v2 belief; the ladder has not
+been re-measured with either the rules at the lower levels or the new
+belief, and the next ladder run records both.

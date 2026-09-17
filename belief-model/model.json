@@ -9,8 +9,8 @@
   ],
   "hidden": 512,
   "layers": 3,
-  "val_accuracy": 0.6460901960784313,
-  "val_nll": 0.6666505629595588,
-  "baseline_accuracy": 0.4664686274509804,
-  "baseline_nll": 0.8968088472867722
+  "val_accuracy": 0.6628206186701894,
+  "val_nll": 0.6530672638597913,
+  "baseline_accuracy": 0.46657240752972257,
+  "baseline_nll": 0.8961341270334989
 }

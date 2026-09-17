@@ -174,17 +174,19 @@ worth about two game points a game over the same player without them.
 
 ## Where it stands
 
-The shipped player, `belief-32-adaptive-margin-ties`, against the field.
-Three seeds pooled by inverse variance, 300 boards a seed (200 against
-go-skat), the auction played, passed-in boards voided; 2026-09-16.
+The shipped player, `belief-32-adaptive-margin-ties` on the v2 belief,
+against the field. Three seeds pooled by inverse variance, 300 boards a seed
+(200 against go-skat), the auction played, passed-in boards voided;
+2026-09-17.
 
 | Match | game pts/game | 95% CI |
 | --- | --- | --- |
-| shipped − XSkat | +0.72 | [−0.64, +2.07] |
-| shipped − go-skat | **+3.01** | [+1.61, +4.41] |
-| shipped − JSkat AlgorithmAI | **+11.72** | [+10.48, +12.95] |
+| shipped − XSkat | +0.83 | [−0.49, +2.15] |
+| shipped − go-skat | **+3.07** | [+1.72, +4.43] |
+| shipped − JSkat AlgorithmAI | **+12.52** | [+11.30, +13.74] |
 | the first two rules − the reference player without them | **+1.07** | [+0.32, +1.83] |
 | the third rule, on top of the two | +0.23 | [−0.19, +0.66] |
+| the v2 belief − the v1 belief, same player | **+0.69** | [+0.04, +1.33] |
 
 Card play alone, at the objectively best makeable contract on each board
 (`--fixed-contract --contracts=solver`), which is the only line where "stronger
@@ -226,7 +228,11 @@ ceiling that was not one until the cheating player learned to discard.
 
 **A trained belief ships with this repository**, under `belief-model/`: the
 weights, the shape descriptor, and the trainer's own recorded answers for
-sixteen inputs. So `belief` and `belief-32` are contestants from a fresh clone,
+sixteen inputs. The current one (2026-09-17) was trained on 200,000 boards
+played by seven programs -- five of ours and two outside engines -- because a
+belief trained only on games between copies of one player learns where *that*
+player puts its cards; widening the population was worth +0.69 [+0.04, +1.33]
+a game with everything else held fixed. `tools/belief-v2.sh` is that run. So `belief` and `belief-32` are contestants from a fresh clone,
 and the numbers in the table above can be reproduced rather than taken on trust.
 The PyTorch checkpoint and the ONNX export are not included; neither is needed to
 run or to verify anything.

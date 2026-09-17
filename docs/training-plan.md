@@ -118,6 +118,37 @@ overall. **Phase A moves ahead of Phase D**, and the Null variants are the first
 thing in it — a Null that can only ever be bid to 23 is a contract we own on
 paper and never play.
 
+## 2.7 Where we stand after the belief retrain, 2026-09-17
+
+The shipped player is `belief-32-adaptive-margin-ties` on the **v2 belief**:
+the same network retrained on a void-mode corpus from `greedy, search-4,
+club, expert, jskat-new, xskat-blind, go-skat`. Three seeds, void mode;
+details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
+
+| v2 belief minus v1, same player | full game |
+| --- | --- |
+| exact pairing | **+0.69** [+0.04, +1.33], seeds +0.65 / +0.66 / +0.75 |
+| paired by board against `xskat`, `jskat-new`, `go-skat` | +0.04, +0.70, +0.17, all non-negative |
+
+- **The population was a limit**, worth about as much as each of the three
+  rules. Held-out placement went from 64.6% to 66.3% against the same
+  46.7% baseline, and the gain shows against every outsider, not only the
+  two whose style entered the corpus.
+- **B2's cheap half is done in one night**; the expensive half (Null in
+  the model, the true-world-share diagnostic, a longer or wider training
+  run -- validation loss was still falling at epoch 20) is what remains
+  of B2 and is now worth doing, since the belief has been shown to move.
+- **Standing against the field** is the 2.6 table plus about two thirds
+  of a point: level with XSkat, three ahead of go-skat, twelve ahead of
+  JSkat; card play 3.6 behind SkatZero at oracle contracts and 5.4 behind
+  the honest ceiling, both taken with the v1 belief.
+
+**Next, in order:** the ladder re-run (three switches at every level, v2
+belief) so the product's spacing is on record; the two oracle rows
+against `solver` and `skatzero` with the v2 belief, so the card-play
+standing is current; then the rest of B2, starting with the longer run
+(cheap, the corpus exists) and Null in the model.
+
 ## 2.6 Where we stand after the tiebreak run, 2026-09-16
 
 The shipped player is `belief-32-adaptive-margin-ties`: the reference

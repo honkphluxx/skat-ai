@@ -357,9 +357,10 @@ for SEED in $SEEDS; do
         # The app's ladder, as the phone seats it (app-<level> is built by
         # Opponents.seat itself, belief and switches included), in the full
         # game with passed-in boards voided. Four levels that are a level
-        # apart is the number the product needs, and since 2026-09-15 the
-        # two upper levels play with both switches while the two lower ones do
-        # not, so the steps have to be re-measured.
+        # apart is the number the product needs. Since 2026-09-16 every
+        # level plays with all three switches and since 2026-09-17 on the
+        # v2 belief; logs from before are the old ladder, and
+        # --redo=app- re-measures it.
         match app-beginner app-club    "$(boards 200)" "--passed-in=void"
         match app-club     app-expert  "$(boards 200)" "--passed-in=void"
         match app-expert   app-analyst "$(boards 200)" "--passed-in=void"
