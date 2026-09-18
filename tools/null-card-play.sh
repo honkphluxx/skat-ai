@@ -19,31 +19,37 @@
 # contracts were worth one. Null is also slow -- NullSolver has no native
 # backend, so every world is a Java search -- and a night is finite.
 #
-# The two levers, each its own contestant against the shipped player, exactly
-# paired because only the one thing differs:
+# Each variant is its own contestant against the shipped player, exactly
+# paired because only the one thing differs.
 #
-#   belief-32-null-rank       break a Null's ties by Null's own rank instead of
-#                             by card points. The shipped order sorts a Null by
-#                             a quantity the contract does not score -- asked to
-#                             separate a ten from a queen it takes the queen,
-#                             three card points against ten, while in Null the
-#                             ten is the lower card. The replacement is one rule
-#                             with two directions: shed the highest safe card
-#                             (the declarer's high cards are the danger, and a
-#                             defender's are worth nothing), except as a defender
-#                             in front of a declarer that has not yet played,
-#                             where the low card is the ammunition that forces it
-#                             over. See RuleTiebreak.nullOrder.
-#   belief-32-null-128        sample 128 worlds at a Null instead of 32. A Null
-#                             solve is a yes/no question with no points to count
-#                             and is about an order of magnitude cheaper than a
-#                             trump game's, and the belief model is blind to Null
-#                             (0 decision points in 5.1 million records), so Null
-#                             worlds are drawn uniformly and more of them is the
-#                             one lever that costs only time.
-#   belief-32-null-rank-128   both, which is the candidate if both hold up.
-#   belief-32-null-rank-256   and the same with the world count doubled again,
-#                             to see whether more worlds keep paying.
+# What the first round (2026-09-18) settled, over 414 Null boards a side:
+#
+#   belief-32-null-128        +1.17 [+0.37, +1.98], resolved. More worlds pay.
+#   belief-32-null-rank       -1.33 [-1.95, -0.72], resolved WORSE. "Shed the
+#                             highest safe card" was wrong, and wrong for a
+#                             reason worth keeping: a card that reaches the
+#                             tiebreak already survives in every sampled world,
+#                             and the Null solver searches to the end of the
+#                             hand, so "safe now, dangerous later" is priced
+#                             already. What is left is robustness to worlds
+#                             nobody sampled, and there the low card is the
+#                             wider margin -- the cushion argument again.
+#   belief-32-null-rank-128   +0.08: the two cancel, as they should if the
+#                             tiebreak costs about what the worlds buy.
+#
+# This round asks the two questions that leaves:
+#
+#   belief-32-null-256        does the world count keep paying past 128? Never
+#                             measured without the refuted tiebreak attached.
+#   belief-32-null-low-128    the shipped points order sorts a Null by card
+#   belief-32-null-low-256    points, which the contract does not score, and
+#                             that accident approximates "play low" -- except
+#                             between a ten and a court card, where points take
+#                             the queen and Null rank takes the ten. LOW_RANK
+#                             says it properly. One disagreement, and it is the
+#                             only thing these two variants change.
+#
+# VARIANTS=... overrides the list, to re-run a single one.
 #
 # Read in the morning from arena-logs/summary-null.txt. The row that decides is
 # each variant against `belief-32-adaptive-margin-ties`, the shipped player, in
@@ -52,8 +58,8 @@
 # touches a trump game by construction (RuleTiebreakTest pins that), but "by
 # construction" is a claim the arena has disagreed with before.
 #
-# The order is variant-major: all three seeds of the rank tiebreak first, then
-# the world counts. An interrupted run therefore leaves a complete answer about
+# The order is variant-major: all three seeds of the first variant, then the
+# next. An interrupted run therefore leaves a complete answer about
 # the cheapest lever rather than a third of an answer about four.
 #
 # Resumable: a match whose log exists is skipped, a STOP file in the repository
@@ -94,7 +100,7 @@ say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 [ -f STOP ] && { rm -f STOP; echo "Removed a STOP file left over from an earlier run."; }
 
 SHIPPED=belief-32-adaptive-margin-ties
-VARIANTS="belief-32-null-rank belief-32-null-128 belief-32-null-rank-128 belief-32-null-rank-256"
+VARIANTS="${VARIANTS:-belief-32-null-256 belief-32-null-low-128 belief-32-null-low-256}"
 
 match() {
     local a="$1" b="$2"

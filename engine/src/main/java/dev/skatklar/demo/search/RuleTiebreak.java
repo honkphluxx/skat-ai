@@ -27,24 +27,68 @@ import java.util.List;
  * <p>A Null is a different game and gets a different order; see
  * {@link #nullOrder}.
  */
-final class RuleTiebreak {
+public final class RuleTiebreak {
 
     private RuleTiebreak() {}
 
-    /** Greater is better, as the search's own comparators read. The shipped order. */
-    static Comparator<Card> order(SkatAi.DecisionContext context) {
-        return order(context, false);
+    /**
+     * How a Null's last ties are settled. Only {@link #POINTS} ships; the
+     * others are contestants, and one of them has already been measured and
+     * refuted -- see {@link #SHED_HIGH}.
+     */
+    public enum NullOrder {
+        /**
+         * The order every other contract uses: fewest card points, then least
+         * power. A Null scores no card points, so this is sorting by a
+         * quantity the contract does not use, and it inverts Null's own rank
+         * wherever a ten meets a court card (it prefers a queen, worth three,
+         * to a ten, worth ten, though the ten is the lower card). What it
+         * approximates, by accident, is "play a low card": the zero-point
+         * sevens, eights and nines come first. Measured on 414 Null boards it
+         * beat the principled replacement below, which is how the accident
+         * turned into an explanation.
+         */
+        POINTS,
+        /**
+         * Shed the highest safe card, except as a defender in front of a
+         * declarer that has not yet played. The reasoning was that a Null
+         * declarer's high cards are the danger and a card safe now need not
+         * stay safe, while a defender's high cards are worth nothing.
+         *
+         * <p><b>Measured worse, resolved: −1.33 [−1.95, −0.72] against the
+         * shipped player over three seeds</b> (arena/README.md, 2026-09-18
+         * second). The reasoning ignored what the vote already does. A card
+         * reaching this comparator survives in <em>every sampled world</em>,
+         * and the Null solver searches to the end of the hand rather than one
+         * trick ahead, so "safe now, dangerous later" has already been priced.
+         * What is left to choose between is robustness to the worlds that were
+         * <em>not</em> sampled, and there a low card is the wider margin --
+         * the same logic as the fifteen-point cushion in a trump game. Kept
+         * registered as the record of a refuted idea.
+         */
+        SHED_HIGH,
+        /**
+         * The lowest card by Null's own rank, for both sides, everywhere.
+         * What {@link #POINTS} was accidentally approximating, said properly:
+         * the only difference between them is a ten against a court card,
+         * where points prefer the queen and this prefers the ten, which is
+         * lower and therefore the wider margin.
+         */
+        LOW_RANK
     }
 
-    /**
-     * @param nullByRank order a Null by Null rank rather than by card points;
-     *                   a contestant until the arena says otherwise, which is
-     *                   why it is a flag and not simply the behaviour
-     */
-    static Comparator<Card> order(SkatAi.DecisionContext context, boolean nullByRank) {
+    /** Greater is better, as the search's own comparators read. The shipped order. */
+    public static Comparator<Card> order(SkatAi.DecisionContext context) {
+        return order(context, NullOrder.POINTS);
+    }
+
+    /** @param nullOrder how to settle a Null's ties; see {@link NullOrder} */
+    public static Comparator<Card> order(SkatAi.DecisionContext context, NullOrder nullOrder) {
         Contract contract = context.game.contract;
         List<SkatAi.PlayedCard> plays = context.currentTrick.plays;
-        if (nullByRank && contract.isNull()) return nullOrder(context, contract, plays);
+        if (nullOrder != NullOrder.POINTS && contract.isNull()) {
+            return nullOrder(context, contract, plays, nullOrder);
+        }
         Comparator<Card> mostPoints = Comparator.comparingInt((Card card) -> SkatRules.cardPoints(card));
         Comparator<Card> fewestPoints = mostPoints.reversed();
         Comparator<Card> leastPower =
@@ -70,31 +114,17 @@ final class RuleTiebreak {
      * The same question in a Null game, where card points are not part of the
      * objective and the order above is therefore sorting by noise.
      *
-     * <p>Measured before it was written: asked to break a tie between the ten,
-     * the queen and the seven of a suit at a Null, the order above answers
-     * seven, queen, ten -- the queen ahead of the ten, because a queen is worth
-     * three card points and a ten is worth ten, while in Null's own order
-     * (7 8 9 10 J Q K A) the ten is the lower card. Nothing is scored for card
-     * points in a Null, so every such inversion is free damage.
-     *
-     * <p>What replaces it is one rule with two directions, and only the
-     * direction is a claim worth arguing about. <b>Shed the highest card</b>
-     * when a high card is what threatens you: the declarer must take no trick,
-     * so its high cards are the danger and one that is safe now need not stay
-     * safe; a defender's high cards are worth nothing at all, since a defender
-     * taking a trick costs its side nothing. <b>Play the lowest card</b> when
-     * you are a defender and the declarer has not yet played in this trick,
-     * lead included: a low card is the ammunition that forces the declarer
-     * over, and spending it in front of a declarer that has already committed
-     * a card wastes it.
-     *
      * <p>Only reached between cards the vote could not separate, so it never
      * overrules the search about which cards survive -- a card that hands the
-     * declarer a trick has already lost the vote in every sampled world.
+     * declarer a trick has already lost the vote in every sampled world, and
+     * the Null solver searches to the end of the hand. That is the fact the
+     * first attempt here got wrong; see {@link NullOrder} for what each order
+     * claims and which of them the arena has already refuted.
      */
     private static Comparator<Card> nullOrder(SkatAi.DecisionContext context, Contract contract,
-                                              List<SkatAi.PlayedCard> plays) {
+                                              List<SkatAi.PlayedCard> plays, NullOrder order) {
         Comparator<Card> highest = Comparator.comparingInt(card -> SkatRules.power(contract, card));
+        if (order == NullOrder.LOW_RANK) return highest.reversed();
         boolean declaring = context.mySeat == context.game.declarer;
         boolean declarerHasPlayed = false;
         for (SkatAi.PlayedCard play : plays) {

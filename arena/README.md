@@ -3115,3 +3115,47 @@ about 135 played ones, which is small by this arena's standards and enough
 here because a Null swings 69 game points between won and lost -- a
 ten-point shift in the declarer's win rate is about two game points a game,
 where the trump-contract mechanisms were worth one.
+
+### 2026-09-18, second: more worlds pay at Null; the tiebreak idea was wrong
+
+Twelve matches on `--contracts=null` boards, three seeds, 414 Null boards a
+side (1,500 attempted for ~135 played each). Against the shipped player,
+exactly paired:
+
+| variant | pooled | seeds | Nulls won, variant vs shipped |
+| --- | --- | --- | --- |
+| `belief-32-null-128` (128 worlds) | **+1.17** [+0.37, +1.98] | +1.38, +1.25, +0.86 | 266/414 (64%) vs 245 (59%) |
+| `belief-32-null-rank` (shed the highest) | **−1.33** [−1.95, −0.72] | −1.21, −1.56, −1.20 | 224/414 (54%) vs 248 (60%) |
+| `belief-32-null-rank-128` (both) | +0.08 [−0.72, +0.89] | +0.17, −0.16, +0.17 | 239/414 (58%) vs 238 (57%) |
+| `belief-32-null-rank-256` | **+1.19** [+0.31, +2.07] | +1.21, +0.94, +1.37 | 250/414 (60%) vs 229 (55%) |
+
+**More worlds pay, resolved**, and the Null win rate moves with them: 59% to
+64% at 128. That is the cheap half of the prediction and it held.
+
+**The tiebreak was the wrong idea, resolved, in the direction opposite to
+the one predicted.** "Shed the highest safe card" cost 1.33 game points a
+game and six points of win rate, on every seed. The prediction was wrong
+because the reasoning ignored what the vote already does: a card that
+reaches the tiebreak survives in *every sampled world*, and `NullSolver`
+searches to the end of the hand rather than one trick ahead, so "safe now,
+dangerous later" has already been priced out. What is left to choose
+between is robustness to the worlds that were **not** sampled -- and there
+the low card is the wider margin, which is the same argument as the
+fifteen-point cushion in a trump game. The shipped points order, which
+sorts a Null by a quantity the contract does not score, was accidentally
+approximating "play low", and the accident beat the principle.
+
+The two effects are separable and roughly equal and opposite: at 128 worlds
+they cancel (+0.08), and `rank-256` minus `null-128`, paired board by board,
+is +0.00 [−0.87, +0.87] -- doubling the worlds again buys back about what
+the tiebreak gives away.
+
+**What this leaves, and the second round** (`tools/null-card-play.sh`, whose
+variant list now names it): does the world count keep paying past 128 --
+never measured without the refuted tiebreak attached to it -- and
+`NullOrder.LOW_RANK`, which is what the points order approximates said
+properly. The two disagree in exactly one place, a ten against a court
+card, where points take the queen (three) and rank takes the ten (lower,
+so the wider margin). `SHED_HIGH` stays registered and its javadoc carries
+the measurement, because a refuted idea with a number on it is worth more
+than a deleted one.

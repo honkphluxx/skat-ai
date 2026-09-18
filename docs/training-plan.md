@@ -158,9 +158,16 @@ details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
   did: nothing in the population announces Null. The belief guard is
   therefore still correct, and Null is played on uniform worlds.
 
+- **Null, first round** (2026-09-18 second): 128 worlds is worth **+1.17**
+  [+0.37, +1.98] at Null, resolved, and lifts the win rate on makeable
+  Nulls from 59% to 64%. The tiebreak idea was refuted at **−1.33**
+  [−1.95, −0.72]: a card reaching the tiebreak already survives every
+  sampled world, so what is left to choose is robustness to the worlds
+  nobody sampled, and there the low card is the wider margin.
+
 **Next, in order:** Null card play, which is now the largest measured
-weakness and the cheapest to attack. Built 2026-09-18 and waiting on one
-run (`tools/null-card-play.sh`): a Null-only contract source, because at
+weakness and the cheapest to attack. Built 2026-09-18 and part measured
+(`tools/null-card-play.sh`): a Null-only contract source, because at
 3% of the oracle mix there is nothing to measure on; a tiebreak that
 stops ordering a Null by card points, which the contract does not score
 and which inverts Null's own rank wherever a ten meets a court card; and

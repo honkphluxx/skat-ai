@@ -42,7 +42,11 @@ public class RuleTiebreakTest {
     }
 
     private static Card bestByNullRank(SkatAi.DecisionContext context) {
-        return context.legalCards.stream().max(RuleTiebreak.order(context, true)).orElseThrow();
+        return best(context, RuleTiebreak.NullOrder.SHED_HIGH);
+    }
+
+    private static Card best(SkatAi.DecisionContext context, RuleTiebreak.NullOrder order) {
+        return context.legalCards.stream().max(RuleTiebreak.order(context, order)).orElseThrow();
     }
 
     @Test public void leadingPlaysTheFewestPointsThenTheLeastPower() {
@@ -162,13 +166,45 @@ public class RuleTiebreakTest {
                 bestByNullRank(at(Contract.NULL, LEFT, declarerPlayed, tie)));
     }
 
+    /**
+     * The low-rank order: the lowest card by Null's own rank, whoever is
+     * playing and wherever in the trick. It differs from the shipped points
+     * order in exactly one place -- a ten against a court card -- which is the
+     * whole of what it claims to fix.
+     */
+    @Test public void theLowRankOrderPlaysTheLowestCardByNullRank() {
+        RuleTiebreak.NullOrder low = RuleTiebreak.NullOrder.LOW_RANK;
+        List<Card> tie = List.of(card(Card.Suit.CLUBS, Card.Rank.TEN),
+                card(Card.Suit.CLUBS, Card.Rank.QUEEN), card(Card.Suit.CLUBS, Card.Rank.SEVEN));
+        assertEquals(card(Card.Suit.CLUBS, Card.Rank.SEVEN),
+                best(at(Contract.NULL, ME, List.of(), tie), low));
+
+        // The one disagreement with the shipped order, in both roles and both
+        // positions: points take the queen (three) over the ten (ten), rank
+        // takes the ten, which is the lower card and so the wider margin.
+        List<Card> pair = List.of(card(Card.Suit.CLUBS, Card.Rank.TEN),
+                card(Card.Suit.CLUBS, Card.Rank.QUEEN));
+        List<SkatAi.PlayedCard> declarerPlayed = List.of(
+                new SkatAi.PlayedCard(LEFT, card(Card.Suit.HEARTS, Card.Rank.SEVEN)));
+        for (SkatAi.Seat declarer : List.of(ME, LEFT)) {
+            for (List<SkatAi.PlayedCard> plays : List.of(List.<SkatAi.PlayedCard>of(), declarerPlayed)) {
+                assertEquals(card(Card.Suit.CLUBS, Card.Rank.QUEEN),
+                        best(at(Contract.NULL, declarer, plays, pair)));
+                assertEquals(card(Card.Suit.CLUBS, Card.Rank.TEN),
+                        best(at(Contract.NULL, declarer, plays, pair), low));
+            }
+        }
+    }
+
     /** Nothing about a trump game changes when the Null branch is switched on. */
     @Test public void theNullBranchTouchesNoTrumpGame() {
         List<Card> hand = List.of(card(Card.Suit.CLUBS, Card.Rank.TEN),
                 card(Card.Suit.CLUBS, Card.Rank.QUEEN), card(Card.Suit.CLUBS, Card.Rank.SEVEN));
         for (Contract contract : List.of(Contract.GRAND, Contract.CLUBS, Contract.HEARTS)) {
             SkatAi.DecisionContext context = at(contract, ME, List.of(), hand);
-            assertEquals(contract.toString(), best(context), bestByNullRank(context));
+            for (RuleTiebreak.NullOrder order : RuleTiebreak.NullOrder.values()) {
+                assertEquals(contract + " / " + order, best(context), best(context, order));
+            }
         }
     }
 }

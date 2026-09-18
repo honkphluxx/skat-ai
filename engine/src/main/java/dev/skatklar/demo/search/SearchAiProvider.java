@@ -232,14 +232,15 @@ public final class SearchAiProvider implements SkatAiProvider {
                              HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
                              boolean ruleTies, int nullWorlds) {
         this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos, temperature,
-                adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, false);
+                adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds,
+                RuleTiebreak.NullOrder.POINTS);
     }
 
     private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
                              WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
                              double temperature, boolean adaptiveBidding,
                              HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
-                             boolean ruleTies, int nullWorlds, boolean nullRankTies) {
+                             boolean ruleTies, int nullWorlds, RuleTiebreak.NullOrder nullTies) {
         this.delegate = delegate;
         this.personality = personality;
         this.seed = seed;
@@ -252,22 +253,21 @@ public final class SearchAiProvider implements SkatAiProvider {
         this.marginPoints = Math.max(0, marginPoints);
         this.ruleTies = ruleTies;
         this.nullWorlds = Math.max(0, nullWorlds);
-        this.nullRankTies = nullRankTies;
+        this.nullTies = Objects.requireNonNull(nullTies, "nullTies");
     }
 
     /**
-     * Whether a Null's last ties are broken by Null's own rank rather than by
-     * card points. See {@link RuleTiebreak} for what the points order does to a
-     * Null and why it is wrong there; a contestant until the arena says
-     * otherwise, which is why this is a flag and not simply the behaviour.
+     * How a Null's last ties are settled. {@link RuleTiebreak.NullOrder#POINTS}
+     * is what ships; the others are contestants, and the arena has already
+     * refuted one of them -- see the enum, which carries the measurement.
      */
-    private final boolean nullRankTies;
+    private final RuleTiebreak.NullOrder nullTies;
 
-    /** The same player, ordering a Null's ties by rank. See {@link #nullRankTies}. */
-    public SearchAiProvider withNullRankTiebreak() {
+    /** The same player, settling a Null's ties that way. See {@link #nullTies}. */
+    public SearchAiProvider withNullTiebreak(RuleTiebreak.NullOrder order) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, nullWorlds, true);
+                ruleTies, nullWorlds, order);
     }
 
     /**
@@ -349,7 +349,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, breaking ties by cushion. See {@link #marginPoints}. */
     public SearchAiProvider withMarginTiebreak(int points) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points, ruleTies, nullWorlds, nullRankTies);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points, ruleTies, nullWorlds, nullTies);
     }
 
     /**
@@ -391,7 +391,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule rule) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, true, rule, marginPoints, ruleTies, nullWorlds, nullRankTies);
+                biddingBudgetNanos, temperature, true, rule, marginPoints, ruleTies, nullWorlds, nullTies);
     }
 
     /**
@@ -412,7 +412,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withBiddingBudget(long nanos) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos,
-                temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullRankTies);
+                temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullTies);
     }
 
     /**
@@ -436,7 +436,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withTemperature(double temperature) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullRankTies);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullTies);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -869,7 +869,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
             Comparator<Card> byCushion = Comparator.comparingInt(card -> held.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
-            Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context, nullRankTies) : byCost.reversed();
+            Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context, nullTies) : byCost.reversed();
             return legal.stream()
                     // Among cards that win equally often, the one that wins by
                     // the wider margin where a margin was asked for, and then

@@ -5,6 +5,7 @@ import dev.skatklar.demo.belief.BeliefModel;
 import dev.skatklar.demo.search.BeliefWorldSource;
 import dev.skatklar.demo.search.HandEvaluator.AuctionEvidence.PassRule;
 import dev.skatklar.demo.search.Personality;
+import dev.skatklar.demo.search.RuleTiebreak.NullOrder;
 import dev.skatklar.demo.search.SearchAiProvider;
 import dev.skatklar.training.arena.Contestant;
 import dev.skatklar.training.arena.PlayerRegistry;
@@ -203,10 +204,19 @@ public final class BeliefPlayers {
         // Null is the one contract where our card play is measurably behind
         // (arena/README.md, 2026-09-17 third), where the belief is blind, and
         // where a solve is cheap enough that more worlds cost little.
-        registry.register(nullVariant("belief-32-null-rank", 32, true, 0, loader));
-        registry.register(nullVariant("belief-32-null-128", 32, false, 128, loader));
-        registry.register(nullVariant("belief-32-null-rank-128", 32, true, 128, loader));
-        registry.register(nullVariant("belief-32-null-rank-256", 32, true, 256, loader));
+        registry.register(nullVariant("belief-32-null-rank", 32, NullOrder.SHED_HIGH, 0, loader));
+        registry.register(nullVariant("belief-32-null-128", 32, NullOrder.POINTS, 128, loader));
+        registry.register(nullVariant("belief-32-null-rank-128", 32, NullOrder.SHED_HIGH, 128, loader));
+        registry.register(nullVariant("belief-32-null-rank-256", 32, NullOrder.SHED_HIGH, 256, loader));
+        // The second round, after the first refuted "shed the highest safe
+        // card" (-1.33, resolved) and cleared "more worlds" (+1.17, resolved).
+        // What is left to separate is how low to play and how far the world
+        // count keeps paying: LOW_RANK is what the shipped points order was
+        // accidentally approximating, said properly, and 256 worlds has never
+        // been measured without the refuted tiebreak attached to it.
+        registry.register(nullVariant("belief-32-null-256", 32, NullOrder.POINTS, 256, loader));
+        registry.register(nullVariant("belief-32-null-low-128", 32, NullOrder.LOW_RANK, 128, loader));
+        registry.register(nullVariant("belief-32-null-low-256", 32, NullOrder.LOW_RANK, 256, loader));
 
         Path candidate = locateCandidate();
         if (candidate != null) {
@@ -225,14 +235,14 @@ public final class BeliefPlayers {
      * @param rankTies  break Null ties by Null rank instead of by card points
      * @param nullWorlds worlds a Null decision samples; zero for the usual count
      */
-    private static Contestant nullVariant(String id, int worlds, boolean rankTies, int nullWorlds,
+    private static Contestant nullVariant(String id, int worlds, NullOrder nullTies, int nullWorlds,
                                           Loader loader) {
         Personality personality = new Personality(worlds, Personality.REFERENCE.memory(),
                 Personality.REFERENCE.risk(), Personality.REFERENCE.aggression());
         return new Contestant() {
             @Override public String id() { return id; }
             @Override public String displayName() {
-                return "The shipped player, Null " + (rankTies ? "by rank" : "as shipped")
+                return "The shipped player, Null ties " + nullTies
                         + (nullWorlds > 0 ? ", " + nullWorlds + " worlds" : "");
             }
             @Override public SkatAiProvider newProvider(long seed) {
@@ -240,11 +250,11 @@ public final class BeliefPlayers {
                         new BeliefWorldSource(loader.get()))
                         .withAdaptiveBidding(PassRule.DEFAULT).withMarginTiebreak(15);
                 // The position tiebreak carries the Null branch, so every
-                // variant has it; "as shipped" means that branch still orders
-                // a Null by card points, which is the control.
+                // variant has it; POINTS means that branch still orders a Null
+                // by card points, which is the shipped control.
                 player = player.withRuleTiebreak();
                 if (nullWorlds > 0) player = player.withNullWorlds(nullWorlds);
-                return rankTies ? player.withNullRankTiebreak() : player;
+                return nullTies == NullOrder.POINTS ? player : player.withNullTiebreak(nullTies);
             }
             @Override public String toString() { return id; }
         };
