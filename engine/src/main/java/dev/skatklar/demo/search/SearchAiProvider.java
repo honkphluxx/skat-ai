@@ -19,6 +19,11 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.Random;
 import java.util.Set;
 
@@ -241,6 +246,17 @@ public final class SearchAiProvider implements SkatAiProvider {
                              double temperature, boolean adaptiveBidding,
                              HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
                              boolean ruleTies, int nullWorlds, RuleTiebreak.NullOrder nullTies) {
+        this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos, temperature,
+                adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullTies, 1);
+    }
+
+    private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
+                             WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
+                             double temperature, boolean adaptiveBidding,
+                             HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
+                             boolean ruleTies, int nullWorlds, RuleTiebreak.NullOrder nullTies,
+                             int worldThreads) {
+        this.worldThreads = Math.max(1, worldThreads);
         this.delegate = delegate;
         this.personality = personality;
         this.seed = seed;
@@ -263,11 +279,58 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     private final RuleTiebreak.NullOrder nullTies;
 
+    /**
+     * Threads one decision's sampled worlds may be spread over. One is off.
+     *
+     * <p>Off by default, and that is not timidity. The arena already uses every
+     * core it has at the board level -- sixteen boards at a time -- so threads
+     * inside one seat's decision there would oversubscribe the machine and make
+     * a night slower, not faster. A phone has the opposite problem: one table,
+     * one decision at a time, and several idle cores while a person waits.
+     *
+     * <p>What makes this safe to do at all is the shape {@link #chooseCard}
+     * already had. The worlds are sampled <em>before</em> any of them is
+     * searched, so every draw from this session's random stream has already
+     * happened by the time the first solve starts; splitting the loop cannot
+     * move a single card. And the tally is a count per card, so partial sums
+     * added in any order give the same totals. A rating run replays exactly
+     * whatever this is set to, which is the property the whole arena rests on
+     * and the reason the same thing cannot simply be done to the auction, where
+     * {@link HandEvaluator} draws its worlds inside the loop that solves them.
+     */
+    private final int worldThreads;
+
+    /** The same player, spreading one decision's worlds. See {@link #worldThreads}. */
+    public SearchAiProvider withWorldThreads(int threads) {
+        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
+                ruleTies, nullWorlds, nullTies, threads);
+    }
+
+    /**
+     * The pool the world loop borrows.
+     *
+     * <p>A holder class, so nothing is created in a process that never asks --
+     * which is every arena run and every server. The threads are daemons: this
+     * pool is never shut down, because the only thing that would own its
+     * lifetime is the app, and an app that exits while a seat is mid-solve
+     * should exit.
+     */
+    private static final class Workers {
+        static final ExecutorService POOL = Executors.newFixedThreadPool(
+                Math.max(1, Runtime.getRuntime().availableProcessors()), work -> {
+                    Thread thread = new Thread(work, "skat-world-search");
+                    thread.setDaemon(true);
+                    thread.setPriority(Thread.NORM_PRIORITY - 1);
+                    return thread;
+                });
+    }
+
     /** The same player, settling a Null's ties that way. See {@link #nullTies}. */
     public SearchAiProvider withNullTiebreak(RuleTiebreak.NullOrder order) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, nullWorlds, order);
+                ruleTies, nullWorlds, order, worldThreads);
     }
 
     /**
@@ -294,7 +357,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withNullWorlds(int worlds) {
         return new SearchAiProvider(delegate, personality, seed, this.worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, worlds);
+                ruleTies, worlds, nullTies, worldThreads);
     }
 
     /**
@@ -317,7 +380,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withRuleTiebreak() {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                true, nullWorlds);
+                true, nullWorlds, nullTies, worldThreads);
     }
 
     /**
@@ -349,7 +412,8 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, breaking ties by cushion. See {@link #marginPoints}. */
     public SearchAiProvider withMarginTiebreak(int points) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points, ruleTies, nullWorlds, nullTies);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points,
+                ruleTies, nullWorlds, nullTies, worldThreads);
     }
 
     /**
@@ -391,7 +455,8 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule rule) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, true, rule, marginPoints, ruleTies, nullWorlds, nullTies);
+                biddingBudgetNanos, temperature, true, rule, marginPoints,
+                ruleTies, nullWorlds, nullTies, worldThreads);
     }
 
     /**
@@ -436,7 +501,8 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withTemperature(double temperature) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullTies);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
+                ruleTies, nullWorlds, nullTies, worldThreads);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -849,7 +915,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             if (votes == null) {
                 votes = new LinkedHashMap<>();
                 for (Card card : legal) { votes.put(card, 0); cushion.put(card, 0); }
-                for (WorldSampler.World sample : sampled) castVotes(context, sample, votes);
+                tallyOverWorlds(context, sampled, legal, votes, false);
                 // The cushion is a tiebreak and only a tiebreak, so it is asked
                 // for only when there is a tie to break: the comparator below
                 // never reads it unless two cards share the top vote. Asking
@@ -859,7 +925,7 @@ public final class SearchAiProvider implements SkatAiProvider {
                 // second question on the decisions that were close.
                 if (marginPoints > 0 && playsForCardPoints(context.game.contract)
                         && topVoteIsShared(votes)) {
-                    for (WorldSampler.World sample : sampled) castCushion(context, sample, cushion);
+                    tallyOverWorlds(context, sampled, legal, cushion, true);
                 }
             }
 
@@ -994,6 +1060,60 @@ public final class SearchAiProvider implements SkatAiProvider {
                 if (count > best) { best = count; holders = 1; } else if (count == best) holders++;
             }
             return holders > 1;
+        }
+
+        /**
+         * Every sampled world's verdicts, added into one tally.
+         *
+         * <p>Sequential unless {@link #worldThreads} says otherwise, and then
+         * in that many contiguous chunks rather than one task a world: a task
+         * per world would be a hundred and twenty-eight submissions for a Null
+         * and the queueing would show. Each chunk counts into a tally of its
+         * own and the chunks are added up here, so nothing is shared while the
+         * searches run and the totals do not depend on which chunk finished
+         * first.
+         */
+        private void tallyOverWorlds(SkatAi.DecisionContext context,
+                                     List<WorldSampler.World> sampled, List<Card> legal,
+                                     Map<Card, Integer> into, boolean forTheCushion) {
+            int chunks = Math.min(worldThreads, sampled.size());
+            if (chunks <= 1) {
+                for (WorldSampler.World sample : sampled) {
+                    if (forTheCushion) castCushion(context, sample, into);
+                    else castVotes(context, sample, into);
+                }
+                return;
+            }
+            List<Callable<Map<Card, Integer>>> tasks = new ArrayList<>(chunks);
+            for (int chunk = 0; chunk < chunks; chunk++) {
+                int from = (int) ((long) sampled.size() * chunk / chunks);
+                int to = (int) ((long) sampled.size() * (chunk + 1) / chunks);
+                List<WorldSampler.World> mine = sampled.subList(from, to);
+                tasks.add(() -> {
+                    Map<Card, Integer> tally = new LinkedHashMap<>();
+                    for (Card card : legal) tally.put(card, 0);
+                    for (WorldSampler.World sample : mine) {
+                        if (forTheCushion) castCushion(context, sample, tally);
+                        else castVotes(context, sample, tally);
+                    }
+                    return tally;
+                });
+            }
+            try {
+                for (Future<Map<Card, Integer>> done : Workers.POOL.invokeAll(tasks)) {
+                    for (Map.Entry<Card, Integer> entry : done.get().entrySet()) {
+                        into.merge(entry.getKey(), entry.getValue(), Integer::sum);
+                    }
+                }
+            } catch (InterruptedException stopped) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("interrupted while searching worlds", stopped);
+            } catch (ExecutionException broken) {
+                Throwable cause = broken.getCause();
+                if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+                if (cause instanceof Error) throw (Error) cause;
+                throw new IllegalStateException("a world search failed", cause);
+            }
         }
 
         private void castVotes(SkatAi.DecisionContext context, WorldSampler.World sample,

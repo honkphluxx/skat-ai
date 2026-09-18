@@ -159,6 +159,23 @@ public final class Opponents {
      */
     public static SkatAiProvider seat(Level level, WorldSource worlds, long seed,
                                       long biddingBudgetNanos, boolean adaptively) {
+        return seat(level, worlds, seed, biddingBudgetNanos, adaptively, 1);
+    }
+
+    /**
+     * The same seat, allowed to spread one decision's worlds over threads.
+     *
+     * <p>One means off, and off is right everywhere but a phone. The arena
+     * already runs sixteen boards at a time, so threads inside a seat there
+     * would oversubscribe the machine and make a night slower; a phone has one
+     * table, one decision, and several idle cores while somebody waits. The
+     * cards do not change either way -- see
+     * {@link dev.skatklar.demo.search.SearchAiProvider#withWorldThreads} for why
+     * that is structural, and WorldThreadsTest for the assertion.
+     */
+    public static SkatAiProvider seat(Level level, WorldSource worlds, long seed,
+                                      long biddingBudgetNanos, boolean adaptively,
+                                      int worldThreads) {
         WorldSource believed = level.usesBelief() && worlds != null ? worlds : WorldSource.UNIFORM;
         // One search player per seat, not one for the table. The engine seats a
         // single provider at every AI seat, and a search player keeps evidence on
@@ -182,7 +199,7 @@ public final class Opponents {
                 player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION)
                         .withRuleTiebreak();
             }
-            return player.withBiddingBudget(biddingBudgetNanos);
+            return player.withBiddingBudget(biddingBudgetNanos).withWorldThreads(worldThreads);
         });
     }
 }
