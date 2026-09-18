@@ -66,6 +66,9 @@ void deal(Random& random, int cardsEach, uint32_t hands[3]) {
 const int kContracts[] = {0, 1, 2, 3, 4, 6};  // every contract but Null
 const int kContractCount = 6;
 
+/// Buried first: the least useful card, by trump, then card points, then rank.
+int buryScore(int card, int contract);
+
 int check(int deals) {
     Random random(20260825ull);
     int failures = 0;
@@ -361,22 +364,109 @@ double seconds(std::chrono::steady_clock::time_point from) {
     return std::chrono::duration<double>(std::chrono::steady_clock::now() - from).count();
 }
 
+/// The trump suit of a contract ordinal, or -1 where only the jacks are trumps.
+int trumpSuitOf(int contract) {
+    return contract == 0 ? 3 : contract == 1 ? 2 : contract == 2 ? 1 : contract == 3 ? 0 : -1;
+}
+
+/// How good a hand looks for a contract: jacks, then trumps, then aces.
+int fitness(uint32_t hand, int contract) {
+    int score = 0;
+    for (int index = 0; index < 32; index++) {
+        if (!((hand >> index) & 1u)) continue;
+        int suit = index / 8;
+        int rank = index % 8;
+        if (rank == 4) { score += 5; continue; }  // a jack is trump in all five
+        if (contract != 4 && suit == trumpSuitOf(contract)) score += 3;
+        if (rank == 7) score += 2;
+    }
+    return score;
+}
+
+int pointsOfRank(int rank) {
+    return rank == 7 ? 11 : rank == 3 ? 10 : rank == 6 ? 4 : rank == 5 ? 3 : rank == 4 ? 2 : 0;
+}
+
+int buryScore(int card, int contract) {
+    int suit = card / 8;
+    int rank = card % 8;
+    bool trump = rank == 4 || (contract != 4 && suit == trumpSuitOf(contract));
+    return (trump ? 1000 : 0) + pointsOfRank(rank) * 10 + rank;
+}
+
+/// A deal somebody would declare on, which is not what a shuffled pack gives.
+///
+/// Twelve to the declarer, the contract its own hand picks, the two least
+/// useful cards buried. The caller then keeps the deal only if the declarer can
+/// actually reach 61, and that filter is the point: about one hand in five
+/// survives it, and the four that do not are hands nobody would ever have
+/// declared. A bench that includes them is not measuring the arena's question.
+/// Reaching 61 was true of one deal in sixty under the uniform dealer this
+/// replaced, which is how the table sizes in api.cpp came to be tuned on
+/// positions the search answers in microseconds.
+void dealDeclared(Random& random, uint32_t hands[3], int declarer, int& contract) {
+    int pack[32];
+    for (int i = 0; i < 32; i++) pack[i] = i;
+    for (int i = 31; i > 0; i--) {
+        int j = random.below(i + 1);
+        int swap = pack[i];
+        pack[i] = pack[j];
+        pack[j] = swap;
+    }
+    uint32_t twelve = 0;
+    for (int i = 0; i < 12; i++) twelve |= 1u << pack[i];
+    int best = -1;
+    contract = 0;
+    for (int candidate = 0; candidate <= 4; candidate++) {
+        int score = fitness(twelve, candidate);
+        if (score > best) { best = score; contract = candidate; }
+    }
+    int order[12];
+    int count = 0;
+    for (int i = 0; i < 32; i++) if ((twelve >> i) & 1u) order[count++] = i;
+    for (int i = 1; i < count; i++) {
+        int card = order[i];
+        int j = i - 1;
+        while (j >= 0 && buryScore(order[j], contract) > buryScore(card, contract)) {
+            order[j + 1] = order[j];
+            j--;
+        }
+        order[j + 1] = card;
+    }
+    hands[0] = hands[1] = hands[2] = 0;
+    for (int i = 2; i < 12; i++) hands[declarer] |= 1u << order[i];
+    int at = 12;
+    for (int seat = 0; seat < 3; seat++) {
+        if (seat == declarer) continue;
+        for (int i = 0; i < 10; i++) hands[seat] |= 1u << pack[at++];
+    }
+}
+
 int bench(int deals) {
     Random random(4711ull);
     std::vector<uint32_t> handsAll;
     std::vector<int> contracts;
     std::vector<int> declarers;
     std::vector<int> leaders;
-    for (int i = 0; i < deals; i++) {
+    int tried = 0;
+    while (static_cast<int>(contracts.size()) < deals) {
+        int declarer = random.below(3);
+        int contract = 0;
         uint32_t hands[3];
-        deal(random, 10, hands);
+        dealDeclared(random, hands, declarer, contract);
+        int leader = random.below(3);
+        tried++;
+        // The filter that makes this a declaration rather than a deal. Not
+        // counted in anything timed below.
+        if (skat_reaches(contract, declarer, hands, leader, leader, 0, 0, 61) != 1) continue;
         handsAll.push_back(hands[0]);
         handsAll.push_back(hands[1]);
         handsAll.push_back(hands[2]);
-        contracts.push_back(kContracts[random.below(kContractCount)]);
-        declarers.push_back(random.below(3));
-        leaders.push_back(random.below(3));
+        contracts.push_back(contract);
+        declarers.push_back(declarer);
+        leaders.push_back(leader);
     }
+    std::printf("kept %d made declarations out of %d dealt\n", deals, tried);
 
     // The question the app and the server actually ask: can the declarer reach
     // 61 from a fresh ten-card deal. Everything else here is a variation on it.

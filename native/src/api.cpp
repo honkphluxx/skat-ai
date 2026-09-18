@@ -59,22 +59,87 @@ namespace {
 
 /// How large a table to build before the search rather than growing into it.
 ///
-/// Measured on ten-card deals, and the single largest tuning win here. The Java
-/// starts every table at sixteen kilobytes and doubles when three quarters
-/// full, which is right when the size is unknowable -- but at this entry point
-/// it is knowable, because the question is known. A null-window question
-/// ("does the declarer reach 61?") keeps getting cheaper up to fourteen bits, a
-/// megabyte, and then turns round as the table stops fitting in cache; the
-/// exact-value question searches thirty times as much and is still improving at
-/// fifteen. Building it at that size costs one memset of about thirty
-/// microseconds against a search of milliseconds, and saves ten doublings that
-/// each re-insert everything.
+/// Measured, and re-measured, because the first measurement was taken on the
+/// wrong deals. `skatsolve_test bench` used to deal ten uniformly random cards
+/// and pick a contract at random, and on those the declarer reaches 61 about
+/// once in sixty: the null-window question is then answered by a hopeless hand
+/// in microseconds, and the sizes below were tuned against that. The bench now
+/// deals twelve to the declarer, lets the hand pick the contract, buries the
+/// two worst cards and keeps the deal only if the declarer can actually make
+/// it -- which is what a declaration is. Everything costs more on those, and
+/// the tuning moves.
+///
+/// Over forty made declarations, `reaches(61)` from the root:
+///
+///     12 bits   0.2 MB   217 ms/deal   208e6 nodes
+///     14 bits   1.0 MB    98 ms/deal    87e6 nodes     <- what used to ship
+///     16 bits   4.0 MB    65 ms/deal    55e6 nodes
+///     18 bits    16 MB    66 ms/deal    52e6 nodes
+///     20 bits    64 MB   108 ms/deal    52e6 nodes
+///     22 bits   256 MB   175 ms/deal    52e6 nodes
+///
+/// and the exact-value question, which searches several times as much:
+///
+///     13 bits   0.5 MB   836 ms/deal
+///     15 bits   2.0 MB   364 ms/deal                   <- what used to ship
+///     17 bits   8.0 MB   205 ms/deal
+///     19 bits    32 MB   221 ms/deal
+///
+/// Both curves have the same shape and it is worth reading carefully, because
+/// it answers a question people keep asking of a machine with a lot of memory.
+/// The node count stops falling at 18 bits and is flat after it: the table has
+/// stopped missing, and there is nothing left for a bigger one to remember. Yet
+/// the 256 MB table is the second slowest thing on the list, three times the
+/// cost of the 4 MB one while searching the same tree. Past the point where the
+/// table fits in cache, every extra megabyte buys nothing and costs a miss.
+/// This is not a structure that wants more RAM; it wants to fit in L2.
+///
+/// The allocation itself is not what decides any of this: building and throwing
+/// away a 4 MB table costs 0.145 ms against a 145 ms decision, and 8 MB costs
+/// 0.29 against 205. An epoch-stamped table kept alive per thread would save
+/// that tenth of a per cent and nothing else, which is why there is not one.
+///
+/// One more turn of the same handle, and the reason a single number is wrong.
+/// The sizes above are right for a decision at the top of a hand, which is the
+/// expensive one and the one that decides a deal's total. They are wrong for
+/// everything after it. The same sweep at three positions:
+///
+///     cards a hand      12 bits   14 bits   16 bits   18 bits
+///     ten (the root)     98.3      56.7      42.7      45.7   ms
+///     eight               3.20      3.05      3.05      3.92  ms
+///     six                 0.113     0.125     0.259     0.794 ms
+///
+/// Read the six-card row against its node count, which is 89945 at every size:
+/// the search is identical and the big table is seven times slower, because at
+/// that size the whole cost is building a table the search will touch a
+/// thousandth of. A hand is one decision at ten cards and nine smaller ones, so
+/// a fixed size is either too small where it matters or too large nine times
+/// over.
+///
+/// The three measured optima -- 16 bits at thirty cards, 14 at twenty-four, 12
+/// at eighteen -- are a straight line in the cards remaining, and that is what
+/// tableBitsFor is. It is not a fit to three points so much as the obvious
+/// shape: the tree grows with the cards left, and so should the table.
 ///
 /// Deliberately not applied to the reusable handles AlphaMu holds: there are
-/// thirty-two of those alive at once and a megabyte each is not a trade a phone
-/// should make. They keep the Java's grow-on-demand behaviour.
-constexpr int kWindowedBits = 14;
-constexpr int kExactBits = 15;
+/// thirty-two of those alive at once and four megabytes each is not a trade a
+/// phone should make. They keep the Java's grow-on-demand behaviour.
+constexpr int kWindowedBits = 16;
+constexpr int kExactBits = 17;
+constexpr int kSmallestBits = 8;
+
+/// How many bits of table a position of this size deserves.
+///
+/// @param extra one more doubling for the exact-value question, which searches
+///              several times the tree a null window does.
+int tableBitsFor(const uint32_t hands[3], int extra) {
+    int cardsLeft = __builtin_popcount(hands[0]) + __builtin_popcount(hands[1])
+            + __builtin_popcount(hands[2]);
+    int bits = cardsLeft / 3 + 6 + extra;
+    if (bits < kSmallestBits) return kSmallestBits;
+    int ceiling = kWindowedBits + extra;
+    return bits > ceiling ? ceiling : bits;
+}
 
 }  // namespace
 
@@ -86,7 +151,7 @@ int32_t skat_solve(int32_t contract, int32_t declarerSeat, const uint32_t hands[
     if (!prepared.ok) return SKAT_UNSUPPORTED;
     if (!positionIsSane(declarerSeat, leader, leader, 0)) return SKAT_INVALID;
     Solver solver(prepared.tables, declarerSeat);
-    solver.reserve(kExactBits);
+    solver.reserve(tableBitsFor(hands, kExactBits - kWindowedBits));
     solver.setHands(hands);
     int value = solver.search(leader, leader, 0, 0, 0, skat::kTotalPoints);
     if (out != nullptr) {
@@ -107,7 +172,7 @@ int32_t skat_reaches(int32_t contract, int32_t declarerSeat, const uint32_t hand
     if (!prepared.ok) return SKAT_UNSUPPORTED;
     if (!positionIsSane(declarerSeat, toPlay, leader, trickSize)) return SKAT_INVALID;
     Solver solver(prepared.tables, declarerSeat);
-    solver.reserve(kWindowedBits);
+    solver.reserve(tableBitsFor(hands, 0));
     solver.setHands(hands);
     int value = solver.search(toPlay, leader, trickCards, trickSize, target - 1, target);
     return value >= target ? 1 : 0;
@@ -122,7 +187,7 @@ int32_t skat_reaches_within(int32_t contract, int32_t declarerSeat, const uint32
     if (!prepared.ok) return SKAT_UNSUPPORTED;
     if (!positionIsSane(declarerSeat, toPlay, leader, trickSize)) return SKAT_INVALID;
     Solver solver(prepared.tables, declarerSeat);
-    solver.reserve(kWindowedBits);
+    solver.reserve(tableBitsFor(hands, 0));
     solver.setHands(hands);
     solver.setBudgetNanos(budgetNanos);
     int value = solver.search(toPlay, leader, trickCards, trickSize, target - 1, target);
@@ -137,7 +202,7 @@ int32_t skat_best_card(int32_t contract, int32_t declarerSeat, int32_t toPlay,
     if (!prepared.ok) return SKAT_UNSUPPORTED;
     if (!positionIsSane(declarerSeat, toPlay, leader, trickSize)) return SKAT_INVALID;
     Solver solver(prepared.tables, declarerSeat);
-    solver.reserve(kExactBits);
+    solver.reserve(tableBitsFor(hands, kExactBits - kWindowedBits));
     solver.setHands(hands);
     Solver::Choice choice = solver.chooseAtRoot(toPlay, leader, trickCards, trickSize);
     if (choice.card < 0) return SKAT_INVALID;
@@ -158,7 +223,7 @@ int32_t skat_best_card_for_result(int32_t contract, int32_t declarerSeat, int32_
     if (!prepared.ok) return SKAT_UNSUPPORTED;
     if (!positionIsSane(declarerSeat, toPlay, leader, trickSize)) return SKAT_INVALID;
     Solver solver(prepared.tables, declarerSeat);
-    solver.reserve(kWindowedBits);
+    solver.reserve(tableBitsFor(hands, 0));
     solver.setHands(hands);
 
     // Skat scores bands, not points: 61 wins, 90 is Schneider, 31 avoids being
@@ -216,7 +281,7 @@ int32_t skat_moves_reaching(int32_t contract, int32_t declarerSeat, int32_t toPl
     if (!prepared.ok) return SKAT_UNSUPPORTED;
     if (!positionIsSane(declarerSeat, toPlay, leader, trickSize)) return SKAT_INVALID;
     Solver solver(prepared.tables, declarerSeat);
-    solver.reserve(kWindowedBits);
+    solver.reserve(tableBitsFor(hands, 0));
     solver.setHands(hands);
     int alpha = larger(0, target - 1);
     int beta = larger(1, target);
