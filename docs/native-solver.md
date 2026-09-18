@@ -304,11 +304,34 @@ lever here than in the points solver. Null scores no card points, so within a
 suit *any* two cards with no live card between them are interchangeable — the
 bridge case. The points solver has to settle for two cards that are also worth
 the same, which in Skat leaves only the jacks and the nine-eight-seven. The
-implementation is a 64 KB `uint8_t keep[256][256]` in `.rodata`: one byte of a
-hand mask is one suit, so a single lookup answers the whole equivalence
-question for it, and that works only because in a Null the card index inside a
-suit *is* the strength. The points solver cannot do it because its jacks leave
-their suits.
+implementation is a 512-byte table in `.rodata`, read twice per suit — a nibble
+each, the stronger four cards first, the second lookup reading the one bit of
+state the first left behind. One byte of a hand mask is one suit, and that works
+only because in a Null the card index inside a suit *is* the strength. The
+points solver cannot do any of it, because its jacks leave their suits.
+
+It was a 64 KB `keep[256][256]` first, one lookup instead of two, and the NDK is
+why it is not. Half a million constexpr loop bodies is past clang's step limit —
+it reports "possible infinite loop?" — where GCC's limit is thirty-two times
+higher and had compiled the same code without a word, which is how it reached a
+commit at all. The repair was not a compiler flag: that would be a flag per
+toolchain, and it buys the right to go on spending 64 KB of every ABI's
+`.rodata`, which the APK then carries four times.
+
+Splitting the walk at the nibble costs nothing, which was the surprise. Over the
+same forty deals the small table measures 42.9 ms against the big one's 42.1 —
+the same number through the noise — and the library is 57 KB instead of 123,
+against 43 KB before this solver existed. The 64 KB was buying speed that had
+been attributed to it and that it did not have. What the reduction is worth is
+the 99x above, and both paths have all of that; the table only decides which
+cards to drop, and against `reduceByLoop`, which computes the same answer rather
+than looking it up, it is worth about 9%.
+
+The carry is the part worth checking rather than arguing about. The walk's
+entire state between cards is one bit — "the last live card I saw was playable" —
+so the high nibble's answer plus that bit is everything the low nibble needs,
+and `null-check` compares the two paths over all 65536 byte pairs, which is the
+whole input space of a suit and so a proof rather than a sample.
 
 `null-check` and `null-bench` in `skatsolve_test` are the checker and the
 sweep; `NullSolverParityTest` is the cross-boundary comparison, and unlike

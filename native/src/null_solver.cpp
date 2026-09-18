@@ -6,8 +6,6 @@
 namespace skat {
 namespace {
 
-inline int trailingZeros(uint32_t mask) { return __builtin_ctz(mask); }
-
 /// Each of 32 bits into its own two-bit lane. Five shifts and no loop.
 ///
 /// The same helper the points solver uses, and for the same reason: three hands
@@ -40,23 +38,27 @@ inline int winnerSlot(int led, int second, int third) {
 
 constexpr EquivTable buildEquivTable() {
     EquivTable table{};
-    for (int alive = 0; alive < 256; alive++) {
-        for (int playable = 0; playable < 256; playable++) {
-            int keep = playable;
-            bool previousWasPlayable = false;
-            // Strongest first, because a run defers upwards: of several
-            // interchangeable cards it is the highest that stands for the rest.
-            for (int rank = 7; rank >= 0; rank--) {
-                int bit = 1 << rank;
-                if ((alive & bit) == 0) continue;  // played; not a divider
-                if ((playable & bit) != 0) {
-                    if (previousWasPlayable) keep &= ~bit;
-                    previousWasPlayable = true;
-                } else {
-                    previousWasPlayable = false;
+    for (int carry = 0; carry < 2; carry++) {
+        for (int alive = 0; alive < 16; alive++) {
+            for (int playable = 0; playable < 16; playable++) {
+                int keep = playable;
+                bool previousWasPlayable = carry != 0;
+                // Strongest first, because a run defers upwards: of several
+                // interchangeable cards it is the highest that stands for the
+                // rest.
+                for (int rank = 3; rank >= 0; rank--) {
+                    int bit = 1 << rank;
+                    if ((alive & bit) == 0) continue;  // played; not a divider
+                    if ((playable & bit) != 0) {
+                        if (previousWasPlayable) keep &= ~bit;
+                        previousWasPlayable = true;
+                    } else {
+                        previousWasPlayable = false;
+                    }
                 }
+                table.step[carry][alive][playable] =
+                        static_cast<uint8_t>(keep | (previousWasPlayable ? kCarry : 0));
             }
-            table.keep[alive][playable] = static_cast<uint8_t>(keep);
         }
     }
     return table;
@@ -163,8 +165,19 @@ uint32_t NullSolver::reduce(uint32_t playable, uint32_t live) {
     for (int suit = 0; suit < 4; suit++) {
         int shift = 8 * suit;
         uint32_t byte = (playable >> shift) & 0xFF;
-        if (byte == 0) continue;
-        keep |= static_cast<uint32_t>(kEquiv.keep[(live >> shift) & 0xFF][byte]) << shift;
+        // Nought or one card in the suit: nothing can stand for anything, and
+        // this is the common case -- a hand is ten cards over four suits and a
+        // follow is usually shorter still.
+        if ((byte & (byte - 1)) == 0) {
+            keep |= byte << shift;
+            continue;
+        }
+        uint32_t liveByte = (live >> shift) & 0xFF;
+        // The high nibble holds the stronger four cards, so it walks first and
+        // hands its carry to the low one.
+        unsigned high = kEquiv.step[0][liveByte >> 4][byte >> 4];
+        unsigned low = kEquiv.step[(high & kCarry) ? 1 : 0][liveByte & 0xF][byte & 0xF];
+        keep |= (((high & 0xF) << 4) | (low & 0xF)) << shift;
     }
     return keep;
 }

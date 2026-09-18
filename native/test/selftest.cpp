@@ -164,9 +164,33 @@ void dealNull(Random& random, uint32_t hands[3], int declarer) {
     for (int i = 22; i < 32; i++) hands[others[1]] |= 1u << pack[i];
 }
 
+/// The two equivalence paths agree everywhere, not just where deals go.
+///
+/// 65536 pairs is the whole input space of a suit, so this is a proof rather
+/// than a sample -- and it is the thing worth proving, because the table splits
+/// the walk at the nibble and carries one bit across the join. A carry that was
+/// wrong in some corner would show up in play as a card quietly missing from a
+/// move list, which is the kind of bug that costs a fortnight.
+int equivalenceCheck() {
+    int failures = 0;
+    for (int alive = 0; alive < 256; alive++) {
+        for (int playable = 0; playable < 256; playable++) {
+            uint32_t byTable = skat::NullSolver::reduce(playable, alive);
+            uint32_t byLoop = skat::NullSolver::reduceByLoop(playable, alive);
+            if (byTable == byLoop) continue;
+            failures++;
+            std::printf("EQUIV alive %02x playable %02x: table %02x, loop %02x\n",
+                        alive, playable, byTable, byLoop);
+            if (failures > 5) return failures;
+        }
+    }
+    std::printf("checked all 65536 equivalence pairs, %d failures\n", failures);
+    return failures;
+}
+
 int nullCheck(int deals) {
     Random random(20260918ull);
-    int failures = 0;
+    int failures = equivalenceCheck();
     int checked = 0;
     int survived = 0;
     for (int i = 0; i < deals; i++) {

@@ -71,32 +71,52 @@ namespace skat {
 
 /// Keeps only the strongest card of each run of adjacent live playable cards.
 ///
-/// One byte of a hand mask is one suit, so this answers the whole equivalence
-/// question for a suit with a single lookup. `alive` must carry every card
-/// still in a hand *and* the cards lying in the current trick: a played card is
-/// gone from the future but can still win this trick, so it separates the cards
-/// on either side of it and must not be skipped over.
+/// One byte of a hand mask is one suit, and this resolves such a byte in two
+/// lookups -- a nibble each, the stronger four cards first, the second reading
+/// the state the first left behind. `alive` must carry every card still in a
+/// hand *and* the cards lying in the current trick: a played card is gone from
+/// the future but can still win this trick, so it separates the cards on either
+/// side of it and must not be skipped over.
 ///
-/// 64 KB of read-only table against eight branches per suit per node: the one
-/// place in this file where memory is deliberately spent on speed. It is built
-/// by the compiler into .rodata, so it costs nothing at load, nothing at
-/// construction, and is shared between threads and processes.
+/// **Why nibbles rather than the whole byte.** The obvious table is
+/// `keep[alive][playable]`, one lookup instead of two, and it was written that
+/// way first. It does not build: 64 KB of entries with an eight-step walk each
+/// is about half a million loop bodies, and the NDK's clang gives up at its
+/// constexpr step limit with "possible infinite loop?" -- where GCC, whose limit
+/// is thirty-two times higher, had compiled it without a word. Raising the limit
+/// with a compiler flag would have been the wrong repair twice over: it is a
+/// flag per toolchain, and it buys the right to spend 64 KB of every ABI's
+/// .rodata, which on Android the APK then carries four times.
 ///
-/// What it is worth, over forty made Nulls, against NullSolver::reduceByLoop,
-/// which is the identical answer computed rather than looked up:
+/// Splitting the walk at the nibble costs one more dependent lookup and shrinks
+/// the table by a factor of 128 -- 512 bytes, which is in L1 and stays there.
+/// The build is 2048 loop bodies, comfortably inside every compiler's budget.
+/// Over forty made Nulls, against NullSolver::reduceByLoop -- the same answer
+/// computed rather than looked up, and necessarily the same node count:
 ///
-///     table  42.1 ms/deal      loop  47.5 ms/deal      (same nodes, necessarily)
+///     512-byte table  42.9 ms/deal        loop  47.2 ms/deal
 ///
-/// Eleven per cent for 64 KB. That is a clear yes on a server and a closer
-/// thing on a phone, where the library carries it once per ABI and the APK
-/// therefore carries it four times -- which is why the loop is kept and
-/// switchable rather than deleted as the losing branch of a decision. Note what
-/// is *not* in that number: the reduction itself is worth about 99x, and both
-/// paths have all of it. This is only the cost of deciding which cards to drop.
+/// The 64 KB version measured 42.1 on the same deals, which is the same number
+/// through the noise. So the small table gave up nothing, and the library went
+/// from 123 KB back to 57 KB -- against 43 KB before this solver existed. There
+/// was never a speed-for-memory trade here to make; there was a first draft that
+/// spent 64 KB for no return and a compiler that refused to let it pass.
+/// `skatsolve_test null-bench` prints both of the two that are left.
+///
+/// The carry is the one subtle part, and it is what makes the split exact: the
+/// walk's whole state between cards is "the last live card I saw was playable",
+/// one bit, so the high nibble's answer plus that bit is everything the low
+/// nibble needs. Nothing is approximated here, and `null-check` proves it by
+/// comparing the two paths over all 65536 byte pairs rather than by argument.
 struct EquivTable {
-    uint8_t keep[256][256];
+    /// Indexed by [carry in][alive nibble][playable nibble]. The low four bits
+    /// are the playable cards to keep; bit four is the carry out.
+    uint8_t step[2][16][16];
 };
 const EquivTable& equivTable();
+
+/// The carry bit inside an EquivTable entry.
+inline constexpr uint8_t kCarry = 0x10;
 
 class NullSolver {
 public:

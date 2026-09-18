@@ -27,7 +27,18 @@ endif()
 
 # The identity the library reports through skat_version, so a stale or
 # mismatched .so can be recognised as one from the Java side rather than by its
-# behaviour. Bump it when the search changes in a way callers should notice.
+# behaviour. Bump it when the search changes in a way callers should notice,
+# here and in NativeSolver.EXPECTED_VERSION together.
+#
+# It is a cache variable, which means a build directory that already exists
+# keeps the value it was configured with and ignores the default above. That is
+# CMake working as designed and it bites on exactly this file: the Android build
+# under app/.cxx and any existing build/ tree will go on compiling the new
+# sources with the old version string until they are deleted or reconfigured,
+# and the app then loads a library that reports a version this build does not
+# expect. NativeSolver says so in the log and falls back to the Java search
+# rather than running something it cannot identify -- which is the check doing
+# its job, but the cause is a stale cache and not a stale library.
 set(SKAT_SOLVE_VERSION "2" CACHE STRING "Build identity reported by skat_version")
 
 add_library(skatsolve_core STATIC
