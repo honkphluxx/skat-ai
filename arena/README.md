@@ -3064,3 +3064,54 @@ trump game's, or both. Queued as its own item.
 A caveat on what is missing: there is no shipped-player-against-`solver` row,
 so the distance to the ceiling is only known for `belief-32`. The overnight
 script now has that row.
+
+### 2026-09-18: an instrument for Null card play, and two levers
+
+Built and tested, not yet measured; `tools/null-card-play.sh` measures it.
+
+**The instrument.** `NullContractSource` (`--contracts=null`) prices Null on
+every board where some seat can avoid every trick against perfect defence
+after the heuristic discard, which is **one board in eleven** (174 of 2,000
+at seed 11; the oracle source, by contrast, chooses Null on 2.8% of the
+boards it prices). Without it there is no way to measure Null card play at
+all: the oracle rows carry six Null games a seed, enough to notice the gap
+that started this and nowhere near enough to close it. `ArenaTest` checks
+that every board it prices is one the declarer can actually hold, and that
+it prices enough of them to be worth running.
+
+**The first lever, and the defect behind it.** Asked to separate the ten,
+the queen and the seven of a suit at a Null, the shipped tiebreak answers
+seven, **queen, ten** -- the queen ahead of the ten, because a queen is
+three card points and a ten is ten, while Null's own order is 7 8 9 10 J Q K
+A. Card points are not scored in a Null, so the shipped order sorts that
+contract by a quantity it does not use, and inverts the only ranking that
+matters wherever a ten meets a court card. This predates the position rule:
+the order before it was "the cheapest card", the same defect.
+
+`RuleTiebreak.nullOrder`, switched on by `SearchAiProvider.withNullRankTiebreak()`
+and registered as `belief-32-null-rank`, replaces it with one rule in two
+directions. **Shed the highest safe card** when high cards are what threaten
+you: a Null declarer's high cards are the danger and a card that is safe now
+need not stay safe, while a defender's high cards are worth nothing, since a
+defender taking a trick costs its side nothing. **Play the lowest** as a
+defender in front of a declarer that has not yet played, lead included: a low
+card is the ammunition that forces the declarer over, and spending it behind
+a declarer that has already committed a card wastes it. Four tests pin the
+positions, a mutation that flattens the two directions fails one of them, and
+a fifth test pins that no trump game changes.
+
+**The second lever.** `withNullWorlds(n)`: a Null decision samples `n` worlds
+instead of the personality's 32. A Null solve is a yes/no question with no
+points to count, an order of magnitude cheaper than a trump game's on the
+same ten cards, and the belief model is blind to Null (0 decision points in
+5.1 million records, twice now), so Null worlds are drawn uniformly and more
+of them is the one lever that costs only time. Registered at 128 and 256,
+alone and with the rank order.
+
+A note on the cost, because it sets the board counts: `NullSolver` has no
+native backend, so every Null world is a Java search. In the container a
+five-board match took nine minutes. The script attempts 1,500 boards for
+about 135 played ones, which is small by this arena's standards and enough
+here because a Null swings 69 game points between won and lost -- a
+ten-point shift in the declarer's win rate is about two game points a game,
+where the trump-contract mechanisms were worth one.

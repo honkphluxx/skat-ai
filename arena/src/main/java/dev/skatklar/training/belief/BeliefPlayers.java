@@ -195,6 +195,19 @@ public final class BeliefPlayers {
         registry.register(alphaMu(registry, "alphamu", 2, loader));
         registry.register(alphaMu(registry, "alphamu-3", 3, loader));
 
+        // The Null variants, for the instrument the Null contract source
+        // provides (`--contracts=null`). All three are the shipped player with
+        // one thing changed, so a match between any of them and the shipped
+        // player is exactly paired: the tiebreak that stops sorting Null by
+        // card points, twice the worlds a Null decision samples, and both.
+        // Null is the one contract where our card play is measurably behind
+        // (arena/README.md, 2026-09-17 third), where the belief is blind, and
+        // where a solve is cheap enough that more worlds cost little.
+        registry.register(nullVariant("belief-32-null-rank", 32, true, 0, loader));
+        registry.register(nullVariant("belief-32-null-128", 32, false, 128, loader));
+        registry.register(nullVariant("belief-32-null-rank-128", 32, true, 128, loader));
+        registry.register(nullVariant("belief-32-null-rank-256", 32, true, 256, loader));
+
         Path candidate = locateCandidate();
         if (candidate != null) {
             Loader other = new Loader(candidate);
@@ -204,6 +217,37 @@ public final class BeliefPlayers {
                     PassRule.DEFAULT, 15, true, other),
                     "The shipped player with the candidate model " + candidate));
         }
+    }
+
+    /**
+     * The shipped player with the Null knobs moved.
+     *
+     * @param rankTies  break Null ties by Null rank instead of by card points
+     * @param nullWorlds worlds a Null decision samples; zero for the usual count
+     */
+    private static Contestant nullVariant(String id, int worlds, boolean rankTies, int nullWorlds,
+                                          Loader loader) {
+        Personality personality = new Personality(worlds, Personality.REFERENCE.memory(),
+                Personality.REFERENCE.risk(), Personality.REFERENCE.aggression());
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() {
+                return "The shipped player, Null " + (rankTies ? "by rank" : "as shipped")
+                        + (nullWorlds > 0 ? ", " + nullWorlds + " worlds" : "");
+            }
+            @Override public SkatAiProvider newProvider(long seed) {
+                SearchAiProvider player = new SearchAiProvider(new GreedyAiProvider(), personality, seed,
+                        new BeliefWorldSource(loader.get()))
+                        .withAdaptiveBidding(PassRule.DEFAULT).withMarginTiebreak(15);
+                // The position tiebreak carries the Null branch, so every
+                // variant has it; "as shipped" means that branch still orders
+                // a Null by card points, which is the control.
+                player = player.withRuleTiebreak();
+                if (nullWorlds > 0) player = player.withNullWorlds(nullWorlds);
+                return rankTies ? player.withNullRankTiebreak() : player;
+            }
+            @Override public String toString() { return id; }
+        };
     }
 
     /** The same contestant under a display name that says which model it carries. */

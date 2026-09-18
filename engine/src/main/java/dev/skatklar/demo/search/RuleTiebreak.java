@@ -23,15 +23,28 @@ import java.util.List;
  * which among touching cards, the usual reason for a tie, is the lowest of
  * them. Nothing here is learned or priced; it is what the score sheet says a
  * trick is worth, and it is a contestant until the arena says otherwise.
+ *
+ * <p>A Null is a different game and gets a different order; see
+ * {@link #nullOrder}.
  */
 final class RuleTiebreak {
 
     private RuleTiebreak() {}
 
-    /** Greater is better, as the search's own comparators read. */
+    /** Greater is better, as the search's own comparators read. The shipped order. */
     static Comparator<Card> order(SkatAi.DecisionContext context) {
+        return order(context, false);
+    }
+
+    /**
+     * @param nullByRank order a Null by Null rank rather than by card points;
+     *                   a contestant until the arena says otherwise, which is
+     *                   why it is a flag and not simply the behaviour
+     */
+    static Comparator<Card> order(SkatAi.DecisionContext context, boolean nullByRank) {
         Contract contract = context.game.contract;
         List<SkatAi.PlayedCard> plays = context.currentTrick.plays;
+        if (nullByRank && contract.isNull()) return nullOrder(context, contract, plays);
         Comparator<Card> mostPoints = Comparator.comparingInt((Card card) -> SkatRules.cardPoints(card));
         Comparator<Card> fewestPoints = mostPoints.reversed();
         Comparator<Card> leastPower =
@@ -51,5 +64,42 @@ final class RuleTiebreak {
             Comparator<Card> points = leftTakes ? mostPoints : fewestPoints;
             return points.thenComparing(leastPower).compare(left, right);
         };
+    }
+
+    /**
+     * The same question in a Null game, where card points are not part of the
+     * objective and the order above is therefore sorting by noise.
+     *
+     * <p>Measured before it was written: asked to break a tie between the ten,
+     * the queen and the seven of a suit at a Null, the order above answers
+     * seven, queen, ten -- the queen ahead of the ten, because a queen is worth
+     * three card points and a ten is worth ten, while in Null's own order
+     * (7 8 9 10 J Q K A) the ten is the lower card. Nothing is scored for card
+     * points in a Null, so every such inversion is free damage.
+     *
+     * <p>What replaces it is one rule with two directions, and only the
+     * direction is a claim worth arguing about. <b>Shed the highest card</b>
+     * when a high card is what threatens you: the declarer must take no trick,
+     * so its high cards are the danger and one that is safe now need not stay
+     * safe; a defender's high cards are worth nothing at all, since a defender
+     * taking a trick costs its side nothing. <b>Play the lowest card</b> when
+     * you are a defender and the declarer has not yet played in this trick,
+     * lead included: a low card is the ammunition that forces the declarer
+     * over, and spending it in front of a declarer that has already committed
+     * a card wastes it.
+     *
+     * <p>Only reached between cards the vote could not separate, so it never
+     * overrules the search about which cards survive -- a card that hands the
+     * declarer a trick has already lost the vote in every sampled world.
+     */
+    private static Comparator<Card> nullOrder(SkatAi.DecisionContext context, Contract contract,
+                                              List<SkatAi.PlayedCard> plays) {
+        Comparator<Card> highest = Comparator.comparingInt(card -> SkatRules.power(contract, card));
+        boolean declaring = context.mySeat == context.game.declarer;
+        boolean declarerHasPlayed = false;
+        for (SkatAi.PlayedCard play : plays) {
+            if (play.seat == context.game.declarer) declarerHasPlayed = true;
+        }
+        return declaring || declarerHasPlayed ? highest : highest.reversed();
     }
 }

@@ -32,6 +32,10 @@ public final class ArenaMain {
                                   solver   the double-dummy oracle: the most
                                            valuable contract that survives perfect
                                            defence. Objective, and slower.
+                                  null     Null on every board a seat can hold
+                                           one on: the instrument for Null card
+                                           play, which the oracle prices on only
+                                           3% of boards.
               --passed-in=<x>   what happens when all three pass:
                                   ramsch   the canon, and what the app plays
                                            (default)
@@ -177,8 +181,9 @@ public final class ArenaMain {
         return switch (source) {
             case "auction" -> new AuctionContractSource(registry.resolve(bidder), seed);
             case "solver" -> new SolverContractSource();
+            case "null" -> new NullContractSource();
             default -> throw new IllegalArgumentException(
-                    "Unknown contract source '" + source + "'. Use auction or solver.");
+                    "Unknown contract source '" + source + "'. Use auction, solver or null.");
         };
     }
 

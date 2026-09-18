@@ -159,13 +159,17 @@ details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
   therefore still correct, and Null is played on uniform worlds.
 
 **Next, in order:** Null card play, which is now the largest measured
-weakness and the cheapest to attack -- more worlds for Null (its solves
-are an order of magnitude cheaper than a trump game's, so 128 or 256
-worlds costs little), and a Null-declaring member of the export
-population so the model can stop being blind there; then the rest of B2
-(the longer or wider training run, the true-world-share diagnostic);
-then, if it still looks worth it, the opponent-modelling cheat as a
-second ceiling instrument (see below).
+weakness and the cheapest to attack. Built 2026-09-18 and waiting on one
+run (`tools/null-card-play.sh`): a Null-only contract source, because at
+3% of the oracle mix there is nothing to measure on; a tiebreak that
+stops ordering a Null by card points, which the contract does not score
+and which inverts Null's own rank wherever a ten meets a court card; and
+more worlds for Null, whose solves are the cheapest this player makes.
+Then the part no lever reaches: a Null-declaring member of the export
+population, so the belief model stops being blind there. Then the rest
+of B2 (the longer or wider training run, the true-world-share
+diagnostic); then, if it still looks worth it, the opponent-modelling
+cheat as a second ceiling instrument.
 
 ## 2.6 Where we stand after the tiebreak run, 2026-09-16
 

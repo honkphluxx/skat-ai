@@ -378,6 +378,45 @@ public class ArenaTest {
         engine.close();
     }
 
+    /**
+     * The Null source prices only boards a seat can actually hold, and it
+     * prices enough of them to be an instrument.
+     *
+     * <p>Both halves matter. A source that handed out unmakeable Nulls would
+     * measure how gracefully a player loses; one that priced a board in fifty
+     * would need a night to collect a sample. Measured over 120 boards it
+     * prices about one in eleven, which is where the board counts in
+     * {@code tools/null-card-play.sh} come from.
+     */
+    @Test public void theNullSourcePricesOnlyMakeableNulls() {
+        NullContractSource nulls = new NullContractSource();
+        int priced = 0;
+        for (int index = 0; index < 120; index++) {
+            Board board = Board.of(11L, index);
+            ContractSource.FixedContract fixed = nulls.contractFor(board);
+            if (fixed == null) continue;
+            priced++;
+            assertEquals(Contract.NULL, fixed.contract());
+
+            java.util.List<java.util.List<Card>> dealt = java.util.List.of(
+                    new java.util.ArrayList<>(board.deal().human),
+                    new java.util.ArrayList<>(board.deal().opponentOne),
+                    new java.util.ArrayList<>(board.deal().opponentTwo));
+            java.util.List<Card> twelve = new java.util.ArrayList<>(dealt.get(fixed.declarer().ordinal()));
+            twelve.addAll(board.deal().skat);
+            java.util.List<Card> keep = dev.skatklar.demo.search.Discards.keepBestTen(Contract.NULL, twelve);
+            java.util.List<java.util.List<Card>> hands = new java.util.ArrayList<>(3);
+            for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+                hands.add(seat == fixed.declarer() ? keep : dealt.get(seat.ordinal()));
+            }
+            assertTrue("board " + index + ": priced a Null the declarer cannot hold",
+                    dev.skatklar.demo.solve.NullSolver.declarerSurvives(
+                            fixed.declarer(), hands, board.round().forehand));
+        }
+        assertTrue("priced " + priced + " of 120 boards, which is too few to measure on",
+                priced >= 6);
+    }
+
     /** Lost, won, Schneider: what a Skat game is actually scored on. */
     private static int band(int declarerPoints) {
         if (declarerPoints >= 90) return 3;

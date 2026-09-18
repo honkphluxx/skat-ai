@@ -222,6 +222,24 @@ public final class SearchAiProvider implements SkatAiProvider {
                              double temperature, boolean adaptiveBidding,
                              HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
                              boolean ruleTies) {
+        this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos,
+                temperature, adaptiveBidding, passRule, marginPoints, ruleTies, 0);
+    }
+
+    private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
+                             WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
+                             double temperature, boolean adaptiveBidding,
+                             HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
+                             boolean ruleTies, int nullWorlds) {
+        this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos, temperature,
+                adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, false);
+    }
+
+    private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
+                             WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
+                             double temperature, boolean adaptiveBidding,
+                             HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
+                             boolean ruleTies, int nullWorlds, boolean nullRankTies) {
         this.delegate = delegate;
         this.personality = personality;
         this.seed = seed;
@@ -233,6 +251,50 @@ public final class SearchAiProvider implements SkatAiProvider {
         this.passRule = Objects.requireNonNull(passRule, "passRule");
         this.marginPoints = Math.max(0, marginPoints);
         this.ruleTies = ruleTies;
+        this.nullWorlds = Math.max(0, nullWorlds);
+        this.nullRankTies = nullRankTies;
+    }
+
+    /**
+     * Whether a Null's last ties are broken by Null's own rank rather than by
+     * card points. See {@link RuleTiebreak} for what the points order does to a
+     * Null and why it is wrong there; a contestant until the arena says
+     * otherwise, which is why this is a flag and not simply the behaviour.
+     */
+    private final boolean nullRankTies;
+
+    /** The same player, ordering a Null's ties by rank. See {@link #nullRankTies}. */
+    public SearchAiProvider withNullRankTiebreak() {
+        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
+                ruleTies, nullWorlds, true);
+    }
+
+    /**
+     * Worlds a Null decision samples, or zero for the same count as everything
+     * else.
+     *
+     * <p>A Null is the cheapest contract this player searches -- {@link
+     * dev.skatklar.demo.solve.NullSolver} answers a yes/no question about
+     * taking no trick at all, with no points to count and no window to widen,
+     * and it is about an order of magnitude faster than a trump game's solve on
+     * the same ten cards. The world count was never separated from the other
+     * contracts' because there was no reason to look: nothing this project
+     * ships ever announces a Null, so the app plays one only when a person
+     * does. The oracle rows of 2026-09-17 gave the reason -- at contracts the
+     * cheat holds, our Null is won 39% of the time against SkatZero's 78%,
+     * while at trump contracts the two are level -- and the belief model is
+     * blind to Null (0 decision points in a 5.1-million-record corpus), so
+     * Null worlds are drawn uniformly and more of them is the one lever that
+     * costs nothing but time.
+     */
+    private final int nullWorlds;
+
+    /** The same player, sampling {@code worlds} worlds at a Null. See {@link #nullWorlds}. */
+    public SearchAiProvider withNullWorlds(int worlds) {
+        return new SearchAiProvider(delegate, personality, seed, this.worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
+                ruleTies, worlds);
     }
 
     /**
@@ -254,7 +316,8 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, breaking the remaining ties by position. See {@link #ruleTies}. */
     public SearchAiProvider withRuleTiebreak() {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints, true);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
+                true, nullWorlds);
     }
 
     /**
@@ -286,7 +349,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, breaking ties by cushion. See {@link #marginPoints}. */
     public SearchAiProvider withMarginTiebreak(int points) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points, ruleTies);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, points, ruleTies, nullWorlds, nullRankTies);
     }
 
     /**
@@ -328,7 +391,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule rule) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, true, rule, marginPoints, ruleTies);
+                biddingBudgetNanos, temperature, true, rule, marginPoints, ruleTies, nullWorlds, nullRankTies);
     }
 
     /**
@@ -349,7 +412,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withBiddingBudget(long nanos) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos,
-                temperature, adaptiveBidding, passRule, marginPoints, ruleTies);
+                temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullRankTies);
     }
 
     /**
@@ -373,7 +436,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withTemperature(double temperature) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
-                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints, ruleTies);
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullRankTies);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -770,7 +833,9 @@ public final class SearchAiProvider implements SkatAiProvider {
 
             List<WorldSampler.World> sampled;
             try {
-                sampled = worlds.sample(evidence(context), personality.worlds(), random);
+                int count = nullWorlds > 0 && context.game.contract.isNull()
+                        ? nullWorlds : personality.worlds();
+                sampled = worlds.sample(evidence(context), count, random);
             } catch (IllegalStateException inconsistent) {
                 // The position does not add up, which means this player is being
                 // driven through a lifecycle it does not model. Play on rather
@@ -804,7 +869,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
             Comparator<Card> byCushion = Comparator.comparingInt(card -> held.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
-            Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context) : byCost.reversed();
+            Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context, nullRankTies) : byCost.reversed();
             return legal.stream()
                     // Among cards that win equally often, the one that wins by
                     // the wider margin where a margin was asked for, and then
