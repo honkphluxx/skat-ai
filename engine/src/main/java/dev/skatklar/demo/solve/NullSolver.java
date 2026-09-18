@@ -20,17 +20,39 @@ import java.util.Map;
  * the opposite question — the card that takes the most points is usually the
  * worst card there is.
  *
- * <p>Being a boolean game makes it far cheaper than a suit game. There is no
- * window to widen and no value to bracket: every branch either survives or does
- * not, the declarer needs one surviving move and the defence needs one killing
- * move, and both cut immediately when they find it. A full ten-card deal solves
- * in about a millisecond.
+ * <p>Being a boolean game changes the shape of the search rather than its size.
+ * There is no window to widen and no value to bracket: every branch either
+ * survives or does not, the declarer needs one surviving move and the defence
+ * needs one killing move, and both cut immediately when they find it.
+ *
+ * <p><b>That does not make it cheap.</b> A Null the declarer cannot make is
+ * refuted in a trick or two, and those are almost every Null in a uniformly
+ * dealt pack — which is why this search was long assumed to be the easy one. A
+ * Null somebody actually declares is the other kind, and from the root it costs
+ * this implementation about two thirds of a second. The arena and the app only
+ * ever ask about the second kind, and they ask once per sampled world. That is
+ * what the native search behind {@link NativeSolver} is for: same verdicts,
+ * about twelve times faster, and this code is the fallback and the
+ * specification. See {@code docs/native-solver.md}.
  *
  * <p>The two defenders are modelled as one side, as everywhere else under perfect
  * information: with nothing hidden there is nothing to signal, so their best
  * joint play is a single strategy.
  */
 public final class NullSolver {
+
+    /**
+     * Whether the native Null search answers instead of this one.
+     *
+     * <p>Decided once, when this class is initialised, and then left alone. Not
+     * final and not private for the same reason {@link DoubleDummySolver} keeps
+     * its own flag writable: {@code NullSolverParityTest} has to put the same
+     * position to both engines inside one JVM, and a decision baked into a
+     * static final cannot be put back. Nothing in production writes to it — to
+     * run on the Java search, start the process with
+     * {@code -Dskatklar.solver=java}.
+     */
+    static boolean nativeEnabled = NativeSolver.available();
 
     private final ContractTables tables = ContractTables.of(Contract.NULL);
     private final int declarerSeat;
@@ -51,6 +73,12 @@ public final class NullSolver {
     public static boolean declarerSurvives(SkatAi.Seat declarer,
                                            List<? extends Collection<Card>> hands,
                                            SkatAi.Seat leader) {
+        if (nativeEnabled) {
+            int[] masks = masks(hands);
+            int answer = NativeSolver.nullSurvives(declarer.ordinal(), masks[0], masks[1],
+                    masks[2], leader.ordinal(), leader.ordinal(), 0, 0);
+            if (answer >= 0) return answer != 0;
+        }
         NullSolver solver = prepare(declarer, hands);
         return solver.survives(leader.ordinal(), leader.ordinal(), 0, 0);
     }
@@ -73,6 +101,11 @@ public final class NullSolver {
             throw new IllegalArgumentException(
                     "It is not " + toPlay + "'s turn after " + trickSoFar.size() + " cards");
         }
+        if (nativeEnabled) {
+            List<Verdict> answer = nativeMovesSurviving(declarer, toPlay, remaining, leader,
+                    trickSoFar);
+            if (answer != null) return answer;
+        }
         NullSolver solver = prepare(declarer, remaining);
         int trickCards = 0;
         for (int slot = 0; slot < trickSoFar.size(); slot++) {
@@ -91,6 +124,51 @@ public final class NullSolver {
 
     /** One card, and whether the Null declarer still gets through after it. */
     public record Verdict(Card card, boolean declarerSurvives) {}
+
+    /**
+     * The same list from the native search, or null when it will not answer.
+     *
+     * <p>Separate from its caller so that the argument checks above run whether
+     * or not the native engine is in play: a caller that passes a trick of four
+     * cards has a bug, and a bug that only shows up on the machines without the
+     * library is worse than one that shows up everywhere.
+     */
+    private static List<Verdict> nativeMovesSurviving(SkatAi.Seat declarer,
+                                                      SkatAi.Seat toPlay,
+                                                      List<? extends Collection<Card>> remaining,
+                                                      SkatAi.Seat leader,
+                                                      List<Card> trickSoFar) {
+        int[] masks = masks(remaining);
+        int[] cards = new int[10];
+        int[] survives = new int[10];
+        int count = NativeSolver.nullMovesSurviving(declarer.ordinal(), toPlay.ordinal(),
+                masks[0], masks[1], masks[2], leader.ordinal(), pack(trickSoFar),
+                trickSoFar.size(), cards, survives);
+        if (count < 0) return null;
+        List<Verdict> verdicts = new ArrayList<>(count);
+        for (int at = 0; at < count; at++) {
+            verdicts.add(new Verdict(ContractTables.card(cards[at]), survives[at] != 0));
+        }
+        return verdicts;
+    }
+
+    private static int[] masks(List<? extends Collection<Card>> hands) {
+        int[] masks = new int[3];
+        for (int seat = 0; seat < 3; seat++) {
+            int mask = 0;
+            for (Card card : hands.get(seat)) mask |= 1 << ContractTables.index(card);
+            masks[seat] = mask;
+        }
+        return masks;
+    }
+
+    private static int pack(List<Card> trickSoFar) {
+        int packed = 0;
+        for (int slot = 0; slot < trickSoFar.size(); slot++) {
+            packed |= ContractTables.index(trickSoFar.get(slot)) << (8 * slot);
+        }
+        return packed;
+    }
 
     private static NullSolver prepare(SkatAi.Seat declarer,
                                       List<? extends Collection<Card>> hands) {

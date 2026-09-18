@@ -258,12 +258,65 @@ next time one is created rather than never. Not `java.lang.ref.Cleaner`, which
 is the same thing with a thread attached and needs API 33; this app supports
 26.
 
+## Null
+
+Null has its own search in the same library, behind `skat_null_survives`,
+`skat_null_moves_surviving` and `skat_null_brute`, and it shares nothing with
+the one above but the card encoding and the shape of the transposition table.
+It could not share more: the value of a Null position is a bit rather than a
+number, so there is no window to widen, nothing to bound, and every cut-off in
+`Solver` means nothing here. What replaces them is short-circuit evaluation —
+the declarer needs one move that survives, the defence one that kills.
+
+`skat_solve` still answers `SKAT_UNSUPPORTED` for Null and every caller still
+falls back, which is right: asking the points search about a Null is asking the
+wrong question, not asking a supported question of an unsupported contract.
+
+**It is not "far less hot", which is what this document used to say.** That
+claim was made from the outside and is wrong by two orders of magnitude, and it
+is worth recording why it was wrong. A Null that *cannot* be made is refuted in
+a trick or two and costs nothing, and those are almost all the Nulls in a
+uniformly dealt pack — about one hand in forty survives with best-ten discards.
+The Nulls a player actually declares are the other kind, and those are the only
+kind the arena ever solves. Over forty of them, from the root:
+
+| | ms per decision | nodes |
+| --- | --- | --- |
+| Java `NullSolver` | 660 | — |
+| native, everything on | 55 | 2.5e7 |
+| native, no equivalence | 1730 | 1.8e8 |
+| native, no transposition table | 12900 | 1.5e9 |
+
+Twelve times the Java, which is more than the points solver's three and a half,
+and for the same reason it was three and a half there: most of it is not the
+language. Two things carry it, in this order.
+
+The **transposition table** is worth about 820x in nodes, and its *size* is
+worth nearly as much as its presence — 105 ms a deal with a one-megabyte table
+against 47 with four. That ordering is the reverse of the points solver's,
+where the table is a cache over a tree alpha-beta has already pruned. Here
+there is no pruning to do, so the table is not an optimisation over the search,
+it is the search's memory: without it the same endgames are re-derived down
+every transposed order of the same tricks.
+
+**Equivalence** is worth about 99x on top of that, and it is a much bigger
+lever here than in the points solver. Null scores no card points, so within a
+suit *any* two cards with no live card between them are interchangeable — the
+bridge case. The points solver has to settle for two cards that are also worth
+the same, which in Skat leaves only the jacks and the nine-eight-seven. The
+implementation is a 64 KB `uint8_t keep[256][256]` in `.rodata`: one byte of a
+hand mask is one suit, so a single lookup answers the whole equivalence
+question for it, and that works only because in a Null the card index inside a
+suit *is* the strength. The points solver cannot do it because its jacks leave
+their suits.
+
+`null-check` and `null-bench` in `skatsolve_test` are the checker and the
+sweep; `NullSolverParityTest` is the cross-boundary comparison, and unlike
+`SolverParityTest` it allows no latitude at all about *which* card is which,
+because its caller is counting a verdict per card across sampled worlds.
+
 ## Not done
 
-- **Null games.** The native engine refuses them and says so, and every caller
-  already falls back — `NullSolver` is a different search with a binary
-  objective, and none of the windows, cut-offs or table values here mean
-  anything for it. It is also far less hot: Null prunes hard on its own.
 - **Parallelism.** Deliberately: the server's problem is throughput across many
   tables, not latency on one, and threads inside one solve would buy the app a
   little and the server nothing.
@@ -274,6 +327,11 @@ is the same thing with a thread attached and needs API 33; this app supports
   `-nostdinc++`, which is the same condition. But compiling is not running:
   `SolverParityTest` on a device is what would say the ABIs are *right*, and
   nothing here can say that.
+- **A Null decision measured over a whole hand.** The table above times the
+  decision at the root, where every hand still holds ten cards; that is the
+  worst one there is, and a turn's real cost is the average over the hand. It
+  matters because the number that has to fit on a phone is worlds times
+  decision, and 128 worlds times 55 ms is seven seconds.
 
 ## Where the C++ stops
 

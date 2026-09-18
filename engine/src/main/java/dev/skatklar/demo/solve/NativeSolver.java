@@ -48,8 +48,14 @@ final class NativeSolver {
      * search. One string comparison at load turns that into a log line and a
      * fallback. Bump it here and in {@code native/CMakeLists.txt} together
      * whenever the search changes in a way a caller could notice.
+     *
+     * <p>2 is the Null search. That bump is not a courtesy: a version-1 library
+     * has no {@code nullSurvives} symbol, and a missing native method is an
+     * {@code UnsatisfiedLinkError} at the call rather than a negative status
+     * code the caller can fall back from. The check turns it into a log line at
+     * load, which is the entire point of having it.
      */
-    private static final String EXPECTED_VERSION = "1";
+    private static final String EXPECTED_VERSION = "2";
 
     private static final String LIBRARY = "skatsolve";
     private static final String PROPERTY = "skatklar.solver";
@@ -305,4 +311,24 @@ final class NativeSolver {
                                     int leader, int trickCards, int trickSize, int target);
 
     static native void setTranspositions(long handle, boolean enabled);
+
+    // ------------------------------------------------------------------- Null
+
+    /*
+     * Null has its own search on the other side, because it answers a different
+     * question: whether the declarer takes no trick at all, which is one bit
+     * rather than a point count. These three return 1, 0, or a negative status,
+     * so a caller reads a negative the same way it reads one anywhere else here
+     * -- ask Java.
+     */
+
+    static native int nullSurvives(int declarer, int hand0, int hand1, int hand2,
+                                   int toPlay, int leader, int trickCards, int trickSize);
+
+    static native int nullMovesSurviving(int declarer, int toPlay, int hand0, int hand1,
+                                         int hand2, int leader, int trickCards,
+                                         int trickSize, int[] outCards, int[] outVerdicts);
+
+    /** Plain minimax on the native side. Exists so the tests can compare like with like. */
+    static native int nullBrute(int declarer, int hand0, int hand1, int hand2, int leader);
 }

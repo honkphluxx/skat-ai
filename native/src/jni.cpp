@@ -171,4 +171,46 @@ Java_dev_skatklar_demo_solve_NativeSolver_setTranspositions(JNIEnv*, jclass, jlo
                                    enabled == JNI_TRUE ? 1 : 0);
 }
 
+// ---------------------------------------------------------------------- Null
+
+JNIEXPORT jint JNICALL
+Java_dev_skatklar_demo_solve_NativeSolver_nullSurvives(JNIEnv*, jclass, jint declarer,
+                                                       jint h0, jint h1, jint h2,
+                                                       jint toPlay, jint leader,
+                                                       jint trickCards, jint trickSize) {
+    uint32_t hands[3];
+    handsOf(h0, h1, h2, hands);
+    return skat_null_survives(declarer, hands, toPlay, leader,
+                              static_cast<uint32_t>(trickCards), trickSize, nullptr);
+}
+
+JNIEXPORT jint JNICALL
+Java_dev_skatklar_demo_solve_NativeSolver_nullMovesSurviving(
+        JNIEnv* env, jclass, jint declarer, jint toPlay, jint h0, jint h1, jint h2,
+        jint leader, jint trickCards, jint trickSize, jintArray outCards,
+        jintArray outVerdicts) {
+    uint32_t hands[3];
+    handsOf(h0, h1, h2, hands);
+    // On the stack and copied out once, for the reason the file's header gives:
+    // a search that called back into the JVM per leaf would be a different
+    // program, and every one of those calls can throw.
+    int32_t cards[10];
+    int32_t verdicts[10];
+    int32_t count = skat_null_moves_surviving(declarer, toPlay, hands, leader,
+                                              static_cast<uint32_t>(trickCards), trickSize,
+                                              cards, verdicts);
+    if (count < 0) return count;
+    env->SetIntArrayRegion(outCards, 0, count, cards);
+    env->SetIntArrayRegion(outVerdicts, 0, count, verdicts);
+    return count;
+}
+
+JNIEXPORT jint JNICALL
+Java_dev_skatklar_demo_solve_NativeSolver_nullBrute(JNIEnv*, jclass, jint declarer, jint h0,
+                                                    jint h1, jint h2, jint leader) {
+    uint32_t hands[3];
+    handsOf(h0, h1, h2, hands);
+    return skat_null_brute(declarer, hands, leader);
+}
+
 }  // extern "C"

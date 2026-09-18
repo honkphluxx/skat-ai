@@ -44,6 +44,14 @@ constexpr bool isTrump(int contract, int suit, int rank) {
 
 /// ContractTables.strengthOf, number for number.
 constexpr int strengthOf(int contract, int suit, int rank) {
+    // Null first, because it is the one contract where a jack is not a trump
+    // and not special: SkatRules.nullStrength is the rank ordinal plus one, so
+    // seven through ace run 1..8 in every suit and the card index carries the
+    // order by itself. Getting this wrong is invisible until something reads
+    // kTables[NULL] -- which nothing does today, because tablesFor refuses Null
+    // and null_solver.cpp needs no table at all -- and that is exactly the kind
+    // of latent wrong number a port should not leave lying about.
+    if (contract == kNullContract) return rank + 1;
     if (rank == kRankJack) {
         return suit == kSuitClubs    ? 104
                : suit == kSuitSpades ? 103
@@ -156,9 +164,9 @@ const Tables* tablesFor(int contractOrdinal) {
     if (contractOrdinal < 0 || contractOrdinal >= kContracts) return nullptr;
     // Null is a different game rather than a different trump: its objective is
     // "the declarer takes no trick at all" rather than a point count, so every
-    // window and cut-off in the search means nothing for it. Refusing is the
-    // honest answer, and the caller falls back exactly as the Java solver's
-    // constructor makes it.
+    // window and cut-off in this search means nothing for it. Refusing is the
+    // honest answer here; the question belongs to null_solver.cpp, behind the
+    // skat_null_* entry points, which needs none of these tables.
     if (contractOrdinal == kNullContract) return nullptr;
     return &kTables[contractOrdinal];
 }

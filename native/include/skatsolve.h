@@ -15,10 +15,13 @@
 // real. That is the same encoding the Java search uses internally, so a caller
 // that already has it does not have to unpack it.
 //
-// Every entry point returns SKAT_UNSUPPORTED for a contract this engine refuses
-// -- Null, whose objective is binary rather than a point count and whose search
-// is a different piece of work. The caller falls back, exactly as it already
-// does when the Java solver's constructor refuses.
+// The point search returns SKAT_UNSUPPORTED for Null, whose objective is a
+// single bit rather than a point count. That is not a gap: Null has its own
+// search behind the skat_null_* entry points at the end of this file, and a
+// caller asking skat_solve about it is asking the wrong question. Any other
+// contract this engine refuses answers SKAT_UNSUPPORTED too, and the caller
+// falls back exactly as it already does when the Java solver's constructor
+// refuses.
 
 #ifndef SKATSOLVE_H
 #define SKATSOLVE_H
@@ -100,6 +103,35 @@ int32_t skat_solver_reaches(SkatSolver* solver, const uint32_t hands[3], int32_t
                             int32_t leader, uint32_t trickCards, int32_t trickSize,
                             int32_t target);
 int64_t skat_solver_visited_nodes(const SkatSolver* solver);
+
+/* ------------------------------------------------------------------- Null */
+
+/* Null is a different game rather than a different trump: the declarer wins by
+   taking no trick at all, so a position is worth one bit and the search that
+   settles it shares nothing with the one above but the card encoding. These
+   three mirror dev.skatklar.demo.solve.NullSolver. */
+
+/// Whether the Null declarer can still avoid every remaining trick.
+///
+/// Returns 1, 0, or a negative code. `out` may be null; when it is not, it
+/// receives the verdict in declarerPoints, -1 in card, and the cost.
+int32_t skat_null_survives(int32_t declarerSeat, const uint32_t hands[3], int32_t toPlay,
+                           int32_t leader, uint32_t trickCards, int32_t trickSize,
+                           SkatResult* out);
+
+/// For every legal card, whether the declarer still survives after playing it.
+///
+/// The shape a determinized search needs: one verdict per move, so the votes of
+/// many sampled worlds can be added up. Writes one entry per legal move into
+/// `outCards` and `outVerdicts`, which must have room for ten, in the order the
+/// moves were generated. Returns the number written, or a negative code.
+int32_t skat_null_moves_surviving(int32_t declarerSeat, int32_t toPlay,
+                                  const uint32_t hands[3], int32_t leader,
+                                  uint32_t trickCards, int32_t trickSize,
+                                  int32_t* outCards, int32_t* outVerdicts);
+
+/// Plain boolean minimax over a Null, for the tests: no table, no equivalence.
+int32_t skat_null_brute(int32_t declarerSeat, const uint32_t hands[3], int32_t leader);
 
 /// A build identity, so a mismatched library can be recognised as one.
 const char* skat_version(void);

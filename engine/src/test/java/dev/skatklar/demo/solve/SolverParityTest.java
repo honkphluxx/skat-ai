@@ -321,8 +321,19 @@ public final class SolverParityTest {
                 position.declarer(), position.hands(), position.leader(), 61), bounded);
     }
 
+    /**
+     * The version literal, spelled out a third time on purpose.
+     *
+     * <p>{@code NativeSolver.EXPECTED_VERSION} and {@code SKAT_SOLVE_VERSION}
+     * in {@code native/CMakeLists.txt} have to agree or nothing loads, and they
+     * would agree just as well if somebody bumped one and let the other follow
+     * without thinking about it. This third copy is what makes the bump a
+     * decision: a test that fails says the library's behaviour changed, and
+     * whoever is looking at the failure has to say what changed and why a
+     * caller should notice. 2 is the Null search.
+     */
     @Test public void theLibraryIsTheOneThisBuildExpects() {
-        assertEquals("1", NativeSolver.version());
+        assertEquals("2", NativeSolver.version());
     }
 
     private static int[] masks(List<List<Card>> hands) {

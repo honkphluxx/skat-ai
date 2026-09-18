@@ -28,11 +28,12 @@ endif()
 # The identity the library reports through skat_version, so a stale or
 # mismatched .so can be recognised as one from the Java side rather than by its
 # behaviour. Bump it when the search changes in a way callers should notice.
-set(SKAT_SOLVE_VERSION "1" CACHE STRING "Build identity reported by skat_version")
+set(SKAT_SOLVE_VERSION "2" CACHE STRING "Build identity reported by skat_version")
 
 add_library(skatsolve_core STATIC
         src/tables.cpp
         src/solver.cpp
+        src/null_solver.cpp
         src/api.cpp)
 target_include_directories(skatsolve_core PUBLIC include src)
 target_compile_definitions(skatsolve_core PRIVATE
@@ -77,6 +78,7 @@ if(NOT ANDROID)
 
     enable_testing()
     add_test(NAME solver_matches_minimax COMMAND skatsolve_test check 400)
+    add_test(NAME null_solver_matches_minimax COMMAND skatsolve_test null-check 400)
 endif()
 
 # ------------------------------------------------------------------------ JNI
@@ -191,6 +193,7 @@ if(NOT ANDROID AND NOT MSVC)
     add_library(skatsolve_freestanding OBJECT
             src/tables.cpp
             src/solver.cpp
+            src/null_solver.cpp
             src/api.cpp)
     target_include_directories(skatsolve_freestanding PRIVATE include src)
     target_compile_definitions(skatsolve_freestanding PRIVATE SKAT_SOLVE_VERSION="check")

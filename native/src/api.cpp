@@ -2,9 +2,11 @@
 
 #include <stdlib.h>
 
+#include "null_solver.h"
 #include "solver.h"
 #include "tables.h"
 
+using skat::NullSolver;
 using skat::Solver;
 using skat::Tables;
 
@@ -298,6 +300,64 @@ int64_t skat_solver_visited_nodes(const SkatSolver* solver) {
 
 void skat_solver_set_transpositions(SkatSolver* solver, int32_t enabled) {
     if (solver != nullptr) solver->solver.setUseTranspositions(enabled != 0);
+}
+
+// ---------------------------------------------------------------------- Null
+
+int32_t skat_null_survives(int32_t declarerSeat, const uint32_t hands[3], int32_t toPlay,
+                           int32_t leader, uint32_t trickCards, int32_t trickSize,
+                           SkatResult* out) {
+    if (!positionIsSane(declarerSeat, toPlay, leader, trickSize)) return SKAT_INVALID;
+    NullSolver solver(declarerSeat, hands);
+    bool survives = solver.survives(toPlay, leader, trickCards, trickSize);
+    if (out != nullptr) {
+        out->declarerPoints = survives ? 1 : 0;
+        out->card = -1;
+        out->visitedNodes = static_cast<int64_t>(solver.visitedNodes());
+        out->transpositions = solver.storedEntries();
+    }
+    return survives ? 1 : 0;
+}
+
+int32_t skat_null_moves_surviving(int32_t declarerSeat, int32_t toPlay,
+                                  const uint32_t hands[3], int32_t leader,
+                                  uint32_t trickCards, int32_t trickSize,
+                                  int32_t* outCards, int32_t* outVerdicts) {
+    if (!positionIsSane(declarerSeat, toPlay, leader, trickSize)) return SKAT_INVALID;
+    NullSolver solver(declarerSeat, hands);
+    uint8_t moves[10];
+    int count = solver.legalMoves(toPlay, trickCards, trickSize, moves);
+    // Every legal card gets a verdict, because the caller counts votes per card
+    // and a card missing from the list is a card that loses its vote. But
+    // interchangeable cards have the same verdict by definition, so only one of
+    // each run is searched and the rest copy its answer -- the same saving the
+    // search makes internally, applied to the one place that cannot simply drop
+    // the duplicates.
+    uint32_t playable = solver.playableCards(toPlay, trickCards, trickSize);
+    uint32_t alive = solver.alive(trickCards, trickSize);
+    int32_t verdictOf[32];
+    bool haveVerdict[32] = {};
+    for (int i = 0; i < count; i++) {
+        int card = moves[i];
+        int representative = NullSolver::representativeOf(card, playable, alive);
+        if (!haveVerdict[representative]) {
+            solver.setHand(toPlay, solver.hand(toPlay) & ~(1u << representative));
+            bool survives = solver.childSurvives(toPlay, leader, trickCards, trickSize,
+                                                 representative);
+            solver.setHand(toPlay, solver.hand(toPlay) | (1u << representative));
+            verdictOf[representative] = survives ? 1 : 0;
+            haveVerdict[representative] = true;
+        }
+        outCards[i] = card;
+        outVerdicts[i] = verdictOf[representative];
+    }
+    return count;
+}
+
+int32_t skat_null_brute(int32_t declarerSeat, const uint32_t hands[3], int32_t leader) {
+    if (!positionIsSane(declarerSeat, leader, leader, 0)) return SKAT_INVALID;
+    NullSolver solver(declarerSeat, hands);
+    return solver.brute(leader, leader, 0, 0) ? 1 : 0;
 }
 
 const char* skat_version(void) { return SKAT_SOLVE_VERSION; }
