@@ -1552,14 +1552,128 @@ public final class GameEngine {
         }
         offerContra(seat);
         if (holdForRe && awaitingRe) return null;
-        Set<Card> legal = currentLegalCards();
-        SkatAi.DecisionContext context = decisionContext(seat, legal);
-        Card card = null;
-        try {
-            card = aiSessions.get(seat).chooseCard(context);
-        } catch (RuntimeException ignored) {
-            recordViolation(seat, ViolationPhase.PLAY);
+        AiTurn turn = prepareAiTurn(seat);
+        decideAiCard(turn);
+        return commitAiCard(turn);
+    }
+
+    // ------------------------------------------------- the same turn, in three
+
+    /**
+     * One automated seat's card, split so the thinking can leave this thread.
+     *
+     * <p>{@link #playAiCard()} decides and plays in one locked call, which is
+     * the right shape everywhere it is used — the server, the arena, the tests —
+     * because none of those has anything else to do while a seat thinks. An app
+     * does. A determinized search is tens of milliseconds on a laptop and can be
+     * most of a second on a phone, and a Null is very much worse than that; run
+     * on the thread that draws the table, every one of those milliseconds is a
+     * frame nobody gets.
+     *
+     * <p>So the same work is available as three calls instead of one:
+     * {@link #beginAiTurn()} under the lock, {@link #decideAiCard(AiTurn)}
+     * outside it, {@link #commitAiCard(AiTurn)} under the lock again. What makes
+     * that safe is that {@link SkatAi.DecisionContext} copies everything it is
+     * given — see the constructors in {@code SkatAi} — so the context built in
+     * the first call is an immutable snapshot that owes nothing to this engine,
+     * and the second call touches no engine state at all. Only the seat's own
+     * session is shared, and it is reached through a reference taken under the
+     * lock: a deal started in the meantime builds new sessions and leaves the
+     * old one to the worker that is still holding it.
+     *
+     * <p>The third call is where a stale answer is caught. It re-checks that the
+     * deal is still where it was — same seat, same trick, same cards on the
+     * table — and returns null rather than playing a card decided about a
+     * position that no longer exists.
+     */
+    public static final class AiTurn {
+        public final SkatAi.Seat seat;
+        public final SkatAi.DecisionContext context;
+        private final SkatAiSession session;
+        private final int atDeal;
+        private final int atTrick;
+        private final int atTrickSize;
+        private Card chosen;
+        private boolean threw;
+
+        private AiTurn(SkatAi.Seat seat, SkatAi.DecisionContext context,
+                       SkatAiSession session, int atDeal, int atTrick, int atTrickSize) {
+            this.seat = seat;
+            this.context = context;
+            this.session = session;
+            this.atDeal = atDeal;
+            this.atTrick = atTrick;
+            this.atTrickSize = atTrickSize;
         }
+    }
+
+    /**
+     * The decision an automated seat is facing, or null when there is not one.
+     *
+     * <p>Null rather than the exception {@link #playAiCard()} throws, because
+     * the caller that asks this is a loop looking for something to do rather
+     * than one that already knows.
+     */
+    public synchronized AiTurn beginAiTurn() {
+        SkatAi.Seat seat = SkatAi.Seat.values()[currentPlayer];
+        if (humanSeats.contains(seat) || trick.size() == 3 || result != null) return null;
+        offerContra(seat);
+        return prepareAiTurn(seat);
+    }
+
+    private AiTurn prepareAiTurn(SkatAi.Seat seat) {
+        return new AiTurn(seat, decisionContext(seat, currentLegalCards()),
+                aiSessions.get(seat), dealGeneration, completedTricks, trick.size());
+    }
+
+    /**
+     * Asks the seat for its card. The long one, and the only one not locked.
+     *
+     * <p>A search that throws is remembered rather than reported: the violation
+     * belongs in the engine's count, and the count is engine state, so it is
+     * written when the card is committed and not from here.
+     */
+    public Card decideAiCard(AiTurn turn) {
+        if (turn.session == null) {
+            turn.threw = true;
+            return null;
+        }
+        try {
+            turn.chosen = turn.session.chooseCard(turn.context);
+        } catch (RuntimeException broken) {
+            turn.threw = true;
+        }
+        return turn.chosen;
+    }
+
+    /**
+     * Plays what {@link #decideAiCard} decided, or null if the deal moved on.
+     *
+     * <p>An illegal card is still the lowest legal one and still a recorded
+     * violation, exactly as in the single call. What is new is the check above
+     * it: a card chosen for a trick that has since been collected, or for a deal
+     * that has since been replaced, is not a bad card but an answer to a
+     * question nobody is asking any more, and playing it would be worse than
+     * dropping it.
+     */
+    public synchronized Card commitAiCard(AiTurn turn) {
+        SkatAi.Seat seat = SkatAi.Seat.values()[currentPlayer];
+        // dealGeneration first, because position cannot see the case that
+        // matters: a deal dealt while a seat was thinking is also at trick
+        // nought with nothing on the table and the same seat to play, so every
+        // positional check passes and the card from the previous deal goes down
+        // on the new one. AiTurnSplitTest found exactly that when this guard was
+        // positional only. It is the same number prepareDeferredSeats already
+        // watches, and it is bumped by clearInteractiveState, which every route
+        // into a deal goes through.
+        if (dealGeneration != turn.atDeal || result != null || seat != turn.seat
+                || humanSeats.contains(seat)
+                || completedTricks != turn.atTrick || trick.size() != turn.atTrickSize) {
+            return null;
+        }
+        if (turn.threw) recordViolation(seat, ViolationPhase.PLAY);
+        Set<Card> legal = currentLegalCards();
+        Card card = turn.chosen;
         if (card == null || !legal.contains(card) || !hands[currentPlayer].contains(card)) {
             recordViolation(seat, ViolationPhase.PLAY);
             card = legal.iterator().next();
