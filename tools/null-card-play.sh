@@ -11,20 +11,34 @@
 # contract mix, so the overnight run cannot measure a change there: six games
 # a seed is enough to notice a gap and nowhere near enough to close one.
 # `--contracts=null` (NullContractSource) prices Null on every board a seat can
-# hold one on, which is about one board in eleven, so 1500 attempted boards buy
-# roughly 135 played ones. That is a small board count by this arena's
-# standards and enough here for one reason: a Null swings 69 game points
-# between won and lost, so a ten-point shift in the declarer's win rate is
-# worth about two game points a game, where the mechanisms measured on trump
-# contracts were worth one. Null is also slow -- NullSolver has no native
-# backend, so every world is a Java search -- and a night is finite.
+# hold one on, which is about one board in eleven, so 6000 attempted boards buy
+# roughly 540 played ones.
+#
+# That board count was 1500 for round one, and the reason it was is worth
+# recording because it has stopped being true. The comment here used to end
+# "Null is also slow -- NullSolver has no native backend, so every world is a
+# Java search -- and a night is finite." There is a native backend now and it
+# is about twelve times the Java (docs/native-solver.md), so the night that
+# bought 414 Null boards a side buys four times as many, and four times the
+# boards is half the interval.
+#
+# Halving it is the point rather than a luxury. Round one asked whether 128
+# worlds beat 32 and answered +1.17 [+0.37, +1.98] -- resolved, but only just,
+# on an interval 1.6 points wide. Round two asks whether 256 beats 128, which
+# is a diminishing return and therefore a smaller effect measured against the
+# same noise. At round one's precision that question would most likely have
+# come back unresolved, and an unresolved night is a night spent learning
+# nothing.
 #
 # Each variant is its own contestant against the shipped player, exactly
 # paired because only the one thing differs.
 #
 # What the first round (2026-09-18) settled, over 414 Null boards a side:
 #
-#   belief-32-null-128        +1.17 [+0.37, +1.98], resolved. More worlds pay.
+#   belief-32-null-128        +1.17 [+0.37, +1.98], resolved. More worlds pay,
+#                             and this now ships -- Opponents.NULL_WORLD_MULTIPLE
+#                             gives every level four times its own world count
+#                             at a Null.
 #   belief-32-null-rank       -1.33 [-1.95, -0.72], resolved WORSE. "Shed the
 #                             highest safe card" was wrong, and wrong for a
 #                             reason worth keeping: a card that reaches the
@@ -37,22 +51,32 @@
 #   belief-32-null-rank-128   +0.08: the two cancel, as they should if the
 #                             tiebreak costs about what the worlds buy.
 #
-# This round asks the two questions that leaves:
+# So the control is no longer the old shipped player: it is
+# belief-32-null-128, which is what ships now. Every variant below differs
+# from it by exactly one thing, which round one did not manage -- rank-128
+# moved two levers at once and its +0.08 could not say which of them did what.
 #
-#   belief-32-null-256        does the world count keep paying past 128? Never
-#                             measured without the refuted tiebreak attached.
+#   belief-32-null-256        does the world count keep paying past 128?
+#   belief-32-null-512        and past 256? Worth asking in the same night
+#                             now that a Null world is cheap; if 256 pays and
+#                             512 does not, the curve has a top and we have
+#                             found it in one run instead of three.
 #   belief-32-null-low-128    the shipped points order sorts a Null by card
-#   belief-32-null-low-256    points, which the contract does not score, and
+#                             points, which the contract does not score, and
 #                             that accident approximates "play low" -- except
 #                             between a ten and a court card, where points take
 #                             the queen and Null rank takes the ten. LOW_RANK
-#                             says it properly. One disagreement, and it is the
-#                             only thing these two variants change.
+#                             says it properly. One disagreement, and at the
+#                             same 128 worlds as the control it is the only
+#                             thing this variant changes.
+#
+# low-256 is deliberately not here. It moves the tiebreak and the world count
+# together, which is the mistake round one made.
 #
 # VARIANTS=... overrides the list, to re-run a single one.
 #
 # Read in the morning from arena-logs/summary-null.txt. The row that decides is
-# each variant against `belief-32-adaptive-margin-ties`, the shipped player, in
+# each variant against `belief-32-null-128`, which is the shipped player, in
 # exact pairing on Null boards. A variant that wins there still has to be
 # non-negative on the ordinary overnight gates before it ships: none of this
 # touches a trump game by construction (RuleTiebreakTest pins that), but "by
@@ -80,7 +104,7 @@ LOG=arena-logs
 SUMMARY=arena-logs/summary-null.txt
 THREADS=16
 # About one board in eleven can hold a Null, so this is ~135 played boards.
-BOARDS=1500
+BOARDS=6000
 SEEDS="11 12 13"
 QUICK=false
 for arg in "$@"; do
@@ -89,7 +113,7 @@ for arg in "$@"; do
         --boards=*)  BOARDS="${arg#*=}" ;;
         --threads=*) THREADS="${arg#*=}" ;;
         --seeds=*)   SEEDS="${arg#*=}" ;;
-        -h|--help)   sed -n '2,52p' "$NULL_ARENA_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)   sed -n '2,76p' "$NULL_ARENA_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)           echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -99,8 +123,8 @@ mkdir -p "$LOG"
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 [ -f STOP ] && { rm -f STOP; echo "Removed a STOP file left over from an earlier run."; }
 
-SHIPPED=belief-32-adaptive-margin-ties
-VARIANTS="${VARIANTS:-belief-32-null-256 belief-32-null-low-128 belief-32-null-low-256}"
+SHIPPED=belief-32-null-128
+VARIANTS="${VARIANTS:-belief-32-null-256 belief-32-null-512 belief-32-null-low-128}"
 
 match() {
     local a="$1" b="$2"

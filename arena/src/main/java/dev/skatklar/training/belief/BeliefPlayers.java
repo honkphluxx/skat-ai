@@ -215,6 +215,7 @@ public final class BeliefPlayers {
         // accidentally approximating, said properly, and 256 worlds has never
         // been measured without the refuted tiebreak attached to it.
         registry.register(nullVariant("belief-32-null-256", 32, NullOrder.POINTS, 256, loader));
+        registry.register(nullVariant("belief-32-null-512", 32, NullOrder.POINTS, 512, loader));
         registry.register(nullVariant("belief-32-null-low-128", 32, NullOrder.LOW_RANK, 128, loader));
         registry.register(nullVariant("belief-32-null-low-256", 32, NullOrder.LOW_RANK, 256, loader));
 

@@ -132,6 +132,30 @@ public final class Opponents {
     public static final int SHIPPED_CUSHION = 15;
 
     /**
+     * How many more worlds a Null gets than the level's other contracts.
+     *
+     * <p>Four, and the arena measured the top of that: 32 worlds against 128 at
+     * Null is worth **+1.17** [+0.37, +1.98] game points a Null, resolved on
+     * three seeds, and it lifts the declarer's win rate on makeable Nulls from
+     * 59% to 64% (arena/README.md, 2026-09-18). It is the largest single
+     * card-play gain this player has been given, and it was sitting unshipped
+     * for one reason: a Null decision cost the better part of a second a world
+     * in Java, so 128 of them was a frozen table. The C++ Null solver is twelve
+     * times that and the search now runs off the drawing thread besides, which
+     * is what makes the number spendable.
+     *
+     * <p>A multiple rather than a flat 128, because a flat number would hand a
+     * beginner a stronger Null defence than an expert's trump play and break
+     * the one thing the ladder promises. Each level keeps its own shape and
+     * pays about the same for a Null as for anything else: a Null world is much
+     * the cheaper search.
+     *
+     * <p>The measured step is 32 to 128. The others are the same ratio and are
+     * not separately measured, which is the honest thing to say about them.
+     */
+    public static final int NULL_WORLD_MULTIPLE = 4;
+
+    /**
      * The same seat, with a ceiling on what one hand's evaluation may cost.
      *
      * <p>Only for a caller with a person waiting on the result — the app. The
@@ -199,7 +223,8 @@ public final class Opponents {
                 player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION)
                         .withRuleTiebreak();
             }
-            return player.withBiddingBudget(biddingBudgetNanos).withWorldThreads(worldThreads);
+            return player.withNullWorlds(level.personality().worlds() * NULL_WORLD_MULTIPLE)
+                    .withBiddingBudget(biddingBudgetNanos).withWorldThreads(worldThreads);
         });
     }
 }
