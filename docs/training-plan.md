@@ -165,8 +165,10 @@ run (`tools/null-card-play.sh`): a Null-only contract source, because at
 stops ordering a Null by card points, which the contract does not score
 and which inverts Null's own rank wherever a ten meets a court card; and
 more worlds for Null, whose solves are the cheapest this player makes.
-Then the part no lever reaches: a Null-declaring member of the export
-population, so the belief model stops being blind there. Then the rest
+Then the part no lever reaches: Null in the belief model, which needs a
+corpus that contains a Null at all (§B2 step 3 -- minted with
+`--contracts=null`, since no bidder announces one), and a measurement of
+whether Null belongs in the shared network or in one of its own. Then the rest
 of B2 (the longer or wider training run, the true-world-share
 diagnostic); then, if it still looks worth it, the opponent-modelling
 cheat as a second ceiling instrument.
@@ -387,10 +389,66 @@ changes what the sweep measures.
    `xskat` so that no decision in the corpus was made with a card the seat
    could not see. 200k boards, `--threads=8`; the exporter already takes
    `--players=`. `check_data.py` before the night, as its README says.
-3. **Null in the model**: shared network with the game-type input that already
-   exists at offset 264, not a separate model — Null decision points will be
-   about one in twenty and a separate head would starve. Verify the count is
-   non-zero this time; it is the one-line check that would have caught 2.1.
+3. **Null in the model.** Two things have to happen here and they are
+   usually confused with each other: *getting Null data at all*, and
+   *deciding which network learns from it*.
+
+   **The data.** Two corpora have now been counted and both hold exactly
+   zero Null decision points — 0 of 89,438 in v1 and 0 of 511,816 in v2 —
+   because no seat in any population announces a Null. That is a bidding
+   fact, not a training one (`NullAuditMain`: the player will bid 18, hold
+   23 and announce Null, but `guaranteedValue(NULL)` is a flat 23 and it
+   can never outbid anyone), and waiting for the bidder to be fixed would
+   block this indefinitely. So the Nulls are **minted** instead:
+   `ExportMain` learns `--contracts=<src>` and exports with
+   `NullContractSource`, which prices a Null on about one board in eleven,
+   so 200k boards give roughly 18,000 Null games and half a million Null
+   decision points. Verify the count is non-zero this time; it is the
+   one-line check that would have caught 2.1.
+
+   The caveat, recorded before the corpus is built rather than after: a
+   minted Null has no auction behind it, so its bidding block is empty.
+   The model would learn where the cards lie in a Null *given no bidding
+   evidence*. That is close to the app's own case — our seats only ever
+   meet a Null that a person declared — but it is not the same thing, and
+   it argues for keeping the minted records distinguishable rather than
+   pretending they came from a normal game.
+
+   **Which network — measure it, do not argue it.** This step used to say
+   "shared network, not a separate model, because Null decision points will
+   be about one in twenty and a separate head would starve". That reason
+   expired with the paragraph above: minted data can be as plentiful as we
+   like, so scarcity no longer decides anything. Train **both** from the
+   same corpus, which costs minutes because the corpus is the expensive
+   part, and read three numbers:
+
+   - held-out Null accuracy, mixed net against Null-only net;
+   - held-out **trump** accuracy of the mixed net against today's model —
+     the number that says whether Null poisoned the 97% of positions the
+     player actually meets;
+   - the arena, as always, on `--contracts=null` boards and on the ordinary
+     gates.
+
+   What the arguments are, so the result can be read against them. *For
+   sharing:* most of the belief's work is contract-independent bookkeeping
+   (voids, cards gone, the 10/10/2 split), which a shared net learns once
+   from every record rather than twice from a slice, and the net is already
+   shared across contracts that differ a great deal — a Grand has four
+   trumps, a suit game eleven — and handles that well; one file also means
+   one parity check and one version to get wrong, which matters in a
+   pipeline whose failure mode is a model that is silently wrong.
+   *Against:* several inputs change meaning on the contract bit.
+   `trumps_out`, `trumps_mine` and `jacks_out` are meaningless in a Null and
+   are still encoded, so a Null record asserts "no trumps are out", which is
+   a false fact rather than an absent one — the same shape as the
+   presence-bit defect of 2.1. The void classes move too, since a jack is
+   trump in one game and a plain card in the other, and the discard is
+   inverted. A shared net must spend capacity learning to ignore inputs
+   rather than to use them.
+
+   If the mixed net matches on trump and wins on Null, ship one file. If it
+   costs anything on trump, ship two; the Null net can be smaller, since
+   Null inference looks like the simpler problem.
 4. Train. Same recipe, same interpreter warning.
 
 **Gates, all three:**
