@@ -356,6 +356,56 @@ because its caller is counting a verdict per card across sampled worlds.
   matters because the number that has to fit on a phone is worlds times
   decision, and 128 worlds times 55 ms is seven seconds.
 
+## The worlds mostly agree, and it cannot be cashed in
+
+Measured 2026-09-19 over 7552 sampled worlds from 59 Null card decisions at 128
+worlds each, by recording each world's verdict vector — the survives/dies answer
+for every legal card — and counting the distinct ones.
+
+| what would have to be known to skip a solve | distinct | share |
+| --- | --- | --- |
+| the deal itself | 7161 | 94.8% |
+| the deal with the dead cards struck out | 6436 | 85.2% |
+| the same, with the two defenders merged | 4744 | 62.8% |
+| the verdict vector | 172 | **2.3%** |
+
+The last row is the striking one and it is the one that cannot be used. A
+decision's 128 worlds usually return one to four distinct answers between them,
+so the search does about forty times the work its output requires — but a
+world's verdict is not knowable without solving it, so that 2.3% is an oracle's
+number, not a cache's.
+
+The third row is the reduction that is *provably* sound, and it is worth writing
+down why, because the argument is tempting and the payoff is not. Null has no
+trumps and no card points, so the only question the rules ever ask about a card
+is how it compares in rank to another card of the same suit; absolute rank never
+enters, and a card nobody holds is never played and so can never come between two
+cards that are. A world is therefore fully determined, for the search, by the
+sequence of owners in ascending rank order within each suit with the dead cards
+struck out. The measurement confirmed it: 1116 pairs of worlds shared such a key
+and not one pair disagreed. It collapses 14.8% of the solving, which is not worth
+a lookup on the path.
+
+The fourth row is the canonicalisation everyone reaches for next — ignore *which*
+defender holds what — and it is wrong, at the rate a shortcut is usually wrong:
+151 of its 2808 collisions disagreed, 5.4%. Seating decides play order and play
+order decides Null. It does not reach 2.3% either.
+
+So the collapse is not worlds being secretly the same world. It is genuinely
+different deals arriving at the same answer, because a Null is usually decided by
+something robust — the declarer holds a stoppable suit or he does not — and the
+exact split of the unseen cards rarely turns it. Solving one world teaches
+nothing transferable about the next. **The search is tight; do not propose a
+verdict cache again without a key that beats 85%.**
+
+One thing survives this and is parked rather than dead, because it is a sampling
+question and not a search one. Many decisions show all 128 worlds returning the
+same vector, which means what the extra worlds buy over 32 is sharper
+*proportions* in the vote rather than new answers — and where the first few dozen
+are unanimous, the rest cannot change which card wins. A sequential stopping rule
+would end those decisions early for nothing. It needs its own arena run to show
+it costs no strength, and performance is not currently urgent.
+
 ## Where the C++ stops
 
 This port is not a beachhead. The rule it establishes — C++ at a leaf, behind a
