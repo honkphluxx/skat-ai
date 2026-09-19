@@ -15,6 +15,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /**
  * How likely a hand is to make a contract, measured rather than scored.
@@ -41,11 +45,36 @@ public final class HandEvaluator {
 
     private final int worlds;
     private final Random random;
+    private final int threads;
 
     public HandEvaluator(int worlds, Random random) {
+        this(worlds, random, 1);
+    }
+
+    /**
+     * @param threads how many threads the sampled worlds may be solved over.
+     *                One is off, and off is right everywhere but the app: the
+     *                arena already runs sixteen boards at a time and threads
+     *                inside a seat there would oversubscribe the machine.
+     */
+    public HandEvaluator(int worlds, Random random, int threads) {
         this.worlds = Math.max(1, worlds);
         this.random = random;
+        this.threads = Math.max(1, threads);
     }
+
+    /**
+     * One drawn world: the other two hands as dealt, and the two in the skat.
+     *
+     * <p>The reason this type exists is the reason the auction could not be
+     * spread over threads while card play could. {@code chooseCard} samples
+     * every world before it searches any, so its random stream is spent before
+     * the first solve starts and the solves divide cleanly. This method used to
+     * shuffle inside the loop that solved, so the draws and the solves were
+     * interleaved and neither could move. Pulling the draw out is the whole
+     * change; the parallelism follows from it.
+     */
+    private record Deal(Map<SkatAi.Seat, List<Card>> hands, List<Card> skat) {}
 
     /**
      * The share of sampled deals the contract holds up in — 61 card points for a
@@ -224,20 +253,51 @@ public final class HandEvaluator {
     private double sample(Contract contract, List<Card> myCards, SkatAi.Seat mySeat,
                           SkatAi.Seat leader, boolean bounded, long deadlineNanos,
                           AuctionEvidence evidence) {
+        List<Deal> drawn = draw(myCards, mySeat, evidence);
+
+        int made = 0;
+        int solved = 0;
+        if (threads <= 1 || drawn.size() < 2) {
+            for (Deal deal : drawn) {
+                if (bounded && solved > 0 && System.nanoTime() - deadlineNanos >= 0) break;
+                Boolean holds = solve(contract, myCards, mySeat, leader, deal, bounded,
+                        deadlineNanos);
+                if (holds == null) break;
+                solved++;
+                if (holds) made++;
+            }
+        } else {
+            int[] counts = solveInParallel(contract, myCards, mySeat, leader, drawn, bounded,
+                    deadlineNanos);
+            made = counts[0];
+            solved = counts[1];
+        }
+        if (solved == 0) return Double.NaN;
+        return (double) made / solved;
+    }
+
+    /**
+     * Every world this evaluation will look at, drawn before any is solved.
+     *
+     * <p>Serial, and it has to be: the shuffle and the rejection test both come
+     * off {@code random}, so this is where the whole of the stream is spent and
+     * the order it is spent in is what makes a seeded run repeat. Drawing is
+     * cheap and solving is not -- the rejections happen here and never cost a
+     * solve -- so drawing worlds a spent budget will not reach is a rounding
+     * error, and it buys something: the stream no longer depends on the clock,
+     * which is one fewer way for a budgeted run to differ from an unbounded one.
+     */
+    private List<Deal> draw(List<Card> myCards, SkatAi.Seat mySeat, AuctionEvidence evidence) {
         List<Card> rest = new ArrayList<>();
         Set<Card> mine = new LinkedHashSet<>(myCards);
         for (Card card : SkatDeck.ordered()) if (!mine.contains(card)) rest.add(card);
         boolean constrained = evidence != null && !evidence.isEmpty();
 
-        int made = 0;
-        int solved = 0;
+        List<Deal> drawn = new ArrayList<>(worlds);
         for (int world = 0; world < worlds; world++) {
-            if (bounded && world > 0 && System.nanoTime() - deadlineNanos >= 0) break;
             Map<SkatAi.Seat, List<Card>> hands = new EnumMap<>(SkatAi.Seat.class);
             int at = 0;
             // Deal until the auction allows it, or give up and take the last one.
-            // Dealing is cheap and solving is not, so the rejections happen here
-            // and never cost a solve.
             for (int attempt = 0; ; attempt++) {
                 Collections.shuffle(rest, random);
                 hands.clear();
@@ -253,43 +313,117 @@ public final class HandEvaluator {
                 if (!constrained || attempt >= REJECTION_ATTEMPTS
                         || evidence.consistent(hands, mySeat, random)) break;
             }
-            // The declarer picks the skat up and buries two cards, so a hand has
-            // to be judged as it will be played rather than as it was dealt.
-            // Skipping that step is not a small pessimism: it is the difference
-            // between a bidder that opens on a third of its hands and one that
-            // never opens at all.
-            List<Card> twelve = new ArrayList<>(myCards);
-            twelve.addAll(rest.subList(at, at + 2));
-            List<Card> keep = Discards.keepBestTen(contract, twelve);
-            int bankedInTheSkat = SkatRules.cardPoints(Discards.buried(contract, twelve));
-
-            List<List<Card>> bySeat = new ArrayList<>(3);
-            for (SkatAi.Seat seat : SkatAi.Seat.values()) {
-                bySeat.add(seat == mySeat ? keep : hands.get(seat));
-            }
-            // Spelled out rather than nested in a conditional expression. Mixing
-            // a `boolean` arm with a `Boolean` one makes the whole expression a
-            // boolean conditional (JLS 15.25), which unboxes the reference arm --
-            // so the timeout's null would have become an NPE here.
-            Boolean holds;
-            if (contract.isNull()) {
-                // Null is left unbounded on purpose: it is decided on tricks
-                // rather than on points, prunes far harder, and has no tail worth
-                // guarding against. The between-worlds check above contains it.
-                holds = NullSolver.declarerSurvives(mySeat, bySeat, leader);
-            } else if (bounded) {
-                holds = DoubleDummySolver.declarerReachesBefore(contract, mySeat, bySeat,
-                        leader, 61 - bankedInTheSkat, deadlineNanos);
-            } else {
-                holds = DoubleDummySolver.declarerReaches(contract, mySeat, bySeat, leader,
-                        61 - bankedInTheSkat);
-            }
-            if (holds == null) break;
-            solved++;
-            if (holds) made++;
+            // Copied out now, because the next world reshuffles the list this
+            // view is a window onto.
+            drawn.add(new Deal(hands, new ArrayList<>(rest.subList(at, at + 2))));
         }
-        if (solved == 0) return Double.NaN;
-        return (double) made / solved;
+        return drawn;
+    }
+
+    /** Whether the contract holds in one drawn world, or null if time ran out. */
+    private Boolean solve(Contract contract, List<Card> myCards, SkatAi.Seat mySeat,
+                          SkatAi.Seat leader, Deal deal, boolean bounded, long deadlineNanos) {
+        // The declarer picks the skat up and buries two cards, so a hand has to
+        // be judged as it will be played rather than as it was dealt. Skipping
+        // that step is not a small pessimism: it is the difference between a
+        // bidder that opens on a third of its hands and one that never opens.
+        List<Card> twelve = new ArrayList<>(myCards);
+        twelve.addAll(deal.skat());
+        List<Card> keep = Discards.keepBestTen(contract, twelve);
+        int bankedInTheSkat = SkatRules.cardPoints(Discards.buried(contract, twelve));
+
+        List<List<Card>> bySeat = new ArrayList<>(3);
+        for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+            bySeat.add(seat == mySeat ? keep : deal.hands().get(seat));
+        }
+        // Spelled out rather than nested in a conditional expression. Mixing a
+        // `boolean` arm with a `Boolean` one makes the whole expression a
+        // boolean conditional (JLS 15.25), which unboxes the reference arm -- so
+        // the timeout's null would have become an NPE here.
+        if (contract.isNull()) {
+            // Null is left unbounded on purpose: it is decided on tricks rather
+            // than on points, prunes far harder, and has no tail worth guarding
+            // against. The between-worlds check contains it.
+            return NullSolver.declarerSurvives(mySeat, bySeat, leader);
+        }
+        if (bounded) {
+            return DoubleDummySolver.declarerReachesBefore(contract, mySeat, bySeat, leader,
+                    61 - bankedInTheSkat, deadlineNanos);
+        }
+        return DoubleDummySolver.declarerReaches(contract, mySeat, bySeat, leader,
+                61 - bankedInTheSkat);
+    }
+
+    /**
+     * The same worlds over several threads. Returns {@code {made, solved}}.
+     *
+     * <p>Contracts are still asked about one after another, deliberately. The
+     * budget is one deadline for the seat and the order decides what gets
+     * dropped -- Null is asked last so that running out of time lands on the
+     * behaviour this player had before Null was measured at all. Spreading the
+     * contracts too would be three times the parallelism and would replace that
+     * with a different degradation: every contract answered from one or two
+     * worlds, and a Null whose estimate is "1 of 1" looking like a certainty.
+     * A coarse answer about the right contract beats a confident one about the
+     * wrong one.
+     *
+     * <p>Which leaves {@code biddingWorlds()} as the thing to revisit rather
+     * than this: it is capped at six because the auction was where the time was
+     * going, and that cap was a cost decision taken before any of this was
+     * parallel.
+     */
+    private int[] solveInParallel(Contract contract, List<Card> myCards, SkatAi.Seat mySeat,
+                                  SkatAi.Seat leader, List<Deal> drawn, boolean bounded,
+                                  long deadlineNanos) {
+        // A shared cursor rather than a world each, and that is measured rather
+        // than tidy. Handing each thread a contiguous slice cost most of the
+        // parallelism here: the worlds in one evaluation differ in cost by two
+        // orders of magnitude -- a contract nobody can make is refuted in
+        // milliseconds and one that hangs on the last trick is not -- so a
+        // thread that drew three cheap worlds finished and waited while its
+        // neighbour ground through three expensive ones. On two cores that was
+        // 1.28x where the structure allows 2x. Pulling the next world when free
+        // costs one atomic increment a world and takes the imbalance out.
+        int tasks = Math.min(threads, drawn.size());
+        AtomicInteger cursor = new AtomicInteger();
+        List<Callable<int[]>> work = new ArrayList<>(tasks);
+        for (int task = 0; task < tasks; task++) {
+            work.add(() -> {
+                int made = 0;
+                int solved = 0;
+                for (;;) {
+                    // Never before the first, so every task owes an answer and a
+                    // spent budget makes this hasty rather than silent.
+                    if (bounded && solved > 0 && System.nanoTime() - deadlineNanos >= 0) break;
+                    int index = cursor.getAndIncrement();
+                    if (index >= drawn.size()) break;
+                    Boolean holds = solve(contract, myCards, mySeat, leader, drawn.get(index),
+                            bounded, deadlineNanos);
+                    if (holds == null) break;
+                    solved++;
+                    if (holds) made++;
+                }
+                return new int[] {made, solved};
+            });
+        }
+        int made = 0;
+        int solved = 0;
+        try {
+            for (Future<int[]> done : SearchWorkers.POOL.invokeAll(work)) {
+                int[] counts = done.get();
+                made += counts[0];
+                solved += counts[1];
+            }
+        } catch (InterruptedException stopped) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while weighing a hand", stopped);
+        } catch (ExecutionException broken) {
+            Throwable cause = broken.getCause();
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IllegalStateException("a world could not be solved", cause);
+        }
+        return new int[] {made, solved};
     }
 
     /**

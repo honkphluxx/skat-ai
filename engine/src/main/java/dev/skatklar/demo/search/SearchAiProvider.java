@@ -21,9 +21,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Random;
 import java.util.Set;
 
@@ -403,25 +402,6 @@ public final class SearchAiProvider implements SkatAiProvider {
                 ruleTies, nullWorlds, nullTies, threads);
     }
 
-    /**
-     * The pool the world loop borrows.
-     *
-     * <p>A holder class, so nothing is created in a process that never asks --
-     * which is every arena run and every server. The threads are daemons: this
-     * pool is never shut down, because the only thing that would own its
-     * lifetime is the app, and an app that exits while a seat is mid-solve
-     * should exit.
-     */
-    private static final class Workers {
-        static final ExecutorService POOL = Executors.newFixedThreadPool(
-                Math.max(1, Runtime.getRuntime().availableProcessors()), work -> {
-                    Thread thread = new Thread(work, "skat-world-search");
-                    thread.setDaemon(true);
-                    thread.setPriority(Thread.NORM_PRIORITY - 1);
-                    return thread;
-                });
-    }
-
     /** The same player, settling a Null's ties that way. See {@link #nullTies}. */
     public SearchAiProvider withNullTiebreak(RuleTiebreak.NullOrder order) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
@@ -777,7 +757,7 @@ public final class SearchAiProvider implements SkatAiProvider {
          */
         private void price(HandEvaluator.AuctionEvidence evidence) {
             List<Card> hand = dealtHand;
-            HandEvaluator evaluator = new HandEvaluator(biddingWorlds(), random);
+            HandEvaluator evaluator = new HandEvaluator(biddingWorlds(), random, worldThreads);
             // One budget for the seat, not one per contract: the tail this
             // guards against is a single solve, and splitting the allowance
             // would let a cheap first contract subsidise nothing while a
@@ -1221,20 +1201,27 @@ public final class SearchAiProvider implements SkatAiProvider {
                 }
                 return searched;
             }
+            // A shared cursor rather than a slice each. The worlds in one
+            // decision differ in cost by two orders of magnitude -- 2 ms to
+            // 649 ms was measured on a phone at the same position -- so a
+            // thread handed a contiguous slice of cheap ones finishes and waits
+            // on the neighbour that drew the expensive ones. One atomic
+            // increment a world buys the balance back.
+            AtomicInteger cursor = new AtomicInteger();
             List<Callable<Tally>> tasks = new ArrayList<>(chunks);
             for (int chunk = 0; chunk < chunks; chunk++) {
-                int from = (int) ((long) sampled.size() * chunk / chunks);
-                int to = (int) ((long) sampled.size() * (chunk + 1) / chunks);
-                List<WorldSampler.World> mine = sampled.subList(from, to);
                 tasks.add(() -> {
                     Map<Card, Integer> tally = new LinkedHashMap<>();
                     for (Card card : legal) tally.put(card, 0);
                     int searched = 0;
-                    for (WorldSampler.World sample : mine) {
+                    for (;;) {
                         if (deadlineNanos != 0 && searched > 0
                                 && System.nanoTime() - deadlineNanos >= 0) {
                             break;
                         }
+                        int index = cursor.getAndIncrement();
+                        if (index >= sampled.size()) break;
+                        WorldSampler.World sample = sampled.get(index);
                         if (forTheCushion) castCushion(context, sample, tally);
                         else castVotes(context, sample, tally);
                         searched++;
@@ -1249,7 +1236,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             // all of them, which is the only thing the comparator needs.
             int searched = 0;
             try {
-                for (Future<Tally> done : Workers.POOL.invokeAll(tasks)) {
+                for (Future<Tally> done : SearchWorkers.POOL.invokeAll(tasks)) {
                     Tally tally = done.get();
                     searched += tally.worlds();
                     for (Map.Entry<Card, Integer> entry : tally.counts().entrySet()) {
