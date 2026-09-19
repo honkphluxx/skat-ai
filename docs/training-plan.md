@@ -165,8 +165,23 @@ details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
   sampled world, so what is left to choose is robustness to the worlds
   nobody sampled, and there the low card is the wider margin.
 
-**Next, in order:** Null card play, which is now the largest measured
-weakness and the cheapest to attack. Built 2026-09-18 and part measured
+- **Null, second round** (2026-09-19), four times the boards because the
+  C++ Null solver made the night afford them: the **tiebreak wins after
+  all, and it is the free one**. `LOW_RANK` at the shipped world count is
+  **+0.98** [+0.68, +1.28] and 4.3 points of win rate, against **+1.18**
+  and 5.3 points for quadrupling the search to 512. Not a reversal of
+  round one, which refuted the opposite policy (`SHED_HIGH`): the shipped
+  points order was *almost* "play low" already, differing only where a ten
+  meets a court card, and saying it properly is worth about what doubling
+  the search twice is worth. 128 worlds and `LOW_RANK` now ship. The world
+  curve is real and shallow (256 is +0.47) and is not taken further
+  because a Null decision is the most expensive thing this player makes.
+
+**Next, in order:** whether the two Null levers substitute rather than add
+-- round one's own explanation of the refutation predicts they do, and a
+null result there means three quarters of the Null search can go. Then Null
+card play, which is now the largest measured weakness and the cheapest to
+attack. Built 2026-09-18 and part measured
 (`tools/null-card-play.sh`): a Null-only contract source, because at
 3% of the oracle mix there is nothing to measure on; a tiebreak that
 stops ordering a Null by card points, which the contract does not score

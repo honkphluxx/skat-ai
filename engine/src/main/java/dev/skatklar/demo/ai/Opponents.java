@@ -1,6 +1,7 @@
 package dev.skatklar.demo.ai;
 
 import dev.skatklar.demo.search.Personality;
+import dev.skatklar.demo.search.RuleTiebreak.NullOrder;
 import dev.skatklar.demo.search.SearchAiProvider;
 import dev.skatklar.demo.search.WorldSource;
 
@@ -155,6 +156,23 @@ public final class Opponents {
      */
     public static final int NULL_WORLD_MULTIPLE = 4;
 
+    /*
+     * A Null's last ties are settled by Null's own rank, and that is the
+     * cheapest point this player has ever been given: +0.98 [+0.68, +1.28]
+     * game points a Null, resolved on all three seeds over 1689 Null boards a
+     * side, worth 4.3 points of win rate on makeable Nulls -- at the same world
+     * count, so it costs nothing at all (arena/README.md, 2026-09-19).
+     *
+     * It looks like a reversal of round one and is not. Round one refuted
+     * SHED_HIGH, "shed the highest safe card", at -1.33. LOW_RANK is the
+     * opposite policy: always the lowest card Null itself ranks lowest. The
+     * order that used to ship sorted a Null by card points, which the contract
+     * does not score, and that accident already approximated "play low"
+     * everywhere except between a ten and a court card -- points take the
+     * queen, Null rank takes the ten. Fixing that single disagreement is what
+     * the point is made of.
+     */
+
     /**
      * The same seat, with a ceiling on what one hand's evaluation may cost.
      *
@@ -224,6 +242,7 @@ public final class Opponents {
                         .withRuleTiebreak();
             }
             return player.withNullWorlds(level.personality().worlds() * NULL_WORLD_MULTIPLE)
+                    .withNullTiebreak(NullOrder.LOW_RANK)
                     .withBiddingBudget(biddingBudgetNanos).withWorldThreads(worldThreads);
         });
     }

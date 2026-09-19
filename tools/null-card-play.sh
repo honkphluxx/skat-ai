@@ -52,26 +52,38 @@
 #                             tiebreak costs about what the worlds buy.
 #
 # So the control is no longer the old shipped player: it is
-# belief-32-null-128, which is what ships now. Every variant below differs
+# belief-32-null-low-128, which is what ships now. Every variant below differs
 # from it by exactly one thing, which round one did not manage -- rank-128
 # moved two levers at once and its +0.08 could not say which of them did what.
 #
-#   belief-32-null-256        does the world count keep paying past 128?
-#   belief-32-null-512        and past 256? Worth asking in the same night
-#                             now that a Null world is cheap; if 256 pays and
-#                             512 does not, the curve has a top and we have
-#                             found it in one run instead of three.
-#   belief-32-null-low-128    the shipped points order sorts a Null by card
-#                             points, which the contract does not score, and
-#                             that accident approximates "play low" -- except
-#                             between a ten and a court card, where points take
-#                             the queen and Null rank takes the ten. LOW_RANK
-#                             says it properly. One disagreement, and at the
-#                             same 128 worlds as the control it is the only
-#                             thing this variant changes.
+# What round two (2026-09-19) settled, over 1689 Null boards a side:
 #
-# low-256 is deliberately not here. It moves the tiebreak and the world count
-# together, which is the mistake round one made.
+#   belief-32-null-low-128    +0.98 [+0.68, +1.28], resolved on every seed,
+#                             +4.3 points of win rate on makeable Nulls -- at
+#                             the control's own world count, so it is free.
+#                             This ships. It is not a reversal of round one:
+#                             that refuted SHED_HIGH, "shed the highest safe
+#                             card", and LOW_RANK is the opposite policy.
+#   belief-32-null-512        +1.18 [+0.78, +1.59], +5.3 points of win rate,
+#                             for four times the search.
+#   belief-32-null-256        +0.47 [+0.10, +0.84]. The world curve is real
+#                             and shallow; the tiebreak is nearly all of what
+#                             four times the worlds was buying.
+#
+# Which is the question this round asks, and it has a prediction attached.
+# Round one explained SHED_HIGH's failure like this: a card that reaches the
+# tiebreak already survives every sampled world, so what is left to choose is
+# robustness to the worlds nobody sampled. More worlds buys that same
+# robustness directly. If that explanation is right the two levers substitute
+# rather than add, and against a control that already plays low, more worlds
+# should be worth much less than the +1.18 they were worth against one that
+# did not.
+#
+#   belief-32-null-low-256    does the world count still pay at 256 once the
+#   belief-32-null-low-512    tiebreak is right? And at 512? A null result
+#                             here is the useful one: it would mean 128 worlds
+#                             is the whole answer and three quarters of the
+#                             Null search can go.
 #
 # VARIANTS=... overrides the list, to re-run a single one.
 #
@@ -113,7 +125,7 @@ for arg in "$@"; do
         --boards=*)  BOARDS="${arg#*=}" ;;
         --threads=*) THREADS="${arg#*=}" ;;
         --seeds=*)   SEEDS="${arg#*=}" ;;
-        -h|--help)   sed -n '2,76p' "$NULL_ARENA_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)   sed -n '2,88p' "$NULL_ARENA_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)           echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -123,8 +135,8 @@ mkdir -p "$LOG"
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 [ -f STOP ] && { rm -f STOP; echo "Removed a STOP file left over from an earlier run."; }
 
-SHIPPED=belief-32-null-128
-VARIANTS="${VARIANTS:-belief-32-null-256 belief-32-null-512 belief-32-null-low-128}"
+SHIPPED=belief-32-null-low-128
+VARIANTS="${VARIANTS:-belief-32-null-low-256 belief-32-null-low-512}"
 
 match() {
     local a="$1" b="$2"

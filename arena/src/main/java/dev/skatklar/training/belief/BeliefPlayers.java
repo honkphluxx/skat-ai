@@ -218,6 +218,7 @@ public final class BeliefPlayers {
         registry.register(nullVariant("belief-32-null-512", 32, NullOrder.POINTS, 512, loader));
         registry.register(nullVariant("belief-32-null-low-128", 32, NullOrder.LOW_RANK, 128, loader));
         registry.register(nullVariant("belief-32-null-low-256", 32, NullOrder.LOW_RANK, 256, loader));
+        registry.register(nullVariant("belief-32-null-low-512", 32, NullOrder.LOW_RANK, 512, loader));
 
         Path candidate = locateCandidate();
         if (candidate != null) {

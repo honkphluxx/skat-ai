@@ -3159,3 +3159,62 @@ card, where points take the queen (three) and rank takes the ten (lower,
 so the wider margin). `SHED_HIGH` stays registered and its javadoc carries
 the measurement, because a refuted idea with a number on it is worth more
 than a deleted one.
+
+### 2026-09-19: the tiebreak wins after all, and it is the free one
+
+Nine matches on `--contracts=null` boards, three seeds, **1,689 Null boards
+a side** — four times round one's 414, because the reason round one was
+small had stopped being true. Its script said "Null is also slow --
+`NullSolver` has no native backend, so every world is a Java search -- and
+a night is finite"; there is a native backend now, about twelve times the
+Java (`docs/native-solver.md`), so the same night bought four times the
+boards and half the interval.
+
+The control is `belief-32-null-128`, which is what shipped after round one,
+so every row below differs from it by exactly one thing. That is the other
+correction: round one's `rank-128` moved two levers at once and its +0.08
+could not say which of them did what.
+
+| variant | pooled | seeds | Nulls won, variant vs control |
+| --- | --- | --- | --- |
+| `belief-32-null-low-128` (LOW_RANK, same worlds) | **+0.98** [+0.68, +1.28] | +0.90, +0.81, +1.28 | 1080/1689 (63.9%) vs 1007 (59.6%) |
+| `belief-32-null-512` | **+1.18** [+0.78, +1.59] | +1.07, +0.93, +1.66 | 1064/1689 (63.0%) vs 975 (57.7%) |
+| `belief-32-null-256` | **+0.47** [+0.10, +0.84] | +0.26, +0.19, +1.08 | 1040/1689 (61.6%) vs 1003 (59.4%) |
+
+All three resolved pooled; `low-128` and `512` resolved on every individual
+seed as well, which `256` did not.
+
+**The tiebreak is worth a point a Null and costs nothing.** `LOW_RANK` at
+the control's own world count is +0.98 and 4.3 points of win rate — against
++1.18 and 5.3 points for quadrupling the search. Nearly all of what four
+times the worlds was buying, for free.
+
+**This is not a reversal of round one, and the distinction matters.** Round
+one refuted `SHED_HIGH`, "shed the highest safe card", at −1.33. `LOW_RANK`
+is the opposite policy: always the card Null itself ranks lowest. The order
+that shipped sorted a Null by card points — a quantity the contract does not
+score — and that accident already approximated "play low" everywhere except
+between a ten and a court card, where points take the queen and Null rank
+takes the ten. Fixing that one disagreement is the whole of the point. Round
+one said the accident beat the principle; it turns out the accident was
+*almost* the principle, and saying it properly is worth about what doubling
+the search twice is worth.
+
+**The world curve is real and shallow.** 256 is +0.47 and 512 is +1.18 over
+128. Worth having where the search is free, and the reason it is not simply
+taken is latency: a Null decision is the most expensive thing this player
+makes, and four times it is four times the wait on a phone.
+
+`LOW_RANK` ships (`Opponents`, alongside `NULL_WORLD_MULTIPLE`). The world
+count stays at four times the level's own.
+
+**Round three, and it has a prediction.** Round one explained `SHED_HIGH`'s
+failure by saying that a card reaching the tiebreak already survives every
+sampled world, so what is left to choose is robustness to the worlds nobody
+sampled. More worlds buys that same robustness directly. If that explanation
+is right, the two levers **substitute rather than add**, and against a
+control that already plays low the extra worlds should be worth much less
+than the +1.18 they were worth against one that did not.
+`belief-32-null-low-256` and `-low-512` against `belief-32-null-low-128`
+settle it. A null result is the useful one: it would mean 128 worlds is the
+whole answer and three quarters of the Null search can go.
