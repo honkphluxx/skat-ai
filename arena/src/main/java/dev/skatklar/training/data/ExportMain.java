@@ -5,6 +5,10 @@ import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.belief.BeliefEncoding;
 import dev.skatklar.training.arena.Board;
 import dev.skatklar.training.arena.Contestant;
+import dev.skatklar.training.arena.AuctionContractSource;
+import dev.skatklar.training.arena.ContractSource;
+import dev.skatklar.training.arena.NullContractSource;
+import dev.skatklar.training.arena.SolverContractSource;
 import dev.skatklar.training.arena.GameRunner;
 import dev.skatklar.training.arena.PlayerRegistry;
 import dev.skatklar.training.arena.Seeds;
@@ -18,6 +22,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.Callable;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -42,7 +47,31 @@ import java.util.concurrent.Future;
  *   --shard=&lt;n&gt;     boards per shard file                    (default 500)
  *   --players=a,b   population to seat, comma separated
  *   --passed-in=&lt;x&gt; ramsch (default) or void; see DuplicateMatch.PassedIn
+ *   --contracts=&lt;x&gt; auction (default), solver or null; see below
  * </pre>
+ *
+ * <p><b>Minting contracts.</b> By default the population bids and the contract
+ * is whatever the auction produced, which is the corpus a belief model wants.
+ * {@code --contracts=} replaces that with a {@link ContractSource}: the auction
+ * is skipped and the board is played at a contract chosen for it. Note that
+ * {@code auction} here means <em>the population's own auction</em>, not
+ * {@link AuctionContractSource} — the exporter has a whole table of bidders
+ * already and borrowing one of them to bid for everybody would throw away the
+ * diversity the population is for.
+ *
+ * <p>This exists for one reason. Two corpora have been counted and both hold
+ * exactly zero Null decision points, because no seat in any population ever
+ * announces a Null: the player will bid 18, hold 23 and announce it, but
+ * {@code guaranteedValue(NULL)} is a flat 23 and can never outbid anyone. That
+ * is a bidding defect, and waiting for it to be fixed would block the belief
+ * model on Null indefinitely. {@code --contracts=null} mints the games instead.
+ *
+ * <p>What a minted record is not: a game anybody bid for. Its bidding block is
+ * empty, because there was no auction, so a model trained on it learns where the
+ * cards lie in a Null <em>given no bidding evidence</em>. That is close to the
+ * app's own case, where our seats only ever meet a Null a person declared, but it
+ * is not the same thing — which is why minted boards belong in their own
+ * {@code --out=} directory rather than stirred into a corpus that was bid for.
  *
  * <p>The corpus has to be exported under the rules the resulting player will be
  * measured under. A model trained on boards where every pass-out became a
@@ -73,6 +102,14 @@ public final class ExportMain {
                     "Unknown --passed-in '" + options.get("passed-in") + "'. Use ramsch or void.");
         };
         Path out = Path.of(options.getOrDefault("out", "belief-data")).toAbsolutePath();
+        String contractsOption = options.getOrDefault("contracts", "auction");
+        ContractSource contracts = switch (contractsOption) {
+            case "auction" -> null;   // the population bids, as it always has
+            case "solver" -> new SolverContractSource();
+            case "null" -> new NullContractSource();
+            default -> throw new IllegalArgumentException(
+                    "Unknown --contracts '" + contractsOption + "'. Use auction, solver or null.");
+        };
 
         // The corpus is scored under the same rule the arena measures under;
         // see Rules. It prints, because a corpus and the model trained on it
@@ -107,14 +144,22 @@ public final class ExportMain {
                 "%,d boards, seed %d, %d thread(s), %d bytes a record, into %s%n",
                 boards, seed, threads, BeliefExporter.RECORD_BYTES, out);
         System.out.println("population: " + population);
+        System.out.println("contracts: " + (contracts == null
+                ? "whatever the population's own auction produced"
+                : contracts.describe() + " (no auction: the bidding block stays empty)"));
 
         long startedAt = System.nanoTime();
         long total = 0;
+        // Boards no source could price. Reported rather than swallowed: a source
+        // that quietly skipped four boards in five would make a corpus look
+        // merely small instead of unrepresentative.
+        AtomicInteger skipped = new AtomicInteger();
         for (int first = 0; first < boards; first += shardSize) {
             int last = Math.min(boards, first + shardSize);
             Path shard = out.resolve(String.format(Locale.ROOT, "shard-%05d.bin", first));
             try (BeliefExporter.ShardWriter writer = new BeliefExporter.ShardWriter(shard)) {
-                play(population, first, last, seed, threads, writer, voidPassedIn);
+                play(population, first, last, seed, threads, writer, voidPassedIn,
+                        contracts, skipped);
                 total += writer.records();
                 System.out.printf(Locale.ROOT, "  %s: %,d records (%,d boards)%n",
                         shard.getFileName(), writer.records(), last - first);
@@ -123,16 +168,26 @@ public final class ExportMain {
         double seconds = (System.nanoTime() - startedAt) / 1e9;
         System.out.printf(Locale.ROOT, "%n%,d records in %.0f s (%,.0f a second)%n",
                 total, seconds, total / seconds);
+        if (contracts != null) {
+            int played = boards - skipped.get();
+            System.out.printf(Locale.ROOT,
+                    "%,d of %,d boards could be priced (%.1f%%); %,d skipped%n",
+                    played, boards, 100.0 * played / boards, skipped.get());
+            if (played == 0) throw new IllegalStateException(
+                    "No board could be priced: the corpus would be empty.");
+        }
     }
 
     private static void play(List<Contestant> population, int firstBoard, int lastBoard,
                              long seed, int threads, BeliefExporter.Sink sink,
-                             boolean voidPassedIn) throws Exception {
+                             boolean voidPassedIn, ContractSource contracts,
+                             AtomicInteger skipped) throws Exception {
         List<Callable<Void>> work = new ArrayList<>(lastBoard - firstBoard);
         for (int index = firstBoard; index < lastBoard; index++) {
             final int board = index;
             work.add(() -> {
-                playBoard(population, Board.of(seed, board), seed, sink, voidPassedIn);
+                playBoard(population, Board.of(seed, board), seed, sink, voidPassedIn,
+                        contracts, skipped);
                 return null;
             });
         }
@@ -170,7 +225,8 @@ public final class ExportMain {
     }
 
     private static void playBoard(List<Contestant> population, Board board, long seed,
-                                  BeliefExporter.Sink sink, boolean voidPassedIn) {
+                                  BeliefExporter.Sink sink, boolean voidPassedIn,
+                                  ContractSource contracts, AtomicInteger skipped) {
         Random random = new Random(Seeds.mix(seed, board.index(), 0xDA7AL));
         Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
         Map<SkatAi.Seat, Integer> whoSatWhere = new EnumMap<>(SkatAi.Seat.class);
@@ -186,8 +242,22 @@ public final class ExportMain {
             recorders.add(recorder);
             seating.put(seat, recorder);
         }
-        GameRunner.play(board, seating,
-                Seeds.mix(seed, board.index(), 0xE1E1E1L), voidPassedIn);
+        long engineSeed = Seeds.mix(seed, board.index(), 0xE1E1E1L);
+        if (contracts == null) {
+            GameRunner.play(board, seating, engineSeed, voidPassedIn);
+        } else {
+            ContractSource.FixedContract fixed = contracts.contractFor(board);
+            // A board the source cannot price is not played at all. Falling back
+            // to the auction would be worse than skipping: the corpus would be
+            // part minted and part bid for, with nothing in a record to say
+            // which, and the empty bidding block would stop meaning anything.
+            if (fixed == null) {
+                skipped.incrementAndGet();
+                recorders.clear();
+                return;
+            }
+            GameRunner.playFixed(board, seating, fixed, engineSeed);
+        }
         recorders.clear();
     }
 }

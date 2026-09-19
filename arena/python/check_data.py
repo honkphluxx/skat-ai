@@ -46,6 +46,24 @@ def main(directory, limit=1_000_000):
     print()
 
     good = True
+    print("what is in it")
+    # The census that would have caught the defect two corpora shipped with: v1
+    # held 0 Null decision points of 89,438 and v2 held 0 of 511,816, because no
+    # seat in any population ever announces a Null. Nothing above failed on
+    # either of them -- every record was well-formed, there were simply none of
+    # a whole contract. A corpus is not only a shape, it is a mix, so print the
+    # mix and let it be read.
+    contracts = corpus.slice(x, "contract").sum(axis=0)
+    for name, seen in zip(("Diamonds", "Hearts", "Spades", "Clubs",
+                           "Grand", "Null", "Ramsch"), contracts):
+        share = 100.0 * seen / max(len(x), 1)
+        print(f"         {name:9s} {int(seen):9,d}  {share:5.1f}%"
+              + ("   <- none at all" if seen == 0 else ""))
+    bid, _ = corpus.field("bidding_present")
+    print(f"         {'bid for':9s} {int((x[:, bid] > 0.5).sum()):9,d}  "
+          f"{100.0 * (x[:, bid] > 0.5).mean():5.1f}%")
+    print()
+
     print("the record itself")
     good &= check("features are in [0, 1]", x.min() >= 0 and x.max() <= 1)
     good &= check("every record has something to guess", mask.sum(axis=1).min() >= 1)
@@ -121,6 +139,15 @@ def main(directory, limit=1_000_000):
 
     for presence, level in (("bidding_present", 0.3), ("counts_present", 0.3)):
         pres, _ = corpus.field(presence)
+        # Nothing to forget is not a failure to forget. A corpus minted with
+        # --contracts= was never bid for, so bidding_present is down on every
+        # record and this comparison is 0% against 0% -- which is the intended
+        # shape of such a corpus, not a defect in it. Saying so beats failing,
+        # because a checker that cries wolf on a valid corpus stops being run.
+        if not (x[:, pres] > 0.5).any():
+            print(f"  [n/a ] {presence} is down on every record: "
+                  "nothing was bid for, so there is nothing to forget")
+            continue
         weak, _ = Forgetting(corpus, levels=(level,), seed=3).apply(x)
         strong, _ = Forgetting(corpus, levels=(1.0,), seed=3).apply(x)
         good &= check(f"{presence} survives less often at memory {level}",
