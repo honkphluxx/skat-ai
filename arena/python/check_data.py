@@ -105,6 +105,17 @@ def main(directory, limit=1_000_000):
     shared = set(board[train].tolist()) & set(board[val].tolist())
     good &= check("no board is in both halves", not shared, f"{len(shared)} shared")
     good &= check("every record lands somewhere", len(train) + len(val) == len(x))
+    # The side a board lands on must depend on the board and the seed and on
+    # nothing else, or a model trained on a corpus that contains this one is
+    # scored on deals it has already seen. Checked by re-splitting a subset:
+    # a split drawn from whichever boards are present would move a board when
+    # its neighbours disappear, and a split computed from the id alone cannot.
+    half = board[: max(1, len(board) // 2)]
+    _, val_half = corpus.split_by_board(half, fraction=0.1, seed=1)
+    held = set(board[val].tolist())
+    moved = {b for b in half[val_half].tolist()} - held
+    good &= check("a board's side does not depend on its company",
+                  not moved, f"{len(moved)} boards changed sides")
 
     print()
     print("forgetting")

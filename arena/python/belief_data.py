@@ -123,12 +123,51 @@ class Corpus:
         split by record would put near-copies of training rows into validation
         and report a number that says nothing about an unseen deal. This is the
         one place that can go wrong without ever looking wrong.
+
+        The side a board lands on is a function of its id and the seed alone,
+        and of nothing else -- not of which other boards are in the corpus, not
+        of how many there are, not of the order they were read in. That is
+        worth more than it sounds. Drawing the held-out tenth from whichever
+        boards happen to be present, which is what this did until 2026-09-19,
+        makes the split a property of the *corpus* rather than of the deal: the
+        same board is held out of one corpus and trained on in another, so a
+        model trained on a mixed corpus and then scored on the held-out tenth of
+        one of its parts is being scored on deals it has already seen. It reads
+        as a model that generalises unusually well, and it is the bug this
+        file's own docstring warns about, arriving through the back door.
+
+        B2 step 3 is entirely made of such comparisons -- one model against
+        several corpora, several models against one -- so the split has to mean
+        the same thing everywhere. The cost of the change is that a
+        val_accuracy stored in a model.json written before this date was
+        measured on a different tenth and is not comparable with one measured
+        after it; recompute it with eval_belief.py rather than quoting it.
+
+        SplitMix64's finalising mix, which is cheap, vectorises, and spreads
+        adjacent ids -- and the ids here are adjacent, since a corpus is one
+        seed and consecutive board indices run through Seeds.mix.
         """
-        boards = np.unique(board)
-        rng = np.random.default_rng(seed)
-        held = set(rng.choice(boards, size=max(1, int(len(boards) * fraction)),
-                              replace=False).tolist())
-        is_val = np.array([b in held for b in board])
+        # Board ids arrive as a signed 32-bit identity; take the low word so
+        # the mixing below is defined rather than sign-dependent.
+        z = (board.astype(np.int64) & 0xFFFFFFFF).astype(np.uint64)
+        # The seed's contribution is folded in Python, where the product is
+        # exact, then reduced -- numpy warns on a scalar uint64 multiply that
+        # wraps, and a warning printed once a night is a warning nobody reads.
+        z = z + np.uint64((seed * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF)
+        z ^= z >> np.uint64(30)
+        z = z * np.uint64(0xBF58476D1CE4E5B9)
+        z ^= z >> np.uint64(27)
+        z = z * np.uint64(0x94D049BB133111EB)
+        z ^= z >> np.uint64(31)
+        cut = np.uint64(round(fraction * (1 << 32)))
+        is_val = (z >> np.uint64(32)) < cut
+        # A corpus small enough to round down to nothing still needs something
+        # held out, or the trainer evaluates on an empty set and reports a
+        # perfect score. Take the board nearest the cut rather than the first,
+        # which keeps the choice a function of the ids.
+        if not is_val.any():
+            only = np.unique(board)[0]
+            is_val = board == only
         return np.where(~is_val)[0], np.where(is_val)[0]
 
 
