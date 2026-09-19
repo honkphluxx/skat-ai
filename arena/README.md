@@ -3270,3 +3270,56 @@ gating `belief-32-adaptive-margin-ties` against the field — a player that
 by then was nobody's. The lever-named contestants stay as the rows above
 refer to them; the gates now point at a name that tracks what `Opponents`
 seats.
+
+### 2026-09-19, third: the gates for what ships, and the number the overlap predicted
+
+**The end-to-end Null row**, `belief-32-shipped` against
+`belief-32-adaptive-margin-ties` — the player of two days ago — over 1,689
+Null boards a side:
+
+**+1.73** [+1.28, +2.18], resolved on every seed (+1.79, +1.82, +1.57).
+Nulls won 65% against 58%.
+
+That number was predicted before it was measured, which is the part worth
+keeping:
+
+| | |
+| --- | --- |
+| naive chain of the two steps (+1.17 worlds, +0.98 tiebreak) | +2.15 |
+| the same two discounted by the measured 45% overlap | **+1.71** |
+| measured | **+1.73** [+1.28, +2.18] |
+
+The overlap was estimated from two rows in a different experiment and then
+used to forecast a third that had not been run. It came in 0.02 away. The
+levers are not additive and now there is a number for how much they are not.
+
+**The overnight gates**, pooled over three seeds, for `belief-32-shipped`
+— and this is the first night these gates have run against the player that
+actually ships:
+
+| gate | pooled | |
+| --- | --- | --- |
+| vs `belief-32-adaptive-margin` (the rules) | **+0.55** [+0.13, +0.96] | resolved ahead |
+| vs `xskat` | +0.83 [−0.49, +2.15] | level, as it has been |
+| vs `jskat-new` | **+11.84** [+10.63, +13.04] | resolved ahead |
+| vs `go-skat` | **+3.21** [+1.85, +4.58] | resolved ahead |
+| vs `solver` (the cheat, oracle contracts) | −6.48 [−7.72, −5.24] | resolved behind |
+
+Non-negative everywhere against the field, and no rule violations in any
+match. Nothing regressed.
+
+**The cheat row is identical to `belief-32-adaptive-margin-ties`'s, to the
+milli-point, on all three seeds** — which looked like a bug and is not.
+That gate sees 18 Nulls in 600 boards (5, 5 and 8), and both players won
+exactly the same ones. A lever worth +1.73 a Null moves a 3%-Null mix by
+about 0.05 game points, against an interval of ±1.2; the row cannot see the
+change, and on eighteen boards an expected difference of about one board
+came out as none. The same arithmetic is in the comment on the tiebreak row
+in `tools/overnight-arena.sh`.
+
+**So the honest reading of "−6.48 behind the honest ceiling" is that it is a
+trump-contract number.** The oracle source picks Null only when no trump
+game makes — `guaranteedValue` puts a Null at 23 and sorts descending — so
+Null is 3% of that mix and effectively invisible to it.
+`tools/null-card-play.sh` is the only instrument that sees Null at all, and
+that separation is now load-bearing rather than incidental.

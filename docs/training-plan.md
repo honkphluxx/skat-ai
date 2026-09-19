@@ -186,11 +186,26 @@ details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
   count is settled at four times the level's own, and this line of work is
   done unless the belief changes what a sampled world is worth.
 
-**Next, in order:** the overnight gates for what now ships, which have been
-owed since LOW_RANK landed and were until today pointed at a player nobody
-runs (`belief-32-shipped` fixes that). Then §B2 step 3 -- Null in the belief
-model, which needs a corpus that contains a Null at all -- which is the one
-thing left that no lever reaches. Built 2026-09-18 and part measured
+- **The Null line, end to end** (2026-09-19 third): `belief-32-shipped`
+  against the player of two days before is **+1.73** [+1.28, +2.18] at
+  Null, resolved on every seed, 65% of makeable Nulls against 58%. The
+  overlap model forecast +1.71 before the row was run and it came in at
+  +1.73. **The gates for what ships are clean**: +0.55 over the same
+  player without the rules, level with XSkat, +11.84 on JSkat, +3.21 on
+  go-skat, −6.48 against the cheat, no rule violations anywhere.
+- **"Behind the honest ceiling" is a trump number.** The oracle source
+  picks Null only when no trump game makes, so Null is 3% of that mix and
+  the cheat gate cannot see a Null change at all -- it returned figures
+  identical to the previous player's, to the milli-point, on all three
+  seeds. `tools/null-card-play.sh` is the only instrument that sees Null,
+  and that separation is load-bearing now rather than incidental.
+
+**Next, in order:** §B2 step 3 -- Null in the belief model, which needs a
+corpus that contains a Null at all (minted with `--contracts=null`, since
+no bidder announces one) and a measurement of whether Null belongs in the
+shared network or one of its own. It is the one thing left that no lever
+reaches, and the Null levers are now spent: the world count is settled and
+the tiebreak is right. Built 2026-09-18 and part measured
 (`tools/null-card-play.sh`): a Null-only contract source, because at
 3% of the oracle mix there is nothing to measure on; a tiebreak that
 stops ordering a Null by card points, which the contract does not score
