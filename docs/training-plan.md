@@ -451,6 +451,20 @@ changes what the sweep measures.
    before that date was measured on a different tenth; recompute it with
    `eval_belief.py` rather than quoting it.
 
+   That last point has a bigger half, learned the hard way on the first quick
+   run (2026-09-19): it is not only the stored *number* that goes stale, it is
+   the *model*. A model trained before the rule changed was held out of a
+   different tenth, so scoring it on the new one grades it on its own training
+   data — the two splits overlapped by 6%, and the shipped model read about
+   five points too well, which looked exactly like "Null poisoned the trump
+   positions". It had not: on the records genuinely held out of both, the two
+   nets were level (62.7% against 62.2%). So the trump comparison is against a
+   **control trained the same night**, on the same split, for the same epochs,
+   differing only in the Null records — not against the shipped model. Every
+   `model.json` now records `split_rule`, `split_seed` and `split_fraction`,
+   and `eval_belief.py` warns when they do not match what it is scoring
+   against.
+
    What the arguments are, so the result can be read against them. *For
    sharing:* most of the belief's work is contract-independent bookkeeping
    (voids, cards gone, the 10/10/2 split), which a shared net learns once

@@ -32,7 +32,8 @@
 #   2. check       check_data.py        both corpora; a FAIL stops the night here
 #   3. mix         belief-data-mixed/   the trump shards and the Null shards in one
 #                                       directory, hard-linked, so the mix costs no disk
-#   4. train       belief-model-mixed/  one net over both contracts
+#   4. train       belief-model-trump/  one net over the trump corpus alone: the control
+#                  belief-model-mixed/  the same, plus the minted Nulls: the treatment
 #                  belief-model-null/   one net over Null alone
 #   5. weights     belief-model-mixed/belief.bin   export_weights.py
 #   6. read        eval_belief.py       the three numbers, below
@@ -43,11 +44,27 @@
 #   Null accuracy    mixed net vs Null-only net, on the held-out tenth of the
 #                    Null corpus. If the Null-only net wins clearly, sharing
 #                    costs something and a separate head is worth its weight.
-#   trump accuracy   mixed net vs today's model, on the held-out tenth of the
-#                    trump corpus, sliced by contract. This is the number that
-#                    says whether Null poisoned the 97% of positions the player
-#                    actually meets, and it is the one that can veto the whole
-#                    idea.
+#   trump accuracy   mixed net vs the trump-only control, on the held-out tenth
+#                    of the trump corpus, sliced by contract. This is the number
+#                    that says whether Null poisoned the 97% of positions the
+#                    player actually meets, and it is the one that can veto the
+#                    whole idea.
+#
+#                    Against a control trained tonight rather than against the
+#                    shipped model, and the difference is not pedantry. A model
+#                    can only be scored honestly on deals it was actually held
+#                    out of, so a model trained before the split rule changed is
+#                    graded on its own training data and reads about five points
+#                    too well. That is exactly what happened on the first quick
+#                    run of this script. eval_belief.py now says so out loud, but
+#                    the real fix is a control trained the same night, on the
+#                    same split, for the same epochs, differing in one thing:
+#                    the Null records. One confound remains and is left standing
+#                    rather than engineered away -- the mixed corpus is about 8%
+#                    larger, so the mixed net takes about 8% more gradient steps
+#                    at equal epochs. If the two land within a point of each
+#                    other that is immaterial; if the mixed net wins by a lot,
+#                    suspect the steps before crediting the Nulls.
 #   the arena        the mixed model on --contracts=null boards, and on the
 #                    ordinary gates. Accuracy is a proxy; this is the outcome.
 #
@@ -86,7 +103,7 @@ for arg in "$@"; do
         --quick)      QUICK=true ;;
         --threads=*)  THREADS="${arg#*=}" ;;
         --python=*)   PYTHON="${arg#*=}" ;;
-        -h|--help)    sed -n '2,68p' "$BELIEF_NULL_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,85p' "$BELIEF_NULL_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -103,7 +120,7 @@ fi
 TRUMP=belief-data-v2
 NULLDATA=belief-data-null
 MIXED=belief-data-mixed
-SHIPPED_MODEL=belief-model-v2
+TRUMP_MODEL=belief-model-trump
 MIXED_MODEL=belief-model-mixed
 NULL_MODEL=belief-model-null
 LOG=arena-logs
@@ -119,7 +136,7 @@ if $QUICK; then
     TRUMP=belief-data-v2-quick
     NULLDATA=belief-data-null-quick
     MIXED=belief-data-mixed-quick
-    SHIPPED_MODEL=belief-model-v2-quick
+    TRUMP_MODEL=belief-model-trump-quick
     MIXED_MODEL=belief-model-mixed-quick
     NULL_MODEL=belief-model-null-quick
     LOG=arena-logs/quick
@@ -218,6 +235,8 @@ train() {
     fi
     grep -E "uniform sampler baseline|best held-out" "$LOG/belief-null-train-$tag.txt" | tail -3 | sed 's/^/      /' | tee -a "$SUMMARY"
 }
+train "$TRUMP" "$TRUMP_MODEL" trump
+stopped && exit 0
 train "$MIXED" "$MIXED_MODEL" mixed
 stopped && exit 0
 train "$NULLDATA" "$NULL_MODEL" nullonly
@@ -247,7 +266,7 @@ read_off() {
     if ! "$PYTHON" arena/python/eval_belief.py --model "$model" --data "$data" $extra > "$out" 2>&1; then
         tail -3 "$out" | sed 's/^/      /' | tee -a "$SUMMARY"; return 0
     fi
-    grep -E "records" "$out" | sed 's/^/      /' | tee -a "$SUMMARY"
+    grep -E "records|^  !!" "$out" | sed 's/^/      /' | tee -a "$SUMMARY"
 }
 say ""
 say "--- does sharing cost Null? (the held-out tenth of $NULLDATA) ---"
@@ -259,8 +278,8 @@ say ""
 say "--- did Null poison the trump positions? (the held-out tenth of $TRUMP) ---"
 say "  mixed net:"
 read_off "$MIXED_MODEL" "$TRUMP" --by-contract
-say "  today's model:"
-read_off "$SHIPPED_MODEL" "$TRUMP" --by-contract
+say "  trump-only control:"
+read_off "$TRUMP_MODEL" "$TRUMP" --by-contract
 say ""
 stopped && exit 0
 

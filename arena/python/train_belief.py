@@ -31,7 +31,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from belief_data import Corpus, Forgetting, score, uniform_baseline
+from belief_data import SPLIT_RULE, Corpus, Forgetting, score, uniform_baseline
 
 CLASSES = 3
 CARDS = 32
@@ -268,6 +268,14 @@ def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll):
         "val_nll": nll,
         "baseline_accuracy": base_accuracy,
         "baseline_nll": base_nll,
+        # What was held out of this model, and by which rule. val_accuracy above
+        # is only meaningful against a held-out set drawn the same way, and a
+        # model scored on somebody else's split is being scored on its own
+        # training data. eval_belief.py refuses to compare across a mismatch.
+        "split_rule": SPLIT_RULE,
+        "split_seed": args.seed,
+        "split_fraction": args.val_fraction,
+        "trained_on": str(pathlib.Path(args.data).resolve().name),
     }, indent=2) + "\n")
 
 

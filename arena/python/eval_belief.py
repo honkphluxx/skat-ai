@@ -38,7 +38,7 @@ import sys
 import numpy as np
 import torch
 
-from belief_data import Corpus, score, uniform_baseline
+from belief_data import SPLIT_RULE, Corpus, score, uniform_baseline
 from train_belief import CARDS, BeliefNet, evaluate
 
 CONTRACTS = ("Diamonds", "Hearts", "Spades", "Clubs", "Grand", "Null", "Ramsch")
@@ -60,6 +60,47 @@ def load(directory, inputs, device):
     model.load_state_dict(torch.load(path / "belief.pt", map_location=device))
     model.eval()
     return model, spec
+
+
+def audit(spec, name, data_name, seed, fraction, scoring_all):
+    """
+    Is this model entitled to be scored on the set it is about to be scored on?
+
+    A held-out number means one thing only: the model never saw these deals.
+    Score a model against a split it was not trained under and that guarantee is
+    gone -- the "held-out" tenth is mostly its training data, and it reads as a
+    model that is five points better than it is. This is not hypothetical. It
+    happened on 2026-09-19, between a morning that changed the split rule and an
+    afternoon that compared a model from three days earlier against one trained
+    after the change, and the two splits overlapped by 6%.
+
+    So the rule, the seed and the fraction go into every model.json, and a
+    mismatch is said out loud here rather than quietly folded into a percentage.
+    It is a warning and not a refusal, because scoring a model on data it has
+    seen is sometimes exactly what is wanted -- that is what --all is for -- and
+    the thing that does harm is doing it without knowing.
+    """
+    if scoring_all:
+        return
+    stored = spec.get("split_rule")
+    if stored is None:
+        print(f"  !! {name} does not say how it was split. It predates "
+              f"split_rule ({SPLIT_RULE}), so the held-out tenth below is "
+              f"probably its training data and the number is inflated. "
+              f"Retrain it before comparing.")
+    elif stored != SPLIT_RULE:
+        print(f"  !! {name} was split by {stored} and this is {SPLIT_RULE}: "
+              f"it was not held out of what follows. Retrain it.")
+    elif spec.get("split_seed") != seed or spec.get("split_fraction") != fraction:
+        print(f"  !! {name} was split at seed {spec.get('split_seed')} / "
+              f"fraction {spec.get('split_fraction')} and this is {seed} / "
+              f"{fraction}: a different tenth. Pass --seed and --val-fraction "
+              f"to match, or the number is inflated.")
+    elif spec.get("trained_on") and spec["trained_on"] != data_name:
+        # Not a problem -- it is the whole point of this script -- but worth
+        # saying, because a model scored on its own corpus and one scored on a
+        # stranger's are different claims and the output looks identical.
+        print(f"  (trained on {spec['trained_on']}, scored on {data_name})")
 
 
 def report(name, model, x, target, mask, corpus, device):
@@ -113,6 +154,8 @@ def main():
     model, spec = load(args.model, corpus.size, device)
     print(f"encoding v{corpus.version}, {corpus.size} inputs, "
           f"{spec['hidden']}x{spec['layers']}")
+    audit(spec, pathlib.Path(args.model).name, pathlib.Path(args.data).resolve().name,
+          args.seed, args.val_fraction, args.all)
     print()
 
     report("everything", model, x, target, mask, corpus, device)
