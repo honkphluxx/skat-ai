@@ -165,47 +165,8 @@ details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
   sampled world, so what is left to choose is robustness to the worlds
   nobody sampled, and there the low card is the wider margin.
 
-- **Null, second round** (2026-09-19), four times the boards because the
-  C++ Null solver made the night afford them: the **tiebreak wins after
-  all, and it is the free one**. `LOW_RANK` at the shipped world count is
-  **+0.98** [+0.68, +1.28] and 4.3 points of win rate, against **+1.18**
-  and 5.3 points for quadrupling the search to 512. Not a reversal of
-  round one, which refuted the opposite policy (`SHED_HIGH`): the shipped
-  points order was *almost* "play low" already, differing only where a ten
-  meets a court card, and saying it properly is worth about what doubling
-  the search twice is worth. 128 worlds and `LOW_RANK` now ship. The world
-  curve is real and shallow (256 is +0.47) and is not taken further
-  because a Null decision is the most expensive thing this player makes.
-
-- **Null, third round** (2026-09-19 second): **the two levers overlap by
-  45%**, at both 256 and 512, which is what round one's account of the
-  refutation predicted -- both buy robustness to the worlds nobody
-  sampled. Partial, not complete: `low-512` is still +0.65 [+0.26, +1.04]
-  and is not taken, because four times the worlds is four times the wait
-  on a phone and the app and the arena run the same player. The Null world
-  count is settled at four times the level's own, and this line of work is
-  done unless the belief changes what a sampled world is worth.
-
-- **The Null line, end to end** (2026-09-19 third): `belief-32-shipped`
-  against the player of two days before is **+1.73** [+1.28, +2.18] at
-  Null, resolved on every seed, 65% of makeable Nulls against 58%. The
-  overlap model forecast +1.71 before the row was run and it came in at
-  +1.73. **The gates for what ships are clean**: +0.55 over the same
-  player without the rules, level with XSkat, +11.84 on JSkat, +3.21 on
-  go-skat, −6.48 against the cheat, no rule violations anywhere.
-- **"Behind the honest ceiling" is a trump number.** The oracle source
-  picks Null only when no trump game makes, so Null is 3% of that mix and
-  the cheat gate cannot see a Null change at all -- it returned figures
-  identical to the previous player's, to the milli-point, on all three
-  seeds. `tools/null-card-play.sh` is the only instrument that sees Null,
-  and that separation is load-bearing now rather than incidental.
-
-**Next, in order:** §B2 step 3 -- Null in the belief model, which needs a
-corpus that contains a Null at all (minted with `--contracts=null`, since
-no bidder announces one) and a measurement of whether Null belongs in the
-shared network or one of its own. It is the one thing left that no lever
-reaches, and the Null levers are now spent: the world count is settled and
-the tiebreak is right. Built 2026-09-18 and part measured
+**Next, in order:** Null card play, which is now the largest measured
+weakness and the cheapest to attack. Built 2026-09-18 and part measured
 (`tools/null-card-play.sh`): a Null-only contract source, because at
 3% of the oracle mix there is nothing to measure on; a tiebreak that
 stops ordering a Null by card points, which the contract does not score
@@ -474,6 +435,21 @@ changes what the sweep measures.
      player actually meets;
    - the arena, as always, on `--contracts=null` boards and on the ordinary
      gates.
+
+   **The tooling for all of this is `./tools/belief-null.sh`** (2026-09-19):
+   mint, check, mix, train both nets, print the three numbers, run the gates,
+   resumable step by step like `belief-v2.sh`. It takes `belief-data-v2` as
+   its input and refuses to start without it. Two things were fixed to make
+   its numbers readable and both are worth knowing about. `ExportMain` gained
+   `--contracts=`, measured at 11.0% of boards pricing a Null, so 200k boards
+   give roughly 22k games and 430k decision points. And `split_by_board` was
+   drawing the held-out tenth from whichever boards were present, which made
+   the split a property of the corpus rather than of the deal — so the mixed
+   net would have been scored on Null deals it had trained on, and would have
+   looked like a net that generalises unusually well. It is now a hash of the
+   board id and the seed. A `val_accuracy` stored in a `model.json` written
+   before that date was measured on a different tenth; recompute it with
+   `eval_belief.py` rather than quoting it.
 
    What the arguments are, so the result can be read against them. *For
    sharing:* most of the belief's work is contract-independent bookkeeping

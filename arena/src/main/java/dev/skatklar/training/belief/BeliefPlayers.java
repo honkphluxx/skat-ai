@@ -245,6 +245,15 @@ public final class BeliefPlayers {
             registry.register(renamed(combined("belief-32-adaptive-margin-ties-candidate", 32,
                     PassRule.DEFAULT, 15, true, other),
                     "The shipped player with the candidate model " + candidate));
+            // The twin of belief-32-shipped above, and it has to exist for the
+            // same reason that one does. A gate that swaps the belief has to
+            // swap it underneath the player people actually get, and since
+            // LOW_RANK and 128 worlds shipped that is no longer
+            // belief-32-adaptive-margin-ties. Without this the Null gate would
+            // be measuring a new model behind last month's card play.
+            registry.register(renamed(
+                    nullVariant("belief-32-shipped-candidate", 32, NullOrder.LOW_RANK, 128, other),
+                    "The shipped player with the candidate model " + candidate));
         }
     }
 
