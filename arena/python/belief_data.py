@@ -24,6 +24,16 @@ SEATING_BYTES = 3
 BOARD_BYTES = 4
 
 
+# Which rule decides a board's side in split_by_board. Written into every
+# model.json and checked by eval_belief.py, because a model can only be scored
+# honestly on a held-out set it was actually held out of: score a model trained
+# under one rule against a set drawn by another and you are grading it on its
+# own training data. That happened once, on 2026-09-19, and cost an afternoon
+# reading a five-point gap that was not there. Bump this string whenever the
+# rule changes, so the mismatch is loud instead of invisible.
+SPLIT_RULE = "splitmix64-v1"
+
+
 class Corpus:
     """One directory of shards, plus the specification that describes them."""
 
