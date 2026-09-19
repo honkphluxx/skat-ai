@@ -256,6 +256,18 @@ public final class SearchAiProvider implements SkatAiProvider {
                              HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
                              boolean ruleTies, int nullWorlds, RuleTiebreak.NullOrder nullTies,
                              int worldThreads) {
+        this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos, temperature,
+                adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullTies,
+                worldThreads, CardPlaySettings.NONE);
+    }
+
+    private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
+                             WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
+                             double temperature, boolean adaptiveBidding,
+                             HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
+                             boolean ruleTies, int nullWorlds, RuleTiebreak.NullOrder nullTies,
+                             int worldThreads, CardPlaySettings cardPlay) {
+        this.cardPlay = cardPlay == null ? CardPlaySettings.NONE : cardPlay;
         this.worldThreads = Math.max(1, worldThreads);
         this.delegate = delegate;
         this.personality = personality;
@@ -300,6 +312,90 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     private final int worldThreads;
 
+    /**
+     * What one card decision cost, for a caller that wants to look.
+     *
+     * <p>Exists because the thing worth knowing about this player on a phone is
+     * not its average decision but its worst one, and the worst one happens on
+     * hardware the people writing this do not own. An app that logs these can
+     * be told by any phone that ever runs it.
+     *
+     * @param worldsAsked    what the personality wanted
+     * @param worldsSearched what the budget allowed; equal unless the budget bit
+     * @param cushionAsked   whether the second question was reached at all
+     */
+    public record CardPlayReport(Contract contract, int cardsInHand, int worldsAsked,
+                                 int worldsSearched, boolean cushionAsked, long nanos) {
+        /** Whether the clock, rather than the personality, decided how hard to think. */
+        public boolean budgetBit() { return worldsSearched < worldsAsked; }
+    }
+
+    /** Called after each card decision. May be called from a worker thread. */
+    public interface CardPlayObserver {
+        void decided(CardPlayReport report);
+    }
+
+    /**
+     * The two things only an app asks for: a ceiling and a stopwatch.
+     *
+     * <p>One object rather than two constructor parameters, because this class
+     * already threads thirteen of them through a chain of delegating
+     * constructors and the fourteenth was the one that made it unreadable.
+     */
+    public static final class CardPlaySettings {
+        static final CardPlaySettings NONE = new CardPlaySettings(0L, null);
+        final long budgetNanos;
+        final CardPlayObserver observer;
+
+        CardPlaySettings(long budgetNanos, CardPlayObserver observer) {
+            this.budgetNanos = Math.max(0L, budgetNanos);
+            this.observer = observer;
+        }
+    }
+
+    /**
+     * Wall-clock one card decision may spend, or zero for no ceiling.
+     *
+     * <p>Zero everywhere it matters, for the reason {@link #biddingBudgetNanos}
+     * gives: a deadline makes the answer depend on the machine and on what else
+     * was running, and the arena, the server and every test replay a match from
+     * its seed. Only the app sets one, because only the app has somebody
+     * watching an empty space where a card should be.
+     *
+     * <p>Bidding has had such a ceiling since it reached a phone; card play
+     * never did, which was defensible only while a decision was cheap. It is
+     * not: a Null now samples four times the worlds of any other contract and
+     * is the most expensive search this player makes, so the one decision with
+     * no ceiling became the one that needed it.
+     *
+     * <p>What a spent budget costs is votes, not legality. The worlds are
+     * sampled before any of them is searched and the tally is a count per card,
+     * so stopping early means fewer votes over the same cards rather than a
+     * half-finished anything — and every card in a tally has seen the same
+     * worlds, which is what the comparator needs. At least one world is always
+     * searched: a budget can make this player hasty and must not make it mute.
+     */
+    private final CardPlaySettings cardPlay;
+
+    /** The same player, with a ceiling on one card decision. See {@link #cardPlay}. */
+    public SearchAiProvider withCardBudget(long nanos) {
+        return withCardPlay(new CardPlaySettings(nanos, cardPlay.observer));
+    }
+
+    /** The same player, telling {@code observer} what each card cost. */
+    public SearchAiProvider withCardPlayObserver(CardPlayObserver observer) {
+        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, observer));
+    }
+
+    private SearchAiProvider withCardPlay(CardPlaySettings settings) {
+        return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
+                ruleTies, nullWorlds, nullTies, worldThreads, settings);
+    }
+
+    /** One chunk's answer: its tally, and how many worlds went into it. */
+    private record Tally(Map<Card, Integer> counts, int worlds) {}
+
     /** The same player, spreading one decision's worlds. See {@link #worldThreads}. */
     public SearchAiProvider withWorldThreads(int threads) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
@@ -330,7 +426,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withNullTiebreak(RuleTiebreak.NullOrder order) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, nullWorlds, order, worldThreads);
+                ruleTies, nullWorlds, order, worldThreads, cardPlay);
     }
 
     /**
@@ -357,7 +453,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withNullWorlds(int worlds) {
         return new SearchAiProvider(delegate, personality, seed, this.worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, worlds, nullTies, worldThreads);
+                ruleTies, worlds, nullTies, worldThreads, cardPlay);
     }
 
     /**
@@ -380,7 +476,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withRuleTiebreak() {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                true, nullWorlds, nullTies, worldThreads);
+                true, nullWorlds, nullTies, worldThreads, cardPlay);
     }
 
     /**
@@ -413,7 +509,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withMarginTiebreak(int points) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, points,
-                ruleTies, nullWorlds, nullTies, worldThreads);
+                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay);
     }
 
     /**
@@ -456,7 +552,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule rule) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, true, rule, marginPoints,
-                ruleTies, nullWorlds, nullTies, worldThreads);
+                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay);
     }
 
     /**
@@ -502,7 +598,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withTemperature(double temperature) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, nullWorlds, nullTies, worldThreads);
+                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -897,11 +993,15 @@ public final class SearchAiProvider implements SkatAiProvider {
 
             rememberWhatIsStillThere(context);
 
+            long startedAt = cardPlay.observer != null ? System.nanoTime() : 0L;
+            long deadline = cardPlay.budgetNanos > 0
+                    ? System.nanoTime() + cardPlay.budgetNanos : 0L;
+            int asked = nullWorlds > 0 && context.game.contract.isNull()
+                    ? nullWorlds : personality.worlds();
+
             List<WorldSampler.World> sampled;
             try {
-                int count = nullWorlds > 0 && context.game.contract.isNull()
-                        ? nullWorlds : personality.worlds();
-                sampled = worlds.sample(evidence(context), count, random);
+                sampled = worlds.sample(evidence(context), asked, random);
             } catch (IllegalStateException inconsistent) {
                 // The position does not add up, which means this player is being
                 // driven through a lifecycle it does not model. Play on rather
@@ -912,10 +1012,12 @@ public final class SearchAiProvider implements SkatAiProvider {
 
             Map<Card, Integer> votes = alphaMuScores(context, sampled);
             Map<Card, Integer> cushion = new LinkedHashMap<>();
+            int searched = sampled.size();
+            boolean cushionAsked = false;
             if (votes == null) {
                 votes = new LinkedHashMap<>();
                 for (Card card : legal) { votes.put(card, 0); cushion.put(card, 0); }
-                tallyOverWorlds(context, sampled, legal, votes, false);
+                searched = tallyOverWorlds(context, sampled, legal, votes, false, deadline);
                 // The cushion is a tiebreak and only a tiebreak, so it is asked
                 // for only when there is a tie to break: the comparator below
                 // never reads it unless two cards share the top vote. Asking
@@ -925,13 +1027,15 @@ public final class SearchAiProvider implements SkatAiProvider {
                 // second question on the decisions that were close.
                 if (marginPoints > 0 && playsForCardPoints(context.game.contract)
                         && topVoteIsShared(votes)) {
-                    tallyOverWorlds(context, sampled, legal, cushion, true);
+                    cushionAsked = true;
+                    tallyOverWorlds(context, sampled, legal, cushion, true, deadline);
                 }
             }
+            report(context, asked, searched, cushionAsked, startedAt);
 
             Map<Card, Integer> scores = votes;
             Map<Card, Integer> held = cushion;
-            if (temperature > 0) return sampleCard(legal, scores, sampled.size());
+            if (temperature > 0) return sampleCard(legal, scores, searched);
             Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
             Comparator<Card> byCushion = Comparator.comparingInt(card -> held.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
@@ -1073,18 +1177,51 @@ public final class SearchAiProvider implements SkatAiProvider {
          * searches run and the totals do not depend on which chunk finished
          * first.
          */
-        private void tallyOverWorlds(SkatAi.DecisionContext context,
-                                     List<WorldSampler.World> sampled, List<Card> legal,
-                                     Map<Card, Integer> into, boolean forTheCushion) {
+        /**
+         * Tells the observer what the decision cost, if anybody is listening.
+         *
+         * <p>Only for decisions that actually searched. A hand with one legal
+         * card, a Ramsch and a position this player cannot model all return
+         * before here, and timing them would bury the rows that matter under
+         * rows that are always zero.
+         */
+        private void report(SkatAi.DecisionContext context, int asked, int searched,
+                            boolean cushionAsked, long startedAt) {
+            CardPlayObserver observer = cardPlay.observer;
+            if (observer == null) return;
+            try {
+                observer.decided(new CardPlayReport(context.game.contract,
+                        context.hand.size(), asked, searched, cushionAsked,
+                        System.nanoTime() - startedAt));
+            } catch (RuntimeException watchingIsNotPlaying) {
+                // An observer that throws is a logger with a bug in it, and a
+                // logger with a bug in it does not get to lose the game.
+            }
+        }
+
+        private int tallyOverWorlds(SkatAi.DecisionContext context,
+                                    List<WorldSampler.World> sampled, List<Card> legal,
+                                    Map<Card, Integer> into, boolean forTheCushion,
+                                    long deadlineNanos) {
             int chunks = Math.min(worldThreads, sampled.size());
             if (chunks <= 1) {
+                int searched = 0;
                 for (WorldSampler.World sample : sampled) {
+                    // Never before the first: a budget may make this player
+                    // hasty and must not make it mute. Subtraction rather than
+                    // a comparison, because nanoTime has no defined origin and
+                    // the difference stays right across a wrap.
+                    if (deadlineNanos != 0 && searched > 0
+                            && System.nanoTime() - deadlineNanos >= 0) {
+                        break;
+                    }
                     if (forTheCushion) castCushion(context, sample, into);
                     else castVotes(context, sample, into);
+                    searched++;
                 }
-                return;
+                return searched;
             }
-            List<Callable<Map<Card, Integer>>> tasks = new ArrayList<>(chunks);
+            List<Callable<Tally>> tasks = new ArrayList<>(chunks);
             for (int chunk = 0; chunk < chunks; chunk++) {
                 int from = (int) ((long) sampled.size() * chunk / chunks);
                 int to = (int) ((long) sampled.size() * (chunk + 1) / chunks);
@@ -1092,19 +1229,34 @@ public final class SearchAiProvider implements SkatAiProvider {
                 tasks.add(() -> {
                     Map<Card, Integer> tally = new LinkedHashMap<>();
                     for (Card card : legal) tally.put(card, 0);
+                    int searched = 0;
                     for (WorldSampler.World sample : mine) {
+                        if (deadlineNanos != 0 && searched > 0
+                                && System.nanoTime() - deadlineNanos >= 0) {
+                            break;
+                        }
                         if (forTheCushion) castCushion(context, sample, tally);
                         else castVotes(context, sample, tally);
+                        searched++;
                     }
-                    return tally;
+                    return new Tally(tally, searched);
                 });
             }
+            // Chunks stop independently, so a budget that bites leaves them
+            // holding different numbers of worlds. That is harmless and it is
+            // worth saying why: every card in a chunk's tally has seen exactly
+            // that chunk's worlds, so the summed tally has one denominator for
+            // all of them, which is the only thing the comparator needs.
+            int searched = 0;
             try {
-                for (Future<Map<Card, Integer>> done : Workers.POOL.invokeAll(tasks)) {
-                    for (Map.Entry<Card, Integer> entry : done.get().entrySet()) {
+                for (Future<Tally> done : Workers.POOL.invokeAll(tasks)) {
+                    Tally tally = done.get();
+                    searched += tally.worlds();
+                    for (Map.Entry<Card, Integer> entry : tally.counts().entrySet()) {
                         into.merge(entry.getKey(), entry.getValue(), Integer::sum);
                     }
                 }
+                return searched;
             } catch (InterruptedException stopped) {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException("interrupted while searching worlds", stopped);

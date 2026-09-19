@@ -218,6 +218,29 @@ public final class Opponents {
     public static SkatAiProvider seat(Level level, WorldSource worlds, long seed,
                                       long biddingBudgetNanos, boolean adaptively,
                                       int worldThreads) {
+        return seat(level, worlds, seed, biddingBudgetNanos, adaptively, worldThreads, 0L, null);
+    }
+
+    /**
+     * The same seat, with a ceiling on one card decision and somebody watching.
+     *
+     * <p>Both are the app's alone and both are off by default, for the reason
+     * the bidding budget is: a deadline makes the answer depend on the machine,
+     * and the arena, the server and every test replay a match from its seed.
+     *
+     * @param cardBudgetNanos wall-clock one card decision may spend, or zero for
+     *                        no ceiling. What it costs when it bites is votes --
+     *                        fewer sampled worlds counted over the same cards --
+     *                        and never a legal card: one world is always
+     *                        searched.
+     * @param observer        told what each decision cost, or null. Called on
+     *                        whichever thread decided, which in the app is a
+     *                        worker and not the one drawing the table.
+     */
+    public static SkatAiProvider seat(Level level, WorldSource worlds, long seed,
+                                      long biddingBudgetNanos, boolean adaptively,
+                                      int worldThreads, long cardBudgetNanos,
+                                      SearchAiProvider.CardPlayObserver observer) {
         WorldSource believed = level.usesBelief() && worlds != null ? worlds : WorldSource.UNIFORM;
         // One search player per seat, not one for the table. The engine seats a
         // single provider at every AI seat, and a search player keeps evidence on
@@ -241,9 +264,11 @@ public final class Opponents {
                 player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION)
                         .withRuleTiebreak();
             }
-            return player.withNullWorlds(level.personality().worlds() * NULL_WORLD_MULTIPLE)
+            player = player.withNullWorlds(level.personality().worlds() * NULL_WORLD_MULTIPLE)
                     .withNullTiebreak(NullOrder.LOW_RANK)
                     .withBiddingBudget(biddingBudgetNanos).withWorldThreads(worldThreads);
+            if (cardBudgetNanos > 0) player = player.withCardBudget(cardBudgetNanos);
+            return observer == null ? player : player.withCardPlayObserver(observer);
         });
     }
 }
