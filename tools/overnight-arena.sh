@@ -548,9 +548,18 @@ for SEED in $SEEDS; do
             # against the shipped player in exact pairing, then the outsiders
             # as the check that it is not a fit to our own play. Expected
             # small: it only decides what the search called a tie.
-            match belief-32-adaptive-margin-ties belief-32-adaptive-margin "$(boards 300)" "--passed-in=void"
-            match belief-32-adaptive-margin-ties xskat "$(boards 300)" "--passed-in=void"
-            match belief-32-adaptive-margin-ties jskat-new "$(boards 300)" "--passed-in=void"
+            #
+            # belief-32-shipped is what Opponents seats, and since 2026-09-19
+            # that includes the Null levers as well as the rules, so this row
+            # is no longer only the tiebreak. The addition is immaterial here
+            # and the row is left alone rather than split: Null is 3% of a
+            # full-game mix and the levers are worth about a point a Null, so
+            # they move this row by roughly 0.03 game points, an order of
+            # magnitude below what 300 boards can resolve. tools/null-card-play.sh
+            # is where they are measured on boards that hold a Null at all.
+            match belief-32-shipped belief-32-adaptive-margin "$(boards 300)" "--passed-in=void"
+            match belief-32-shipped xskat "$(boards 300)" "--passed-in=void"
+            match belief-32-shipped jskat-new "$(boards 300)" "--passed-in=void"
         fi
     fi
     if $GOSKAT; then
@@ -567,7 +576,7 @@ for SEED in $SEEDS; do
             match belief-32-adaptive-p1 go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-margin go-skat "$(boards 200)" "--passed-in=void"
             match belief-32-adaptive-margin go-skat "$(boards 200)" "--passed-in=void"
-            match belief-32-adaptive-margin-ties go-skat "$(boards 200)" "--passed-in=void"
+            match belief-32-shipped go-skat "$(boards 200)" "--passed-in=void"
             match belief-32 go-skat "$(boards 200)" "--passed-in=void"
         fi
     fi
@@ -601,7 +610,7 @@ for SEED in $SEEDS; do
             # before either date are the old instrument:
             # --redo=vs-solver-oracle re-measures these two.
             match belief-32 solver "$(boards 200)" "--fixed-contract --contracts=solver"
-            match belief-32-adaptive-margin-ties solver "$(boards 200)" "--fixed-contract --contracts=solver"
+            match belief-32-shipped solver "$(boards 200)" "--fixed-contract --contracts=solver"
             match skatzero solver "$(boards 200)" "--fixed-contract --contracts=solver"
         fi
     fi

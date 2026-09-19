@@ -135,7 +135,11 @@ mkdir -p "$LOG"
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 [ -f STOP ] && { rm -f STOP; echo "Removed a STOP file left over from an earlier run."; }
 
-SHIPPED=belief-32-null-low-128
+# SHIPPED=... overrides the control, for a row that measures a whole line of
+# work rather than one step of it: SHIPPED=belief-32-adaptive-margin-ties with
+# VARIANTS=belief-32-shipped is what every Null change since 2026-09-18 bought
+# together, which is not the sum of the steps -- they overlap, measurably.
+SHIPPED="${SHIPPED:-belief-32-null-low-128}"
 VARIANTS="${VARIANTS:-belief-32-null-low-256 belief-32-null-low-512}"
 
 match() {

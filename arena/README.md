@@ -3218,3 +3218,55 @@ than the +1.18 they were worth against one that did not.
 `belief-32-null-low-256` and `-low-512` against `belief-32-null-low-128`
 settle it. A null result is the useful one: it would mean 128 worlds is the
 whole answer and three quarters of the Null search can go.
+
+### 2026-09-19, second: the two Null levers overlap, and by half
+
+Six matches, three seeds, 1,689 Null boards a side, against
+`belief-32-null-low-128` — what ships — so the only difference in each row
+is the world count.
+
+| variant | pooled | seeds | Nulls won, variant vs control |
+| --- | --- | --- | --- |
+| `belief-32-null-low-512` | **+0.65** [+0.26, +1.04] | +0.56, +0.54, +0.87 | 64.1% vs 61.2% |
+| `belief-32-null-low-256` | +0.26 [−0.10, +0.62] | +0.00, +0.19, +0.58 | 63.6% vs 62.5% |
+
+**The prediction held, and to a suspiciously round number.** Round one
+explained `SHED_HIGH`'s failure by saying that a card reaching the tiebreak
+already survives every sampled world, so what is left to choose is
+robustness to the worlds nobody sampled — and more worlds buys exactly that
+robustness, directly. If that was the right account, the two levers had to
+overlap. They do, and by the same fraction at both counts:
+
+| extra worlds | against a points-ordered control | against a low-ordered one | gone |
+| --- | --- | --- | --- |
+| 256 | +0.47 | +0.26 | 44% |
+| 512 | +1.18 | +0.65 | 45% |
+
+Two independent measurements agreeing on 45% is more than the prediction
+asked for. The account was not merely consistent with round two, it
+forecast the size of round three.
+
+**It is a partial substitution, not a complete one.** `low-512` is still
++0.65 and resolved pooled, so more worlds do buy something the tiebreak
+cannot. It is not taken: a Null decision is the most expensive search this
+player makes, four times it is four times the wait on a phone, and the app
+and the arena have to run the same player. `low-256` at +0.26 is not
+resolved and would not be worth taking even if it were free.
+
+**So the Null world count is settled at four times the level's own**, and
+the line of work that started on 2026-09-18 is done unless the belief model
+changes what a sampled world is worth — which is §B2 step 3, and the one
+thing left that no lever reaches.
+
+**What the whole line bought is not the sum of its steps**, because the
+steps overlap by 45%. Chaining +1.17 and +0.98 would claim +2.15 and be
+wrong. The honest number needs its own row:
+`SHIPPED=belief-32-adaptive-margin-ties VARIANTS=belief-32-shipped`, which
+is one variant and about half an hour.
+
+**`belief-32-shipped` is new, and it is a name for a status rather than a
+lever.** For a day after `LOW_RANK` shipped, `tools/overnight-arena.sh` was
+gating `belief-32-adaptive-margin-ties` against the field — a player that
+by then was nobody's. The lever-named contestants stay as the rows above
+refer to them; the gates now point at a name that tracks what `Opponents`
+seats.

@@ -220,6 +220,23 @@ public final class BeliefPlayers {
         registry.register(nullVariant("belief-32-null-low-256", 32, NullOrder.LOW_RANK, 256, loader));
         registry.register(nullVariant("belief-32-null-low-512", 32, NullOrder.LOW_RANK, 512, loader));
 
+        // What Opponents actually seats, under a name that says so.
+        //
+        // The lever-named contestants above are history: each one is a row in
+        // arena/README.md and renaming them would orphan the row. This one is
+        // a status rather than a lever, so the overnight gates can point at it
+        // once and go on being right the next time something ships. It has
+        // drifted before -- for a day after LOW_RANK shipped, the gates were
+        // clearing belief-32-adaptive-margin-ties, which by then was nobody's
+        // player -- and a name that tracks the answer is the cheap way to stop
+        // that recurring.
+        //
+        // Not built from Opponents.seat, which would be the airtight version:
+        // that seats a level's own personality and the arena measures the
+        // reference one (same 32 worlds, different risk and aggression). The
+        // card-play levers are what has to match here, and they do.
+        registry.register(nullVariant("belief-32-shipped", 32, NullOrder.LOW_RANK, 128, loader));
+
         Path candidate = locateCandidate();
         if (candidate != null) {
             Loader other = new Loader(candidate);

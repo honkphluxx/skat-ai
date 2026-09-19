@@ -177,11 +177,20 @@ details in [`../arena/README.md`](../arena/README.md), 2026-09-17.
   curve is real and shallow (256 is +0.47) and is not taken further
   because a Null decision is the most expensive thing this player makes.
 
-**Next, in order:** whether the two Null levers substitute rather than add
--- round one's own explanation of the refutation predicts they do, and a
-null result there means three quarters of the Null search can go. Then Null
-card play, which is now the largest measured weakness and the cheapest to
-attack. Built 2026-09-18 and part measured
+- **Null, third round** (2026-09-19 second): **the two levers overlap by
+  45%**, at both 256 and 512, which is what round one's account of the
+  refutation predicted -- both buy robustness to the worlds nobody
+  sampled. Partial, not complete: `low-512` is still +0.65 [+0.26, +1.04]
+  and is not taken, because four times the worlds is four times the wait
+  on a phone and the app and the arena run the same player. The Null world
+  count is settled at four times the level's own, and this line of work is
+  done unless the belief changes what a sampled world is worth.
+
+**Next, in order:** the overnight gates for what now ships, which have been
+owed since LOW_RANK landed and were until today pointed at a player nobody
+runs (`belief-32-shipped` fixes that). Then §B2 step 3 -- Null in the belief
+model, which needs a corpus that contains a Null at all -- which is the one
+thing left that no lever reaches. Built 2026-09-18 and part measured
 (`tools/null-card-play.sh`): a Null-only contract source, because at
 3% of the oracle mix there is nothing to measure on; a tiebreak that
 stops ordering a Null by card points, which the contract does not score
