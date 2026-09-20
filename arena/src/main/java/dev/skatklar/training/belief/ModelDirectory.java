@@ -59,6 +59,23 @@ final class ModelDirectory {
         return inputs;
     }
 
+    /**
+     * Which contracts the trainer says the corpus held, from model.json.
+     *
+     * <p>For the ONNX path, which has no header to carry it -- the Java loader
+     * reads the number out of belief.bin instead. A directory whose model.json
+     * predates the field gets {@link BeliefModel#LEGACY_CONTRACTS}, which is the
+     * rule that was in force when it was written rather than a guess about it.
+     */
+    static int contractsTrained(Path descriptor) {
+        try {
+            return number(Files.readString(descriptor, StandardCharsets.UTF_8),
+                    "contracts_trained");
+        } catch (IOException absent) {
+            return BeliefModel.LEGACY_CONTRACTS;
+        }
+    }
+
     private static int number(String json, String field) throws IOException {
         Matcher matcher = Pattern.compile("\"" + field + "\"\\s*:\\s*(-?\\d+)").matcher(json);
         if (!matcher.find()) throw new IOException("model.json has no " + field);

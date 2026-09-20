@@ -132,6 +132,27 @@ def main():
     print(f"{len(train):,} training records, {len(val):,} held out "
           f"({len(np.unique(board[val])):,} whole boards)")
 
+    # Which contracts the model will actually have been shown. Recorded because
+    # the sampler has to know: a model asked about a contract absent from its
+    # corpus returns an arbitrary belief rather than a weak one, and the honest
+    # baseline beats an arbitrary belief. It used to be a hardcoded rule ("never
+    # ask about Null"), which was right until the night a model was trained on
+    # Nulls and then measured against one that had not been -- both were sent to
+    # the baseline and the run reported +0.000 on every board.
+    # Read off the packed bytes rather than the unpacked floats, and over every
+    # training row rather than a prefix. Both matter. Unpacking five million
+    # records is six gigabytes; and a prefix would miss exactly what this is for,
+    # since a mixed corpus keeps its minted shards at the end of the sort and the
+    # first million rows of one are all trump. A one-hot is the top or the bottom
+    # of the byte range, so the threshold survives the packing.
+    contracts = corpus.slice(x[train], "contract")
+    seen = 0
+    for slot in range(contracts.shape[1]):
+        if (contracts[:, slot] > corpus.scale / 2).any():
+            seen |= 1 << slot
+    names = ("Diamonds", "Hearts", "Spades", "Clubs", "Grand", "Null", "Ramsch")
+    print("trained on: " + ", ".join(n for at, n in enumerate(names) if seen >> at & 1))
+
     x_val = corpus.unpack(x[val])
     target_val = target[val].astype(np.int64)
     mask_val = mask[val]
@@ -165,7 +186,7 @@ def main():
     if args.export_only:
         model.load_state_dict(torch.load(out / "belief.pt"))
         accuracy, nll = evaluate(model, x_val, target_val, mask_val, device)
-        export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll)
+        export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll, seen)
         print(f"exported from belief.pt: {accuracy:.1%} correct, nll {nll:.4f}")
         return
 
@@ -214,7 +235,7 @@ def main():
     # run that takes hours.
     model.load_state_dict(torch.load(out / "belief.pt"))
     try:
-        export(model, corpus, out, args, *best_scores, base_accuracy, base_nll)
+        export(model, corpus, out, args, *best_scores, base_accuracy, base_nll, seen)
         print(f"\nbest held-out nll {best:.4f} at epoch {best_epoch} of {args.epochs}, "
               f"where training loss stood at {best_train:.4f}; "
               f"weights and ONNX in {out}")
@@ -237,9 +258,14 @@ def main():
               "missing module, requirements.txt is the answer.")
 
 
-def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll):
+def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll, contracts):
     """ONNX for the app, plus fixtures so the Java side can prove it agrees."""
     model.eval()
+    # The descriptor first, because the two steps below have their own
+    # dependencies and a failure in either used to take model.json down with
+    # them -- leaving belief.pt on disk beside nothing that says what shape it
+    # is, which export_weights.py needs and which --export-only cannot rebuild.
+    write_descriptor(out, corpus, args, accuracy, nll, base_accuracy, base_nll, contracts)
     dummy = torch.zeros(1, corpus.size, device=next(model.parameters()).device)
     torch.onnx.export(
         model, dummy, out / "belief.onnx",
@@ -257,6 +283,8 @@ def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll):
         logits = model(sample).cpu().numpy()
     np.savez(out / "fixtures.npz", features=x[:16], logits=logits)
 
+def write_descriptor(out, corpus, args, accuracy, nll, base_accuracy, base_nll, contracts):
+    """What the loaders read: shape, encoding, split, and what it was shown."""
     (out / "model.json").write_text(json.dumps({
         "encoding_version": corpus.version,
         "inputs": corpus.size,
@@ -272,6 +300,7 @@ def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll):
         # is only meaningful against a held-out set drawn the same way, and a
         # model scored on somebody else's split is being scored on its own
         # training data. eval_belief.py refuses to compare across a mismatch.
+        "contracts_trained": contracts,
         "split_rule": SPLIT_RULE,
         "split_seed": args.seed,
         "split_fraction": args.val_fraction,

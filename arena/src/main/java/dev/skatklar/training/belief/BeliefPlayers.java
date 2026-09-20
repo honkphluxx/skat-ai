@@ -507,9 +507,23 @@ public final class BeliefPlayers {
      */
     private static BeliefModel read(Path directory) throws IOException {
         if (Files.isRegularFile(directory.resolve("belief.bin"))) {
+            // The weight file carries which contracts it was trained on in its
+            // own header, which is what the app reads too, since the app ships
+            // belief.bin and no model.json.
             return NetBeliefModel.load(directory);
         }
-        return OnnxBeliefModel.load(directory);
+        // ONNX has no header to carry it, so the same fact is taken from
+        // model.json. Without this the ONNX path would quietly keep the old
+        // rule for ever and a Null-trained model would never be consulted on a
+        // Null through it -- which is exactly the class of silence this whole
+        // change exists to end.
+        BeliefModel onnx = OnnxBeliefModel.load(directory);
+        int contracts = ModelDirectory.contractsTrained(directory.resolve("model.json"));
+        return new BeliefModel() {
+            @Override public float[] logits(float[] features) { return onnx.logits(features); }
+            @Override public int inputs() { return onnx.inputs(); }
+            @Override public int trainedOnContracts() { return contracts; }
+        };
     }
 
     /**

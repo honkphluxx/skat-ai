@@ -38,7 +38,7 @@ public class BeliefWorldSourceTest {
 
     /** A model certain that one named card sits in one named class. */
     private static BeliefModel certainAbout(Card card, int cardClass) {
-        return features -> {
+        return (features -> {
             float[] logits = new float[32 * BeliefEncoding.CLASSES];
             int watched = BeliefEncoding.index(card);
             for (int at = 0; at < 32; at++) {
@@ -48,7 +48,7 @@ public class BeliefWorldSourceTest {
                 }
             }
             return logits;
-        };
+        });
     }
 
     @Test public void theModelSteersTheDrawTowardsTheSeatItNames() {
@@ -97,6 +97,11 @@ public class BeliefWorldSourceTest {
 
     /** "This card is buried and none of the others are." */
     private static BeliefModel believesOnlyThisIsBuried(Card card) {
+        return buriedLogits(card);
+    }
+
+    /** The same opinion again, so a test can present it as trained or not. */
+    private static BeliefModel buriedLogits(Card card) {
         return features -> {
             float[] logits = new float[32 * BeliefEncoding.CLASSES];
             int watched = BeliefEncoding.index(card);
@@ -106,6 +111,49 @@ public class BeliefWorldSourceTest {
             }
             return logits;
         };
+    }
+
+    /**
+     * A model is not asked about a contract it has never been shown.
+     *
+     * <p>The property that replaced a constant. The sampler used to refuse on
+     * Null and on nothing else, which was right while no corpus held a Null and
+     * wrong the moment one did -- and wrong silently: a night measuring a
+     * Null-trained model against the shipped one returned +0.000 on 539 of 539
+     * boards, because both were sent to the baseline unasked.
+     *
+     * <p>Asserted in both directions with the same stub, so the only thing that
+     * differs between the two runs is what the model claims to have seen. A
+     * stub certain about a card draws it there nearly every time when it is
+     * consulted, and lands at the uniform rate when it is not.
+     */
+    @Test public void aModelIsNotConsultedAboutAContractItHasNeverSeen() {
+        SkatAi.Seat seat = SkatAi.Seat.HUMAN;
+        Card watched = unseenFor(seat).get(0);
+        // The skat stub rather than certainAbout, for the reason
+        // itCanAlsoBelieveACardIsBuried gives: two slots against twenty-two
+        // candidates is a queue, and a model that nominates one card while
+        // shrugging about the rest loses the race to the shrugs.
+        BeliefModel opinionated = buriedLogits(watched);
+        BeliefModel sameButUntrained = new BeliefModel() {
+            @Override public float[] logits(float[] features) {
+                return buriedLogits(watched).logits(features);
+            }
+            // Claims Null, and evidence() plays a Grand: a model trained on one
+            // contract has no standing on another.
+            @Override public int trainedOnContracts() {
+                return BeliefModel.contractBit(dev.skatklar.demo.Contract.NULL);
+            }
+        };
+        int heard = count(seat, opinionated, watched, world -> world.skat().contains(watched));
+        int ignored = count(seat, sameButUntrained, watched,
+                world -> world.skat().contains(watched));
+        int uniform = count(seat, null, watched, world -> world.skat().contains(watched));
+
+        assertTrue("a model that has seen the contract is consulted: " + heard + " of 200",
+                heard > 150);
+        assertEquals("a model that has not is not consulted, and the draw is the"
+                + " uniform one exactly -- same seed, same sampler", uniform, ignored);
     }
 
     /**

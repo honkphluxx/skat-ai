@@ -36,7 +36,10 @@ import numpy as np
 import torch
 
 MAGIC = 0x534B4257
-FORMAT = 1
+# Format 2 appends one int to the header: which contracts the corpus held, a bit
+# per Contract ordinal. BeliefNet still reads format 1 and reports no contracts
+# for it, which BeliefModel.trainedOnContracts defines as "assume none".
+FORMAT = 2
 
 
 def main():
@@ -57,8 +60,12 @@ def main():
 
     out = directory / "belief.bin"
     with open(out, "wb") as f:
-        f.write(struct.pack(">7i", MAGIC, FORMAT, descriptor["encoding_version"],
-                            inputs, hidden, layers, outputs))
+        # A model that predates contracts_trained says nothing, which the reader
+        # takes as "saw no contract" and answers from the baseline instead. That
+        # is the safe direction, so it is also the default here.
+        contracts = descriptor.get("contracts_trained", 0)
+        f.write(struct.pack(">8i", MAGIC, FORMAT, descriptor["encoding_version"],
+                            inputs, hidden, layers, outputs, contracts))
         width = inputs
         for block in range(layers):
             # Each block is Linear, LayerNorm, GELU, Dropout -- four modules, so
@@ -74,8 +81,12 @@ def main():
 
     cases = write_parity(directory, outputs)
 
+    names = ("Diamonds", "Hearts", "Spades", "Clubs", "Grand", "Null", "Ramsch")
+    held = ", ".join(n for at, n in enumerate(names) if contracts >> at & 1) or "nothing recorded"
     print(f"{out}: {out.stat().st_size / 1024 / 1024:.2f} MB, "
           f"{inputs}x{hidden}x{layers} -> {outputs}")
+    print(f"  trained on: {held}"
+          + ("" if contracts >> 5 & 1 else "  (no Null: the sampler will not consult it on one)"))
     if cases:
         print(f"{cases}: {cases.stat().st_size / 1024:.0f} KB of the trainer's own answers")
     print("Now run the arena; BeliefPlayers prefers belief.bin and replays "

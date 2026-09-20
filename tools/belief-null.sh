@@ -37,7 +37,14 @@
 #                  belief-model-null/   one net over Null alone
 #   5. weights     belief-model-mixed/belief.bin   export_weights.py
 #   6. read        eval_belief.py       the three numbers, below
-#   7. gates       arena-logs/          the mixed model against the shipped one
+#   7. gates       arena-logs/belief-null/   the mixed model against the shipped one
+#
+# The match logs go in a directory of this script's own, and that is not tidiness.
+# The tag a match is filed under is a-vs-b-mode-seed, and belief-v2.sh runs a row
+# with the identical tag against a different candidate model. Sharing arena-logs/
+# meant this script's resume logic found that row already present and skipped it:
+# the first full night reported "[skip] belief-32-candidate-vs-belief-32-cardplay-s11
+# -- log already exists" on all three seeds and quietly carried last week's answer.
 #
 # The three numbers, read in the morning from arena-logs/summary-belief-null.txt:
 #
@@ -103,7 +110,7 @@ for arg in "$@"; do
         --quick)      QUICK=true ;;
         --threads=*)  THREADS="${arg#*=}" ;;
         --python=*)   PYTHON="${arg#*=}" ;;
-        -h|--help)    sed -n '2,85p' "$BELIEF_NULL_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,93p' "$BELIEF_NULL_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -123,7 +130,7 @@ MIXED=belief-data-mixed
 TRUMP_MODEL=belief-model-trump
 MIXED_MODEL=belief-model-mixed
 NULL_MODEL=belief-model-null
-LOG=arena-logs
+LOG=arena-logs/belief-null
 SUMMARY=arena-logs/summary-belief-null.txt
 BOARDS=200000
 SHARD=20000
@@ -139,7 +146,7 @@ if $QUICK; then
     TRUMP_MODEL=belief-model-trump-quick
     MIXED_MODEL=belief-model-mixed-quick
     NULL_MODEL=belief-model-null-quick
-    LOG=arena-logs/quick
+    LOG=arena-logs/quick/belief-null
     SUMMARY=arena-logs/quick/summary-belief-null.txt
     BOARDS=4000
     SHARD=2000
@@ -149,7 +156,7 @@ if $QUICK; then
     GATE_SMALL=30
     NULLGATE=300
 fi
-mkdir -p "$LOG"
+mkdir -p "$LOG" "$(dirname "$SUMMARY")"
 POPULATION=greedy,search-4,club,expert,jskat-new,xskat-blind,go-skat
 
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
@@ -224,9 +231,22 @@ stopped && exit 0
 
 # 4. Two nets from the same shards, which is why this step is minutes and the
 # corpus was the expensive part.
+# A model is only reusable if it can say what it was trained on. One that
+# cannot predates contracts_trained, and the sampler reads its silence as the
+# old rule -- consult on everything, refuse on Null -- which is right for a
+# shipped model and useless here, since the whole question is what happens when
+# a model HAS seen Nulls. Retrain rather than skip: the first full night
+# produced exactly such a model and its Null gate came back +0.000 on 539 of
+# 539 boards, having never consulted it.
 train() {
     local data="$1" model="$2" tag="$3"
-    if [ -f "$model/belief.pt" ]; then say "  [skip] train $tag -- $model/belief.pt exists"; return 0; fi
+    if [ -f "$model/belief.pt" ] && grep -q contracts_trained "$model/model.json" 2>/dev/null; then
+        say "  [skip] train $tag -- $model/belief.pt exists"; return 0
+    fi
+    if [ -f "$model/belief.pt" ]; then
+        say "  [$(date '+%H:%M:%S')] $model predates contracts_trained -- retraining $tag"
+        rm -rf "$model"
+    fi
     say "  [$(date '+%H:%M:%S')] train $tag, $EPOCHS epochs, $data -> $model"
     if ! "$PYTHON" arena/python/train_belief.py --data "$data" --out "$model" --epochs "$EPOCHS" \
             > "$LOG/belief-null-train-$tag.txt" 2>&1; then
@@ -244,8 +264,11 @@ stopped && exit 0
 
 # 5. The weights the arena and the app read. Only the mixed model gets them:
 # the Null-only net exists to answer a question, not to be played.
-if [ -f "$MIXED_MODEL/belief.bin" ]; then
-    say "  [skip] weights -- $MIXED_MODEL/belief.bin exists"
+# Likewise the weights: a format 1 belief.bin has no room for the mask, so an
+# existing one from before the format change has to be rewritten, not kept.
+if [ -f "$MIXED_MODEL/belief.bin" ] \
+        && [ "$(od -An -tu4 -j4 -N4 --endian=big "$MIXED_MODEL/belief.bin" | tr -d ' ')" = "2" ]; then
+    say "  [skip] weights -- $MIXED_MODEL/belief.bin exists and is format 2"
 else
     say "  [$(date '+%H:%M:%S')] export_weights $MIXED_MODEL"
     if ! "$PYTHON" arena/python/export_weights.py --model="$MIXED_MODEL" > "$LOG/belief-null-weights.txt" 2>&1; then

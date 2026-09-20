@@ -53,15 +53,28 @@ def main(directory, limit=1_000_000):
     # either of them -- every record was well-formed, there were simply none of
     # a whole contract. A corpus is not only a shape, it is a mix, so print the
     # mix and let it be read.
-    contracts = corpus.slice(x, "contract").sum(axis=0)
+    # Counted over the WHOLE corpus, not over the bounded sample everything
+    # below uses, and read straight off the packed bytes so that costs nothing.
+    # The limit exists because the forgetting checks make four float copies of
+    # what they are given; a census has no such problem, and taking the sample
+    # instead produced the one thing this section exists to prevent. A mixed
+    # corpus sorts its minted shards last, so the first million records of one
+    # are all trump, and the census duly reported "Null: none at all" about a
+    # corpus with 323,524 Nulls in it -- while the trainer, which reads
+    # everything, was training on them perfectly happily.
+    whole, _, _, all_boards = corpus.load(packed=True)
+    contracts = (corpus.slice(whole, "contract") > corpus.scale / 2).sum(axis=0)
+    census_records = len(whole)
+    print(f"         all {census_records:,} records, {len(np.unique(all_boards)):,} boards")
     for name, seen in zip(("Diamonds", "Hearts", "Spades", "Clubs",
                            "Grand", "Null", "Ramsch"), contracts):
-        share = 100.0 * seen / max(len(x), 1)
+        share = 100.0 * seen / max(census_records, 1)
         print(f"         {name:9s} {int(seen):9,d}  {share:5.1f}%"
               + ("   <- none at all" if seen == 0 else ""))
     bid, _ = corpus.field("bidding_present")
-    print(f"         {'bid for':9s} {int((x[:, bid] > 0.5).sum()):9,d}  "
-          f"{100.0 * (x[:, bid] > 0.5).mean():5.1f}%")
+    was_bid = whole[:, bid] > corpus.scale / 2
+    print(f"         {'bid for':9s} {int(was_bid.sum()):9,d}  {100.0 * was_bid.mean():5.1f}%")
+    del whole, all_boards
     print()
 
     print("the record itself")

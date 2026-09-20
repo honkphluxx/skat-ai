@@ -49,5 +49,8 @@ public final class NetBeliefModel implements BeliefModel {
 
     @Override public int inputs() { return net.inputs(); }
 
+    /** Straight through from the weight file's header; zero if it is format 1. */
+    @Override public int trainedOnContracts() { return net.trainedOnContracts(); }
+
     @Override public float[] logits(float[] features) { return net.logits(features); }
 }

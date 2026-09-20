@@ -45,19 +45,32 @@ public final class BeliefNet {
 
     /** File magic: "SKBW", SkatKlar belief weights. */
     private static final int MAGIC = 0x534B4257;
-    /** The layout this class understands. */
-    public static final int FORMAT = 1;
+    /**
+     * The layout this class writes and prefers.
+     *
+     * <p>Format 2 added one int to the header: which contracts the model was
+     * trained on. Format 1 is still read, because a weight file outlives the
+     * build that wrote it and the shipped model is one -- it reports
+     * {@link BeliefModel#LEGACY_CONTRACTS}, which is the rule that was in force
+     * when it was written rather than a guess about it.
+     */
+    public static final int FORMAT = 2;
+    /** The oldest layout still read. */
+    public static final int OLDEST_FORMAT = 1;
     /** LayerNorm's epsilon, inside the square root, as PyTorch does it. */
     private static final float EPS = 1e-5f;
 
     private final int inputs;
     private final int encodingVersion;
+    private final int trainedOnContracts;
     private final Layer[] trunk;
     private final Layer head;
 
-    private BeliefNet(int inputs, int encodingVersion, Layer[] trunk, Layer head) {
+    private BeliefNet(int inputs, int encodingVersion, int trainedOnContracts,
+                      Layer[] trunk, Layer head) {
         this.inputs = inputs;
         this.encodingVersion = encodingVersion;
+        this.trainedOnContracts = trainedOnContracts;
         this.trunk = trunk;
         this.head = head;
     }
@@ -71,6 +84,9 @@ public final class BeliefNet {
     /** The encoding the model was trained against; compare with {@link BeliefEncoding#VERSION}. */
     public int encodingVersion() { return encodingVersion; }
 
+    /** Which contracts the corpus held; {@link BeliefModel#LEGACY_CONTRACTS} for format 1. */
+    public int trainedOnContracts() { return trainedOnContracts; }
+
     /**
      * Reads a weight file. See {@code arena/python/export_weights.py}, which
      * is the only thing that writes one.
@@ -83,14 +99,18 @@ public final class BeliefNet {
         DataInputStream in = new DataInputStream(new BufferedInputStream(source));
         if (in.readInt() != MAGIC) throw new IOException("not a belief weight file");
         int format = in.readInt();
-        if (format != FORMAT) {
-            throw new IOException("weight file format " + format + ", this build reads " + FORMAT);
+        if (format < OLDEST_FORMAT || format > FORMAT) {
+            throw new IOException("weight file format " + format + ", this build reads "
+                    + OLDEST_FORMAT + " to " + FORMAT);
         }
         int encodingVersion = in.readInt();
         int inputs = in.readInt();
         int hidden = in.readInt();
         int layers = in.readInt();
         int outputs = in.readInt();
+        // Format 1 has nothing here and the weights start immediately, so this
+        // read must be conditional rather than skipped-if-zero.
+        int trainedOnContracts = format >= 2 ? in.readInt() : BeliefModel.LEGACY_CONTRACTS;
         if (inputs <= 0 || hidden <= 0 || layers <= 0 || outputs <= 0 || layers > 16) {
             throw new IOException("implausible shape: " + inputs + "x" + hidden
                     + "x" + layers + "->" + outputs);
@@ -106,7 +126,7 @@ public final class BeliefNet {
         }
         Layer head = new Layer(width, outputs,
                 floats(in, width * outputs), floats(in, outputs), null, null);
-        return new BeliefNet(inputs, encodingVersion, trunk, head);
+        return new BeliefNet(inputs, encodingVersion, trainedOnContracts, trunk, head);
     }
 
     private static float[] floats(DataInputStream in, int count) throws IOException {

@@ -65,15 +65,20 @@ public final class BeliefWorldSource implements WorldSource {
     @Override
     public List<WorldSampler.World> sample(BeliefEncoding.Evidence evidence,
                                            int count, Random random) {
-        // Null is a contract the model has never seen. Counted over the shipped
-        // training set: 0 Null decision points in 89 438, because no player this
-        // project ships has ever announced one -- and a Null game also presents
-        // every trump-derived feature as zero, so it is not merely a rare input
-        // but an unvisited corner of the space. An unvisited corner does not
-        // give a weak answer, it gives an arbitrary one, so the honest baseline
-        // is asked instead. Remove this the run after a model is trained on
-        // games that include them.
-        if (evidence.context().game.contract.isNull()) {
+        // A contract this model has never seen gets the honest baseline instead.
+        // Not a weak answer but an arbitrary one is what an unvisited corner of
+        // the space returns, and a Null presents every trump-derived feature as
+        // zero, so it is a corner rather than merely a rare input.
+        //
+        // This used to be an unconditional refusal on Null, which was right for
+        // as long as it was true -- 0 Null decision points in 89,438, because no
+        // player this project ships ever announces one -- and silent for exactly
+        // as long as it was not. The night that first trained a model on minted
+        // Nulls measured it against the shipped model and got +0.000 on 539 of
+        // 539 boards: both sides were sent here, both were sent to the uniform
+        // sampler, and the model under test was never asked. So the rule now
+        // reads the model instead of the calendar.
+        if (!model.sawContract(evidence.context().game.contract)) {
             return WorldSource.UNIFORM.sample(evidence, count, random);
         }
         double[][] belief = beliefFor(evidence);
