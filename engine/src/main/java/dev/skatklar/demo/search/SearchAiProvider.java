@@ -918,8 +918,15 @@ public final class SearchAiProvider implements SkatAiProvider {
             // in a short suit, a Null buries the two highest cards. Nothing else
             // in this player would get Null right if this did not.
             List<Card> twelve = new ArrayList<>(context.hand);
-            Contract forContract = intended != null
-                    ? intended : HandEvaluator.plausible(twelve, 1).get(0);
+            // In order of how much it is worth trusting: a contract somebody has
+            // already settled on, then this seat's own intention from the
+            // auction, then a guess from the twelve cards. The guess is a poor
+            // last resort and only a fixed-contract match ever reached it --
+            // there it said Null on 0 of 400 makeable Null boards and buried the
+            // opposite two cards.
+            Contract forContract = context.settledContract != null ? context.settledContract
+                    : intended != null ? intended
+                    : HandEvaluator.plausible(twelve, 1).get(0);
             Set<Card> discarded = new LinkedHashSet<>(Discards.buried(forContract, twelve));
             if (discarded.size() != 2) discarded = blind.discardSkat(context);
             // The engine runs the exchange in a session of its own and starts

@@ -401,13 +401,44 @@ public final class SkatAi {
         public final Seat mySeat;
         public final Set<Card> hand;
         public final List<Card> skat;
+        /**
+         * The contract this game will be played at, when that is already
+         * settled, and null when it is not.
+         *
+         * <p>Null in an ordinary game, and that is not an omission: the
+         * declarer discards and only then announces, so at this moment nobody
+         * knows the contract — the declarer least of all, since the discard is
+         * part of deciding it. A player must still work without this.
+         *
+         * <p>Set when the arena fixes the contract to measure card play, where
+         * the auction is skipped and the contract was chosen before the deal
+         * was handed out. Passing it is not a gift of hidden information: in a
+         * real game the declarer knows perfectly well what it is about to
+         * announce while it buries. Fixing the contract removes the auction,
+         * and removed that knowledge with it by accident.
+         *
+         * <p>What that accident cost, measured 2026-09-20 on 400 boards priced
+         * as makeable Nulls: the declarer guessed the contract from its twelve
+         * cards, said Null on 0 of them, buried the wrong two cards on 98%, and
+         * 57.5% of the boards stopped being makeable before a card was played.
+         * Every fixed-contract Null number in this project was measured through
+         * that.
+         */
+        public final Contract settledContract;
 
         public SkatExchangeContext(RoundPosition round, Seat mySeat,
                                    Set<Card> hand, List<Card> skat) {
+            this(round, mySeat, hand, skat, null);
+        }
+
+        public SkatExchangeContext(RoundPosition round, Seat mySeat,
+                                   Set<Card> hand, List<Card> skat,
+                                   Contract settledContract) {
             this.round = Objects.requireNonNull(round);
             this.mySeat = Objects.requireNonNull(mySeat);
             this.hand = immutableSet(hand);
             this.skat = immutableList(skat);
+            this.settledContract = settledContract;
         }
     }
 

@@ -1003,6 +1003,17 @@ public final class GameEngine {
      */
     private List<Card> exchangeSkat(SkatAiSession declarerSession, SkatAi.RoundPosition round,
                                     SkatAi.Seat declarer, int bidValue, List<Card> dealtSkat) {
+        return exchangeSkat(declarerSession, round, declarer, bidValue, dealtSkat, null);
+    }
+
+    /**
+     * @param settledContract the contract this game will be played at when it
+     *        is already known, which is so only when the caller fixed it; null
+     *        after an auction, where the announcement comes after the discard
+     */
+    private List<Card> exchangeSkat(SkatAiSession declarerSession, SkatAi.RoundPosition round,
+                                    SkatAi.Seat declarer, int bidValue, List<Card> dealtSkat,
+                                    Contract settledContract) {
         // The demo variant excludes hand games. The callback stays useful to a
         // full-game coordinator, while this variant always picks up.
         declarerSession.pickUpSkat(new SkatAi.SkatChoiceContext(round, declarer, bidValue));
@@ -1011,7 +1022,8 @@ public final class GameEngine {
         Set<Card> discarded;
         try {
             discarded = declarerSession.discardSkat(new SkatAi.SkatExchangeContext(
-                    round, declarer, new LinkedHashSet<>(twelveCards), dealtSkat));
+                    round, declarer, new LinkedHashSet<>(twelveCards), dealtSkat,
+                    settledContract));
         } catch (RuntimeException invalid) {
             discarded = Collections.emptySet();
         }
@@ -1055,7 +1067,11 @@ public final class GameEngine {
         try {
             exchange.prepareDeal(new SkatAi.DealContext(round, declarer,
                     new LinkedHashSet<>(hands[declarer.ordinal()]), AUTO_BIDDING_CONTRACTS));
-            exchangeSkat(exchange, round, declarer, bidValue, deal.skat);
+            // The contract was chosen before the deal was handed out, so the
+            // declarer is told it. Without this it discards for a guess -- and
+            // on a Null that guess is a trump game every time, which buries the
+            // opposite two cards.
+            exchangeSkat(exchange, round, declarer, bidValue, deal.skat, contract);
         } finally {
             try { exchange.close(); } catch (RuntimeException ignored) {}
         }
