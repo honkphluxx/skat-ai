@@ -49,7 +49,11 @@ public final class NetBeliefModel implements BeliefModel {
 
     @Override public int inputs() { return net.inputs(); }
 
-    /** Straight through from the weight file's header; zero if it is format 1. */
+    /**
+     * Straight through from the weight file's header. A format 1 file has no
+     * such header and {@link BeliefNet} reports {@link BeliefModel#LEGACY_CONTRACTS}
+     * for it, which is the rule that was in force when it was written.
+     */
     @Override public int trainedOnContracts() { return net.trainedOnContracts(); }
 
     @Override public float[] logits(float[] features) { return net.logits(features); }

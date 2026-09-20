@@ -9,8 +9,13 @@
   ],
   "hidden": 512,
   "layers": 3,
-  "val_accuracy": 0.6628206186701894,
-  "val_nll": 0.6530672638597913,
-  "baseline_accuracy": 0.46657240752972257,
-  "baseline_nll": 0.8961341270334989
+  "val_accuracy": 0.6599620822826407,
+  "val_nll": 0.6561595021950176,
+  "baseline_accuracy": 0.4666307789300904,
+  "baseline_nll": 0.8960077429880376,
+  "split_rule": "splitmix64-v1",
+  "split_seed": 1,
+  "split_fraction": 0.1,
+  "trained_on": "belief-data-mixed",
+  "contracts_trained": 63
 }
