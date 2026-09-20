@@ -565,9 +565,54 @@ touching the network.
 
 ### Phase D — declaring (after B2, because it pays twice with a better belief)
 
+**Started 2026-09-20. Two things found before building anything.**
+
+*The obvious instrument is circular and cannot be used.* `SolverContractSource`
+prices a board by asking whether it is makeable after `Discards.keepBestTen`,
+and the player buries that same heuristic's complement — so at
+`--contracts=solver` the heuristic keeps a makeable ten **100%** of the time by
+construction. Measuring a discard there measures the assumption. The contract
+has to come from somewhere that chose it without reference to a discard, which
+means the auction.
+
+*And the declarer was burying for the wrong contract.* The engine asks for the
+discard before the announcement, rightly, since in a real game the discard is
+part of deciding the contract. A fixed-contract match has no auction and lost
+that knowledge with it: the declarer buried for whatever `price()` liked about
+its own ten cards. `SkatExchangeContext.settledContract` fixes it, and it was
+worth **+26.0 points of makeability at Null contracts and +13.0 at solver
+contracts** — told the contract, the declarer keeps a makeable ten every time.
+The 13 is the missing tenth `arena/README.md` calls "the ten percent the
+discard costs". Every fixed-contract Null number here was measured through the
+74%.
+
+**The prize, measured honestly.** Contracts from the auction, 352 declared
+boards, every one of the 66 discards enumerated against double-dummy defence:
+
+| | |
+| --- | --- |
+| some discard makes it | 47.2% |
+| the heuristic's discard makes it | 40.9% |
+| cold either way | 52.8% |
+
+So **+6.3 points, or 13.3% of the winnable boards** — one declared game in
+eight that could be won is lost at the discard. That is the ceiling for this
+item and it is a generous one: enumerating 66 discards with every hand face up
+is not something a player can do, and the double-dummy defence it is scored
+against is not the defence it will meet.
+
 - Belief-weighted discard: for each of the 66 discards, the vote over sampled
   worlds, native solver, budgeted. Measured at **oracle contracts against
   par's 90.1%** — the tenth that is the discard is the target.
+
+  **One obstacle, found 2026-09-20 and not yet settled.** "Belief-weighted"
+  assumes the belief can be asked at the discard, and it cannot as things
+  stand: `BeliefEncoding.Evidence` is built from a `DecisionContext`, which is
+  a card-play position, and at the exchange there is no trick, no play history
+  and no void. The first version should therefore sample **uniformly** over the
+  twenty unseen cards, which is most of the value and needs nothing new; asking
+  the belief at the discard is its own piece of work and should be justified by
+  the uniform version paying first.
 - Then the line choice, measured as declaring-column distance to par at fixed
   contracts, currently 8.
 
@@ -671,8 +716,27 @@ moves.
    Break-even is 46/69 = **0.667**, so declining is right by a hair and the
    interval ([0.43, 0.82]) says nothing.
 
-   More boards do not help: at p = 0.65 the interval still straddles 0.667 at
-   n = 90 and at n = 160, and reaching n = 90 costs about 2,400 oracle boards.
+   **Settled properly, 2026-09-20, at no cost.** "More boards do not help" was
+   right about oracle boards and wrong about the question: `--contracts=null`
+   produces the same measurement eighty-four times over, and B2 step 3's gate
+   ran 1,689 of them for an unrelated reason. Today's player makes **1,072 of
+   1,689 = 63.5% [61.2%, 65.8%]**, and break-even is 66.7% — the interval now
+   sits entirely below it. Declining is right, and with room, where before it
+   was right by a hair on an interval that said nothing.
+
+   Two things make this stronger than it looks rather than weaker. It is
+   measured on *today's* player, after the week that added the C++ Null solver,
+   128 worlds and the LOW_RANK tiebreak and then the Null-aware belief — so it
+   is not a stale number that improvement might overturn; improvement already
+   happened and the answer held. And `NullContractSource` hands the contract to
+   any seat that can hold it double-dummy, which is a more favourable selection
+   than a bidder could ever identify, so 63.5% is an **upper bound** on the make
+   rate of Nulls we would actually choose to declare. The real figure is lower,
+   and the conclusion only hardens.
+
+   The older reasoning, kept because it was the right call on what it had: at
+   p = 0.65 the interval still straddles 0.667 at n = 90 and at n = 160, and
+   reaching n = 90 costs about 2,400 oracle boards.
    And the stakes are below the noise floor -- Null is the oracle's best contract
    on 3.8% of boards, so capturing every one perfectly is worth between **-0.17
    and +0.09 game points per game**, against a match margin of +2.565 whose own
