@@ -2,6 +2,7 @@ package dev.skatklar.demo.search;
 
 import dev.skatklar.demo.Card;
 import dev.skatklar.demo.Contract;
+import dev.skatklar.demo.SkatDeck;
 import dev.skatklar.demo.SkatRules;
 import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.ai.SkatAiProvider;
@@ -266,6 +267,19 @@ public final class SearchAiProvider implements SkatAiProvider {
                              HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
                              boolean ruleTies, int nullWorlds, RuleTiebreak.NullOrder nullTies,
                              int worldThreads, CardPlaySettings cardPlay) {
+        this(delegate, personality, seed, worlds, alphaMuDepth, biddingBudgetNanos, temperature,
+                adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullTies,
+                worldThreads, cardPlay, DiscardSettings.NONE);
+    }
+
+    private SearchAiProvider(SkatAiProvider delegate, Personality personality, long seed,
+                             WorldSource worlds, int alphaMuDepth, long biddingBudgetNanos,
+                             double temperature, boolean adaptiveBidding,
+                             HandEvaluator.AuctionEvidence.PassRule passRule, int marginPoints,
+                             boolean ruleTies, int nullWorlds, RuleTiebreak.NullOrder nullTies,
+                             int worldThreads, CardPlaySettings cardPlay,
+                             DiscardSettings discard) {
+        this.discard = discard == null ? DiscardSettings.NONE : discard;
         this.cardPlay = cardPlay == null ? CardPlaySettings.NONE : cardPlay;
         this.worldThreads = Math.max(1, worldThreads);
         this.delegate = delegate;
@@ -406,7 +420,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withNullTiebreak(RuleTiebreak.NullOrder order) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, nullWorlds, order, worldThreads, cardPlay);
+                ruleTies, nullWorlds, order, worldThreads, cardPlay, discard);
     }
 
     /**
@@ -429,11 +443,52 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     private final int nullWorlds;
 
+    /**
+     * How the two buried cards are chosen: by rule, or by playing them out.
+     *
+     * <p>Bundled rather than added as three more constructor parameters, for the
+     * reason {@link CardPlaySettings} was: this constructor already takes
+     * fifteen and every one of them has to be threaded through every {@code
+     * with} method.
+     *
+     * @param worlds deals sampled per candidate discard; zero is off, and off
+     *        is what ships until a gate says otherwise
+     * @param candidateCards how many of the heuristic's least-wanted cards the
+     *        pair may come from. Five leaves ten candidates and, over 264
+     *        declared boards, gives up none of the ceiling
+     * @param budgetNanos a ceiling on the whole decision, or zero for none
+     */
+    public record DiscardSettings(int worlds, int candidateCards, long budgetNanos) {
+        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L);
+    }
+
+    private final DiscardSettings discard;
+
+    /**
+     * The same player, choosing its discard by search.
+     *
+     * <p>Off by default. The heuristic it replaces is not bad -- keep trumps and
+     * aces, bury the points of a short suit -- but it answers a question about
+     * the shape of a hand when the question is about this deal. Measured over
+     * 352 declared boards with contracts from the auction: some discard makes
+     * the contract on 47.2% of them and the heuristic's on 40.9%, so one
+     * declared game in eight that could be won is lost before a card is played.
+     */
+    public SearchAiProvider withDiscardSearch(int worlds, int candidateCards, long budgetNanos) {
+        return withDiscard(new DiscardSettings(worlds, candidateCards, budgetNanos));
+    }
+
+    private SearchAiProvider withDiscard(DiscardSettings settings) {
+        return new SearchAiProvider(delegate, personality, seed, this.worlds, alphaMuDepth,
+                biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
+                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay, settings);
+    }
+
     /** The same player, sampling {@code worlds} worlds at a Null. See {@link #nullWorlds}. */
     public SearchAiProvider withNullWorlds(int worlds) {
         return new SearchAiProvider(delegate, personality, seed, this.worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, worlds, nullTies, worldThreads, cardPlay);
+                ruleTies, worlds, nullTies, worldThreads, cardPlay, discard);
     }
 
     /**
@@ -456,7 +511,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withRuleTiebreak() {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                true, nullWorlds, nullTies, worldThreads, cardPlay);
+                true, nullWorlds, nullTies, worldThreads, cardPlay, discard);
     }
 
     /**
@@ -489,7 +544,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withMarginTiebreak(int points) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, points,
-                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay);
+                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay, discard);
     }
 
     /**
@@ -532,7 +587,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withAdaptiveBidding(HandEvaluator.AuctionEvidence.PassRule rule) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, true, rule, marginPoints,
-                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay);
+                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay, discard);
     }
 
     /**
@@ -578,7 +633,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withTemperature(double temperature) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay);
+                ruleTies, nullWorlds, nullTies, worldThreads, cardPlay, discard);
     }
 
     /** The reference player at a given world count, with everything else neutral. */
@@ -928,6 +983,20 @@ public final class SearchAiProvider implements SkatAiProvider {
                     : intended != null ? intended
                     : HandEvaluator.plausible(twelve, 1).get(0);
             Set<Card> discarded = new LinkedHashSet<>(Discards.buried(forContract, twelve));
+            // And, when asked for, the same question the card play asks: play it
+            // out in sampled worlds and keep what wins in the most. The
+            // heuristic above is the fallback rather than the answer, which is
+            // what a budget spent before anything was scored falls back to.
+            if (discard.worlds() > 0) {
+                List<Card> unseen = new ArrayList<>(SkatDeck.ordered());
+                unseen.removeAll(twelve);
+                long deadline = discard.budgetNanos() > 0
+                        ? System.nanoTime() + discard.budgetNanos() : 0L;
+                DiscardSearch.Choice choice = DiscardSearch.choose(forContract, context.mySeat,
+                        twelve, unseen, context.round.forehand, discard.worlds(),
+                        discard.candidateCards(), deadline, random, new ArrayList<>(discarded));
+                if (choice.buried().size() == 2) discarded = new LinkedHashSet<>(choice.buried());
+            }
             if (discarded.size() != 2) discarded = blind.discardSkat(context);
             // The engine runs the exchange in a session of its own and starts
             // trick play in a fresh one, so this has to survive at the provider.

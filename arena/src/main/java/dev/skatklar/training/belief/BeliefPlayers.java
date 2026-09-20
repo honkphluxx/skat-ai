@@ -236,6 +236,17 @@ public final class BeliefPlayers {
         // reference one (same 32 worlds, different risk and aggression). The
         // card-play levers are what has to match here, and they do.
         registry.register(nullVariant("belief-32-shipped", 32, NullOrder.LOW_RANK, 128, loader));
+        // Phase D: the shipped player with the two buried cards chosen by search
+        // instead of by rule. Ten candidates -- pairs from the five cards the
+        // heuristic wants least, which over 264 declared boards gives up none of
+        // the ceiling -- and sixteen worlds each. The first version scored all 66
+        // and lost by two points, because maximising over 66 candidates on four
+        // samples each picks the luckiest.
+        for (int worlds : new int[] {8, 16, 32}) {
+            registry.register(renamed(
+                    discardVariant("belief-32-shipped-discard-" + worlds, worlds, 5, loader),
+                    "The shipped player, discard searched over " + worlds + " worlds"));
+        }
 
         Path candidate = locateCandidate();
         if (candidate != null) {
@@ -263,6 +274,22 @@ public final class BeliefPlayers {
      * @param rankTies  break Null ties by Null rank instead of by card points
      * @param nullWorlds worlds a Null decision samples; zero for the usual count
      */
+    /** The shipped player, with {@link dev.skatklar.demo.search.DiscardSearch} on. */
+    private static Contestant discardVariant(String id, int discardWorlds, int candidates,
+                                             Loader loader) {
+        Contestant shipped = nullVariant(id, 32, NullOrder.LOW_RANK, 128, loader);
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() { return shipped.displayName(); }
+            @Override public SkatAiProvider newProvider(long seed) {
+                SkatAiProvider player = shipped.newProvider(seed);
+                return player instanceof SearchAiProvider search
+                        ? search.withDiscardSearch(discardWorlds, candidates, 0L) : player;
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
     private static Contestant nullVariant(String id, int worlds, NullOrder nullTies, int nullWorlds,
                                           Loader loader) {
         Personality personality = new Personality(worlds, Personality.REFERENCE.memory(),
