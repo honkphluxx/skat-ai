@@ -671,27 +671,8 @@ moves.
    Break-even is 46/69 = **0.667**, so declining is right by a hair and the
    interval ([0.43, 0.82]) says nothing.
 
-   **Settled properly, 2026-09-20, at no cost.** "More boards do not help" was
-   right about oracle boards and wrong about the question: `--contracts=null`
-   produces the same measurement eighty-four times over, and B2 step 3's gate
-   ran 1,689 of them for an unrelated reason. Today's player makes **1,072 of
-   1,689 = 63.5% [61.2%, 65.8%]**, and break-even is 66.7% — the interval now
-   sits entirely below it. Declining is right, and with room, where before it
-   was right by a hair on an interval that said nothing.
-
-   Two things make this stronger than it looks rather than weaker. It is
-   measured on *today's* player, after the week that added the C++ Null solver,
-   128 worlds and the LOW_RANK tiebreak and then the Null-aware belief — so it
-   is not a stale number that improvement might overturn; improvement already
-   happened and the answer held. And `NullContractSource` hands the contract to
-   any seat that can hold it double-dummy, which is a more favourable selection
-   than a bidder could ever identify, so 63.5% is an **upper bound** on the make
-   rate of Nulls we would actually choose to declare. The real figure is lower,
-   and the conclusion only hardens.
-
-   The older reasoning, kept because it was the right call on what it had: at
-   p = 0.65 the interval still straddles 0.667 at n = 90 and at n = 160, and
-   reaching n = 90 costs about 2,400 oracle boards.
+   More boards do not help: at p = 0.65 the interval still straddles 0.667 at
+   n = 90 and at n = 160, and reaching n = 90 costs about 2,400 oracle boards.
    And the stakes are below the noise floor -- Null is the oracle's best contract
    on 3.8% of boards, so capturing every one perfectly is worth between **-0.17
    and +0.09 game points per game**, against a match margin of +2.565 whose own
