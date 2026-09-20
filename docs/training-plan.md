@@ -118,6 +118,64 @@ overall. **Phase A moves ahead of Phase D**, and the Null variants are the first
 thing in it — a Null that can only ever be bid to 23 is a contract we own on
 paper and never play.
 
+## 2.8 B2 step 3 answered, 2026-09-20: one net, and it pays at Null
+
+**Share the network.** The mixed net -- the v2 trump corpus plus 323,524
+minted Null decision points -- is better at Null than a net trained on Null
+alone, and costs the trump positions nothing. Held out, against the same
+46.7% baseline:
+
+| | mixed net | the alternative |
+| --- | --- | --- |
+| the Null corpus | **63.6%**, nll 0.6895 | Null-only net 62.4%, nll 0.7114 |
+| the trump corpus | 66.2%, nll 0.6537 | trump-only control 66.2%, nll 0.6529 |
+
+Trump is a dead heat contract by contract, 66.0 to 66.4 with the two
+alternating for the lead by a tenth. There is no poisoning to weigh against
+the Null gain.
+
+And it reaches the table. Three seeds, `--fixed-contract --contracts=null`,
+1,689 played boards, inverse-variance pooled:
+
+| | |
+| --- | --- |
+| Null, fixed contract | **+0.74** [+0.32, +1.17], resolved; seeds +0.81 / +0.35 / +1.12 |
+| Nulls made | 63.5% against 60.2% |
+| trump card play | +0.32 [-0.85, +1.48], not resolved |
+| full game against the shipped player | -0.01 [-0.73, +0.71], not resolved |
+
+So the mixed belief is a strict improvement: it wins where it was given new
+data and is indistinguishable everywhere else. The trump rows are the
+result -- adding a contract the auction never reaches should not move games
+that never contain it, and it does not.
+
+**Three things worth keeping about how this was measured**, because the first
+attempt at the same night produced +0.000 [+0.000, +0.000] and every one of
+them had to be fixed before the number above existed.
+
+- The sampler refused to consult any model on a Null, so both sides played
+  identically on 539 of 539 boards. That refusal was correct when written and
+  its own comment said to remove it the run after a model was trained on
+  Nulls. A fact about a model now lives in the model: `belief.bin` format 2
+  carries which contracts its corpus held, and a format 1 file is read as the
+  old rule rather than as a guess about it.
+- `check_data.py`'s census read a bounded sample and a mixed corpus sorts its
+  minted shards last, so it reported "Null: none at all" about a corpus with
+  323,524 Nulls while the trainer trained on them happily.
+- A model trained before the split rule changed cannot be scored on the new
+  split at all -- the new held-out tenth is its training data. The trump
+  comparison is therefore against a control trained the same night, not
+  against the shipped model, which read five points too well.
+
+**The caveat that remains, and its size.** A minted Null has no auction behind
+it, so the model learned Null given no bidding evidence, while the app's own
+case is a Null a person declared after a real auction. Stress-tested by
+pasting real bidding blocks from other deals onto held-out Null records:
+64.5% to 63.9%, and merely setting the presence bit costs 0.1. Those pasted
+bids contradict the cards in a way real ones never would, so that is an upper
+bound on the cost and the corner is not a cliff. Worth minting Nulls behind a
+real auction before this is leaned on harder, not before shipping it.
+
 ## 2.7 Where we stand after the belief retrain, 2026-09-17
 
 The shipped player is `belief-32-adaptive-margin-ties` on the **v2 belief**:
@@ -396,7 +454,14 @@ changes what the sweep measures.
    `xskat` so that no decision in the corpus was made with a card the seat
    could not see. 200k boards, `--threads=8`; the exporter already takes
    `--players=`. `check_data.py` before the night, as its README says.
-3. **Null in the model.** Two things have to happen here and they are
+3. **Null in the model. Answered 2026-09-20: share the network** -- see
+   [&sect;2.8](#28-b2-step-3-answered-2026-09-20-one-net-and-it-pays-at-null)
+   for the numbers and for the three measurement defects that had to be fixed
+   before they meant anything. What follows is the reasoning as it stood
+   before the run, kept because the result should be readable against the
+   arguments rather than in place of them.
+
+   Two things have to happen here and they are
    usually confused with each other: *getting Null data at all*, and
    *deciding which network learns from it*.
 
