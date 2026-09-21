@@ -1,26 +1,30 @@
 #!/usr/bin/env bash
-# How far is the shipped player's declaring from par, now that it knows the
-# contract it is declaring?
+# How far is the shipped player's declaring from par, with both declarers
+# facing the same defence?
 #
 #   ./tools/declaring-par.sh             three seeds, 200 boards each
 #   ./tools/declaring-par.sh --quick     one seed, 30 boards
 #
-# "About eight game points remain" (arena/README.md) was `belief` against
-# `solver` at fixed contracts, read off the "from declaring" line. Two things
-# have changed underneath that number.
+# "From declaring" is a number about a declarer AND the two players defending
+# against it, and it only compares like with like when the defenders are the
+# same. The first version of this script got that wrong: it ran "us vs solver"
+# and read both declaring columns, which puts OUR declarer against the solver's
+# double-dummy defence and the SOLVER's declarer against ours. It reported a
+# gap of 17.8 against the plan's 8, and five different players of ours all read
+# -21.9x with exactly 38.01% wins -- because against perfect defence a declarer
+# wins roughly when the ten it kept are cold, and every one of them buries the
+# same heuristic pair. The August reference numbers had the same issue in the
+# other direction: belief's -5.19 was against search defenders, the solver's
+# +2.91 against expert's.
 #
-# The solver is a TableObserver: observeFixedContract tells it the contract
-# before it discards. Our player was not told, and buried for whatever it would
-# have bid -- a different pair on 25% of solver-priced boards, a makeable ten
-# 87% of the time against 100%. That was fixed on 2026-09-20
-# (SkatExchangeContext.settledContract), so some of the eight may be gone.
+# So par is measured as two declarers against one defence, ours:
 #
-# And the player is not the one that was measured: since then it gained 128
-# Null worlds, the LOW_RANK tiebreak, the v2 belief and the Null-aware one.
+#   solver declaring, we defend   <- "us vs solver", the solver's column
+#   we declare,       we defend   <- "us vs us", a self-match
 #
-# Same instrument as the original so the numbers compare: fixed contracts from
-# the default auction (greedy's), both sides at the same contract. Read the two
-# "from declaring" values; their difference is the gap. Phase D's gate is 4.
+# Same seed, same boards, same fixed contracts from greedy's auction, same
+# defenders. The difference is declaring skill and nothing else. Phase D's gate
+# is 4.
 #
 # This file must keep LF line endings (.gitattributes pins *.sh).
 
@@ -39,11 +43,12 @@ for arg in "$@"; do
     case "$arg" in
         --quick)      QUICK=true ;;
         --threads=*)  THREADS="${arg#*=}" ;;
-        -h|--help)    sed -n '2,25p' "$PAR_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,29p' "$PAR_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
 
+US=belief-32-shipped
 LOG=arena-logs/par
 SUMMARY=arena-logs/summary-par.txt
 BOARDS=200
@@ -52,19 +57,31 @@ if $QUICK; then LOG=arena-logs/quick/par; SUMMARY=arena-logs/quick/summary-par.t
 mkdir -p "$LOG" "$(dirname "$SUMMARY")"
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 
+# Runs a fixed-contract match unless its log exists; prints nothing.
+run() {
+    local a="$1" b="$2" tag="$3"
+    local report="$LOG/$tag.txt"
+    [ -f "$report" ] && return 0
+    [ -f STOP ] && return 1
+    say "  [$(date '+%H:%M:%S')] $tag ($BOARDS boards)"
+    ./gradlew --console=plain -q --no-daemon :arena:arena \
+        --args="--a=$a --b=$b --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
+        > "$report" 2>&1 || { mv "$report" "$LOG/$tag.failed.txt"; say "      FAILED -- see $tag.failed.txt"; return 1; }
+}
+# The "from declaring" value in column 1 or 2 of a report.
+declaring() { grep -E "^  from declaring" "$1" | awk -v c="$2" '{print $(2 + c)}'; }
+
 say "============================================================"
 say "declaring-par started $(date '+%Y-%m-%d %H:%M:%S')   quick=$QUICK threads=$THREADS"
 for SEED in $SEEDS; do
-    [ -f STOP ] && { say "STOP file found -- stopping."; break; }
-    tag="belief-32-shipped-vs-solver-cardplay-s$SEED"
-    $QUICK && tag="$tag-b$BOARDS"
-    report="$LOG/$tag.txt"
-    if [ -f "$report" ]; then say "  [skip] $tag -- log already exists"; continue; fi
-    say "  [$(date '+%H:%M:%S')] $tag ($BOARDS boards)"
-    ./gradlew --console=plain -q --no-daemon :arena:arena \
-        --args="--a=belief-32-shipped --b=solver --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
-        > "$report" 2>&1 || { mv "$report" "$LOG/$tag.failed.txt"; say "      FAILED"; continue; }
-    grep -E "^game pts/game|^  from declaring|^  from defending|^wins as declarer| = .*game pts/game" \
-        "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
+    suffix="s$SEED"; $QUICK && suffix="$suffix-b$BOARDS"
+    vs_solver="$US-vs-solver-cardplay-$suffix"
+    self="$US-vs-$US-cardplay-$suffix"
+    run "$US" solver "$vs_solver" || continue
+    run "$US" "$US" "$self" || continue
+    solver_decl=$(declaring "$LOG/$vs_solver.txt" 2)
+    our_decl=$(declaring "$LOG/$self.txt" 1)
+    gap=$(awk -v s="$solver_decl" -v u="$our_decl" 'BEGIN { printf "%.2f", s - u }')
+    say "  seed $SEED: against our defence, solver declares $solver_decl, we declare $our_decl -> gap $gap"
 done
 say "declaring-par finished $(date '+%Y-%m-%d %H:%M:%S')"
