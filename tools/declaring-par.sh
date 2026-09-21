@@ -4,6 +4,9 @@
 #
 #   ./tools/declaring-par.sh             three seeds, 200 boards each
 #   ./tools/declaring-par.sh --quick     one seed, 30 boards
+#   ./tools/declaring-par.sh --seeds="14 15 16"   more seeds; matches already on
+#                                        disk are skipped, and the closing line
+#                                        pools every seed found in the log folder
 #
 # "From declaring" is a number about a declarer AND the two players defending
 # against it, and it only compares like with like when the defenders are the
@@ -43,6 +46,7 @@ for arg in "$@"; do
     case "$arg" in
         --quick)      QUICK=true ;;
         --threads=*)  THREADS="${arg#*=}" ;;
+        --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
         -h|--help)    sed -n '2,29p' "$PAR_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
@@ -54,6 +58,7 @@ SUMMARY=arena-logs/summary-par.txt
 BOARDS=200
 SEEDS="11 12 13"
 if $QUICK; then LOG=arena-logs/quick/par; SUMMARY=arena-logs/quick/summary-par.txt; BOARDS=30; SEEDS="11"; fi
+[ -n "${SEEDS_ARG:-}" ] && SEEDS="$SEEDS_ARG"
 mkdir -p "$LOG" "$(dirname "$SUMMARY")"
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 
@@ -84,4 +89,27 @@ for SEED in $SEEDS; do
     gap=$(awk -v s="$solver_decl" -v u="$our_decl" 'BEGIN { printf "%.2f", s - u }')
     say "  seed $SEED: against our defence, solver declares $solver_decl, we declare $our_decl -> gap $gap"
 done
+# Every seed with both logs on disk, not only this run's: the question is the
+# gap, and seeds added later belong in the same interval. The per-board files
+# carry only each match's total, so the interval comes from the spread between
+# seeds -- a t interval, since with a handful of seeds the normal one is
+# optimistic by a factor that matters.
+gaps=""
+for self_log in "$LOG"/$US-vs-$US-cardplay-s*.txt; do
+    [ -f "$self_log" ] || continue
+    tag=$(basename "$self_log" .txt); tag=${tag#$US-vs-$US-cardplay-}
+    vs_log="$LOG/$US-vs-solver-cardplay-$tag.txt"
+    [ -f "$vs_log" ] || continue
+    s=$(declaring "$vs_log" 2); u=$(declaring "$self_log" 1)
+    [ -n "$s" ] && [ -n "$u" ] && gaps="$gaps $(awk -v s="$s" -v u="$u" 'BEGIN { print s - u }')"
+done
+echo "$gaps" | awk '{
+    n = NF; if (n < 2) { print "  pooled: need two seeds"; exit }
+    for (i = 1; i <= n; i++) sum += $i; mean = sum / n
+    for (i = 1; i <= n; i++) ss += ($i - mean) ^ 2
+    se = sqrt(ss / (n - 1)) / sqrt(n)
+    split("12.706 4.303 3.182 2.776 2.571 2.447 2.365 2.306 2.262", t, " ")
+    q = (n - 1 <= 9) ? t[n - 1] : 1.96
+    printf "  pooled over %d seeds: gap %.2f, 95%% [%.1f, %.1f]  (the gate is 4)\n", n, mean, mean - q * se, mean + q * se
+}' | tee -a "$SUMMARY"
 say "declaring-par finished $(date '+%Y-%m-%d %H:%M:%S')"
