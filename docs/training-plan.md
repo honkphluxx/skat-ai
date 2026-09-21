@@ -613,8 +613,38 @@ against is not the defence it will meet.
   twenty unseen cards, which is most of the value and needs nothing new; asking
   the belief at the discard is its own piece of work and should be justified by
   the uniform version paying first.
+
+  **Measured 2026-09-21: does not resolve, and not worth its cost.** Three
+  seeds, 400 auction boards each, pooled, against the shipped player:
+
+  | worlds a candidate | game pts/game | wins as declarer |
+  | --- | --- | --- |
+  | 8 | -0.25 [-0.75, +0.24] | +0.30 pp |
+  | 16 | +0.19 [-0.27, +0.64] | +1.56 pp |
+  | 32 | +0.14 [-0.32, +0.60] | +1.09 pp |
+
+  Read it as a small effect this instrument cannot see rather than as nothing.
+  The declarer-win lift at 16 worlds, +1.6 points, is almost exactly what the
+  pilot predicted -- a quarter of the 6.3-point ceiling -- and on 28% of games
+  declared it is worth something like +0.3 game points, which is inside a
+  half-width of 0.45. Resolving it would take about five nights. And it costs
+  about ten seconds a discard on the workstation (ten candidates, sixteen
+  worlds, 160 solves), so it would not ship to a phone even resolved.
+  **Closed at the heuristic.** The world-count axis also refuses to rise: 16
+  and 32 are level, so this is not a budget problem either.
+
+  What the item did buy is the settled-contract fix below it, which was the
+  larger defect and cost nothing to run.
 - Then the line choice, measured as declaring-column distance to par at fixed
   contracts, currently 8.
+
+  **Re-measure that 8 before working on it.** It was `belief` against `solver`
+  at fixed contracts, where `solver` is a `TableObserver`, is told the contract
+  by `observeFixedContract`, and discards for it -- while our player discarded
+  for whatever it would have bid, on 25% of solver-priced boards a different
+  pair, and kept a makeable ten 87% of the time against 100%. Part of the 8 was
+  that defect, fixed 2026-09-20. It was also the `belief` of mid-August, not the
+  player that ships now. `./tools/declaring-par.sh` asks the question again.
 
 **Gate:** each change resolved positive at fixed contracts; the declaring column
 moves.
@@ -716,27 +746,8 @@ moves.
    Break-even is 46/69 = **0.667**, so declining is right by a hair and the
    interval ([0.43, 0.82]) says nothing.
 
-   **Settled properly, 2026-09-20, at no cost.** "More boards do not help" was
-   right about oracle boards and wrong about the question: `--contracts=null`
-   produces the same measurement eighty-four times over, and B2 step 3's gate
-   ran 1,689 of them for an unrelated reason. Today's player makes **1,072 of
-   1,689 = 63.5% [61.2%, 65.8%]**, and break-even is 66.7% — the interval now
-   sits entirely below it. Declining is right, and with room, where before it
-   was right by a hair on an interval that said nothing.
-
-   Two things make this stronger than it looks rather than weaker. It is
-   measured on *today's* player, after the week that added the C++ Null solver,
-   128 worlds and the LOW_RANK tiebreak and then the Null-aware belief — so it
-   is not a stale number that improvement might overturn; improvement already
-   happened and the answer held. And `NullContractSource` hands the contract to
-   any seat that can hold it double-dummy, which is a more favourable selection
-   than a bidder could ever identify, so 63.5% is an **upper bound** on the make
-   rate of Nulls we would actually choose to declare. The real figure is lower,
-   and the conclusion only hardens.
-
-   The older reasoning, kept because it was the right call on what it had: at
-   p = 0.65 the interval still straddles 0.667 at n = 90 and at n = 160, and
-   reaching n = 90 costs about 2,400 oracle boards.
+   More boards do not help: at p = 0.65 the interval still straddles 0.667 at
+   n = 90 and at n = 160, and reaching n = 90 costs about 2,400 oracle boards.
    And the stakes are below the noise floor -- Null is the oracle's best contract
    on 3.8% of boards, so capturing every one perfectly is worth between **-0.17
    and +0.09 game points per game**, against a match margin of +2.565 whose own
