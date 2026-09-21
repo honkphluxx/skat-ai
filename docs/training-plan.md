@@ -646,6 +646,33 @@ against is not the defence it will meet.
   that defect, fixed 2026-09-20. It was also the `belief` of mid-August, not the
   player that ships now. `./tools/declaring-par.sh` asks the question again.
 
+  **Measured 2026-09-21: about 5, and the 8 was never a clean number.**
+  "From declaring" scores a declarer together with the two players defending
+  against it, so two declarers only compare against the same defence. The 8
+  subtracted belief's -5.19 (against search's defence, from belief vs search)
+  from the solver's +2.91 (against expert's, from expert vs solver). A first
+  re-measure made the opposite mistake -- our declarer against the solver's
+  double-dummy defence, the solver's against ours -- and read 17.8; five
+  different players of ours all scored exactly 38.01% there, because against
+  perfect defence a declarer wins about when the ten it kept are cold, and they
+  all bury the same pair. Nothing had regressed.
+
+  Measured properly -- solver declaring and ours, both against our defence, on
+  the same boards and fixed contracts from greedy's auction:
+
+  | seed | solver declares | we declare | gap |
+  | --- | --- | --- | --- |
+  | 11 (178 boards) | -2.61 | -5.29 | 2.68 |
+  | 12 (171) | -0.45 | -10.29 | 9.84 |
+  | 13 (180) | -4.41 | -7.74 | 3.33 |
+
+  **Mean 5.3, roughly [0.8, 9.8]** from the spread over three seeds (the
+  per-board files hold only each match's total, so no paired interval). The
+  gate of 4 is inside that interval: Phase D may be nearly done or may have
+  most of it left, and three seeds cannot say which. Par here is an omniscient
+  declarer -- it discards and plays seeing every hand -- so not all of the gap
+  is reachable by an honest one.
+
 **Gate:** each change resolved positive at fixed contracts; the declaring column
 moves.
 
