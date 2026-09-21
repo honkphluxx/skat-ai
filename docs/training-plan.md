@@ -673,6 +673,14 @@ against is not the defence it will meet.
   declarer -- it discards and plays seeing every hand -- so not all of the gap
   is reachable by an honest one.
 
+  **Six seeds, 2026-09-21: 4.99 [2.0, 8.0]** (t interval). Seeds 14-16 added
+  6.93, 2.99 and 4.16 on 173, 170 and 177 boards. The gap is real -- the
+  interval stays clear of zero -- and the gate of 4 is still inside it, with
+  the point estimate a point above. What this does not say is how much of the
+  five an honest declarer could ever take: the solver's share includes seeing
+  every hand at the discard and at every card, and the one piece of that
+  already chased, the discard, came back at about +0.3 and unresolvable.
+
 **Gate:** each change resolved positive at fixed contracts; the declaring column
 moves.
 
