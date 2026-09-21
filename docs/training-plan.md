@@ -681,6 +681,22 @@ against is not the defence it will meet.
   every hand at the discard and at every card, and the one piece of that
   already chased, the discard, came back at about +0.3 and unresolvable.
 
+  **Split, 2026-09-21.** `solver-heuristic-discard` cheats at every card but
+  buries our pair (identical on 53 of 53 boards checked), so the solver minus
+  it is the discard's share and it minus us is card play's. Six seeds:
+
+  | | share | 95% |
+  | --- | --- | --- |
+  | the discard | 0.93 | [0.1, 1.8] |
+  | card play | **4.06** | [1.6, 6.5] |
+
+  Card play is four fifths of the gap, on every seed, and its own interval
+  clears zero. The discard is a point at most, which is why the search came
+  back at +0.3: it was fishing a one-point pond. The line choice is where
+  Phase D's remaining points are, and this is the instrument that measures it
+  -- `--split`, the card-play share, its gate now 4.06 - 4 &asymp; nothing
+  for the honest player to lose and up to 4 to find.
+
 **Gate:** each change resolved positive at fixed contracts; the declaring column
 moves.
 
