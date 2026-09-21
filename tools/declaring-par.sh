@@ -7,6 +7,11 @@
 #   ./tools/declaring-par.sh --seeds="14 15 16"   more seeds; matches already on
 #                                        disk are skipped, and the closing line
 #                                        pools every seed found in the log folder
+#   ./tools/declaring-par.sh --split --seeds="11 12 13 14 15 16"
+#                                        also plays solver-heuristic-discard, which
+#                                        cheats at every card but buries our pair,
+#                                        and splits the gap into the discard's
+#                                        share and card play's
 #
 # "From declaring" is a number about a declarer AND the two players defending
 # against it, and it only compares like with like when the defenders are the
@@ -41,12 +46,14 @@ cd "$(dirname "$PAR_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
 QUICK=false
+SPLIT=false
 THREADS=16
 for arg in "$@"; do
     case "$arg" in
         --quick)      QUICK=true ;;
         --threads=*)  THREADS="${arg#*=}" ;;
         --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
+        --split)      SPLIT=true ;;
         -h|--help)    sed -n '2,29p' "$PAR_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
@@ -88,6 +95,12 @@ for SEED in $SEEDS; do
     our_decl=$(declaring "$LOG/$self.txt" 1)
     gap=$(awk -v s="$solver_decl" -v u="$our_decl" 'BEGIN { printf "%.2f", s - u }')
     say "  seed $SEED: against our defence, solver declares $solver_decl, we declare $our_decl -> gap $gap"
+    if $SPLIT; then
+        vs_hd="$US-vs-solver-heuristic-discard-cardplay-$suffix"
+        run "$US" solver-heuristic-discard "$vs_hd" || continue
+        hd_decl=$(declaring "$LOG/$vs_hd.txt" 2)
+        say "           the same with our discard declares $hd_decl -> discard $(awk -v a="$solver_decl" -v b="$hd_decl" 'BEGIN{printf "%.2f", a-b}'), card play $(awk -v a="$hd_decl" -v b="$our_decl" 'BEGIN{printf "%.2f", a-b}')"
+    fi
 done
 # Every seed with both logs on disk, not only this run's: the question is the
 # gap, and seeds added later belong in the same interval. The per-board files
@@ -103,6 +116,18 @@ for self_log in "$LOG"/$US-vs-$US-cardplay-s*.txt; do
     s=$(declaring "$vs_log" 2); u=$(declaring "$self_log" 1)
     [ -n "$s" ] && [ -n "$u" ] && gaps="$gaps $(awk -v s="$s" -v u="$u" 'BEGIN { print s - u }')"
 done
+pool() {
+    local label="$1"; shift
+    echo "$*" | awk -v label="$label" '{
+    n = NF; if (n < 2) { print "  " label ": need two seeds"; exit }
+    for (i = 1; i <= n; i++) sum += $i; mean = sum / n
+    for (i = 1; i <= n; i++) ss += ($i - mean) ^ 2
+    se = sqrt(ss / (n - 1)) / sqrt(n)
+    split("12.706 4.303 3.182 2.776 2.571 2.447 2.365 2.306 2.262", t, " ")
+    q = (n - 1 <= 9) ? t[n - 1] : 1.96
+    printf "  %s over %d seeds: %.2f, 95%% [%.1f, %.1f]\n", label, n, mean, mean - q * se, mean + q * se
+    }' | tee -a "$SUMMARY"
+}
 echo "$gaps" | awk '{
     n = NF; if (n < 2) { print "  pooled: need two seeds"; exit }
     for (i = 1; i <= n; i++) sum += $i; mean = sum / n
@@ -112,4 +137,18 @@ echo "$gaps" | awk '{
     q = (n - 1 <= 9) ? t[n - 1] : 1.96
     printf "  pooled over %d seeds: gap %.2f, 95%% [%.1f, %.1f]  (the gate is 4)\n", n, mean, mean - q * se, mean + q * se
 }' | tee -a "$SUMMARY"
+if $SPLIT; then
+    discard_share=""; play_share=""
+    for hd_log in "$LOG"/$US-vs-solver-heuristic-discard-cardplay-s*.txt; do
+        [ -f "$hd_log" ] || continue
+        tag=$(basename "$hd_log" .txt); tag=${tag#$US-vs-solver-heuristic-discard-cardplay-}
+        vs_log="$LOG/$US-vs-solver-cardplay-$tag.txt"; self_log="$LOG/$US-vs-$US-cardplay-$tag.txt"
+        [ -f "$vs_log" ] && [ -f "$self_log" ] || continue
+        s=$(declaring "$vs_log" 2); h=$(declaring "$hd_log" 2); u=$(declaring "$self_log" 1)
+        discard_share="$discard_share $(awk -v a="$s" -v b="$h" 'BEGIN{print a-b}')"
+        play_share="$play_share $(awk -v a="$h" -v b="$u" 'BEGIN{print a-b}')"
+    done
+    pool "the discard's share" $discard_share
+    pool "card play's share  " $play_share
+fi
 say "declaring-par finished $(date '+%Y-%m-%d %H:%M:%S')"

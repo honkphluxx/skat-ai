@@ -47,6 +47,12 @@ public final class PlayerRegistry {
         // not cheat at.
         registry.register(stateless("solver", "Double-dummy par (cheats)",
                 seed -> new SolverAiProvider()));
+        // The same ceiling with the honest discard: it cheats at every card but
+        // buries the heuristic pair, so solver minus this is what the discard is
+        // worth and this minus an honest player is what card play is worth.
+        registry.register(stateless("solver-heuristic-discard",
+                "Double-dummy card play, heuristic discard (cheats)",
+                seed -> new SolverAiProvider(new dev.skatklar.demo.ai.GreedyAiProvider(), true)));
         // The honest counterpart of the solver: same search, but it only ever
         // sees its own cards and guesses the rest. Registered at several sample
         // counts because "how many worlds is enough" is a question the arena is

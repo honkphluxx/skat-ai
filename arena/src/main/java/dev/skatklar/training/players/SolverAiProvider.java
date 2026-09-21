@@ -85,8 +85,30 @@ public final class SolverAiProvider implements SkatAiProvider, TableObserver {
      *                 contract comes from outside, it only matters for the discard.
      */
     public SolverAiProvider(SkatAiProvider delegate) {
-        this.delegate = delegate;
+        this(delegate, false);
     }
+
+    /**
+     * @param heuristicDiscard bury what an honest declarer buries -- the
+     *        heuristic pair for the settled contract -- instead of the pair
+     *        that is best with every hand face up, and still play every card
+     *        seeing everything. Registered as {@code solver-heuristic-discard}.
+     *
+     * <p>It exists to split one number. Declaring against the same defence,
+     * the solver stands 4.99 [2.0, 8.0] ahead of the shipped player over six
+     * seeds, and that lead is two cheats at once: a perfect discard and
+     * perfect card play. The discard half was already chased honestly and came
+     * back at about +0.3 and unresolvable. This player keeps the card-play cheat
+     * and gives up the discard one, so the solver minus it is the discard's
+     * share of the five and it minus us is card play's -- which is what says
+     * whether a week on the line choice has anything to find.
+     */
+    public SolverAiProvider(SkatAiProvider delegate, boolean heuristicDiscard) {
+        this.delegate = delegate;
+        this.heuristicDiscard = heuristicDiscard;
+    }
+
+    private final boolean heuristicDiscard;
 
     @Override public SkatAi.AiDescriptor descriptor() {
         return new SkatAi.AiDescriptor("solver", "Double-dummy par (cheats)", true);
@@ -204,6 +226,15 @@ public final class SolverAiProvider implements SkatAiProvider, TableObserver {
         }
 
         @Override public Set<Card> discardSkat(SkatAi.SkatExchangeContext context) {
+            if (heuristicDiscard && context.settledContract != null) {
+                // Exactly the pair SearchAiProvider buries when it is told the
+                // contract, so the discard is identical and only the card play
+                // differs.
+                Set<Card> honest = new LinkedHashSet<>(Discards.buried(
+                        context.settledContract, new ArrayList<>(context.hand)));
+                try { blind.discardSkat(context); } catch (RuntimeException ignored) {}
+                return honest;
+            }
             Set<Card> solved = solvedDiscard(context);
             if (solved == null) return blind.discardSkat(context);
             // The delegate still sees the exchange, so its own bookkeeping of
