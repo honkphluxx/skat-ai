@@ -697,6 +697,79 @@ against is not the defence it will meet.
   -- `--split`, the card-play share, its gate now 4.06 - 4 &asymp; nothing
   for the honest player to lose and up to 4 to find.
 
+  **Where the card play loses it, 2026-09-22: not in won games. In lost
+  ones.** Before proposing a fix, an instrument that could name the failure
+  mode: `./tools/declaring-audit.sh` (`DeclaringAuditMain`). The per-board
+  files in `arena-logs/par/` cannot say -- each row is one side's six-game
+  total minus the other's, and the self-match that carries our declarer's
+  column is zero on every row by construction -- so the audit replays the
+  arena's own declarer-rotation games (same `Seeds.mix`, same fixed contract,
+  same defenders; its ZERO CHECK reproduces every seed's "from declaring" to
+  the cent), solves the true position before every card, and reads the
+  player's own tally through its own session
+  (`CardPlayObserver.voted`, a default no-op). Two units worth fixing first:
+  "from declaring" is Seeger-Fabian points per game at the table, so the
+  card-play share of 4.06 is about **five points of declarer win rate**,
+  53.7% against 58.5%, roughly fifty games in 1,049.
+
+  Six seeds, 1,049 declared boards (`arena-logs/par-audit/`; seeds 11-13
+  were also run in the Cowork container and the files are byte-identical):
+
+  | | s11 | s12 | s13 | s14 | s15 | s16 | six seeds |
+  | --- | --- | --- | --- | --- | --- | --- | --- |
+  | boards cold after the discard (won with every hand face up) | 81 | 66 | 70 | 75 | 58 | 74 | 424 |
+  | of those, we won | 81 | 66 | 69 | 72 | 56 | 71 | **415 = 97.9%** |
+  | card-play share on cold boards | -0.04 | +0.07 | +0.43 | +1.10 | +0.86 | +1.01 | **0.57 [0.1, 1.1]** |
+  | boards not cold | 97 | 105 | 110 | 98 | 112 | 103 | 625 |
+  | par wins one (always by a defender's mistake; par never throws) | 31 | 40 | 35 | 24 | 27 | 33 | **190 = 30.4%** |
+  | we win one | 24 | 24 | 31 | 17 | 26 | 27 | **149 = 23.8%** |
+  | card-play share on not-cold boards | +2.62 | +8.33 | +1.89 | +3.63 | +1.35 | +3.11 | **3.49 [0.9, 6.1]** |
+  | of it, both lost but charged differently (we are Schneidered about twice as often) | +0.54 | +0.55 | +0.51 | +0.54 | +1.31 | +0.66 | 0.69 [0.4, 1.0] |
+  | total, which is the gate's number | 2.58 | 8.40 | 2.33 | 4.72 | 2.21 | 4.11 | **4.06 [1.6, 6.5]** |
+  | our throws (a won position played to a lost one) | 5 | 6 | 10 | 9 | 7 | 17 | 54 in 50 games |
+  | our declarer decisions with **every card at zero votes** | 32% | 35% | 29% | 36% | 42% | 36% | **2,860 of 8,189 = 35%** |
+  | of those, the position was in truth won | 1 | 0 | 0 | 0 | 0 | 0 | 1 |
+  | games flat from the opening lead on | 50/75 | 43/86 | -- | 54/85 | 52/90 | 53/78 | about six in ten |
+
+  The total row reproduces `--split`'s 4.06 [1.6, 6.5] exactly, which is the
+  zero check at the level of the whole instrument. Of it, the cold boards
+  carry **0.57** -- nine games in 424, one in seven of the share -- and the
+  not-cold boards **3.49**, six in seven. Seeds 14-16 lose two or three cold
+  games each where 11-13 lost one in all, so "never" is wrong; "one board in
+  fifty" is right, and those nine are the only places a *better answer to
+  the present question* would help.
+
+  So the honest declarer converts 98% of cold boards: the belief is doing
+  its job, and the calibration table says so directly -- cards the vote put
+  at 12% / 39% / 65% / 89% won in the true world 10% / 34% / 62% / 90% of the
+  time. **Six sevenths of the gap is on boards that are lost against perfect
+  defence, where the only way to win is a defender's mistake, and par draws
+  one in 30% of those games against our 24%.** The mechanism is in the
+  zero-votes row: on a third of its decisions the search answers "no card
+  reaches 61 in any of the 32 worlds", and the card then falls to the
+  tiebreak -- keep the points off the table, then the rule order -- which has
+  no opinion about which line keeps a mistake possible, and none about
+  Schneider either (28 of our 73 lost not-cold games on seed 11 were
+  Schneidered, 14 of par's 66). Par, which asks for the most it can guarantee
+  and only then for the result, keeps its tricks and its pressure; ours, told
+  it has lost, plays the rest of the hand with no objective at all. Six games
+  in ten of those are flat from the first card.
+
+  **What that rules out.** More worlds (the tally is flat, not close), a
+  better belief (calibrated), alpha-mu (strategy fusion is about overvaluing
+  won lines; these are lost ones), and anything aimed at the discard. What it
+  points at is one place in `chooseCard`: **what the declarer asks when the
+  answer to "does this reach 61" is no everywhere.** The natural first
+  experiment is a ladder -- when the top vote is zero, tally the same worlds
+  at the next rung down (61 → 31, the Schneider line, then the best guaranteed
+  points), and pick from that. It costs one extra tally on a third of the
+  declarer's decisions and nothing on the rest. Its ceiling is the not-cold
+  boards par wins and we lose, 70 in 1,049 against 29 the other way -- about
+  3.5 points -- and an honest player will not draw every mistake par draws,
+  so expect less; the Schneider row, 0.69 [0.4, 1.0], is the part it can
+  claim almost by construction. Gate unchanged:
+  `./tools/declaring-par.sh --split`, the card-play share, from 4.06.
+
 **Gate:** each change resolved positive at fixed contracts; the declaring column
 moves.
 

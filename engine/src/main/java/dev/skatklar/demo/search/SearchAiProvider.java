@@ -13,6 +13,7 @@ import dev.skatklar.demo.ramsch.RamschPolicy;
 import dev.skatklar.demo.solve.DoubleDummySolver;
 import dev.skatklar.demo.solve.NullSolver;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -346,6 +347,23 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** Called after each card decision. May be called from a worker thread. */
     public interface CardPlayObserver {
         void decided(CardPlayReport report);
+
+        /**
+         * What the worlds said about each legal card, and the card that was
+         * then played. Called after the choice is made, so watching cannot
+         * move it; a no-op unless somebody asks. It exists for
+         * {@code DeclaringAuditMain}: a diagnosis of the line choice has to
+         * read the player's own tally from the player's own session, not
+         * re-derive it from a stand-in that drew different worlds.
+         *
+         * @param votes   worlds in which each legal card keeps this seat's
+         *                side winning; alpha-mu's scores where that ran
+         * @param cushion the second question's tally, empty unless it was asked
+         * @param worldsSearched the denominator of {@code votes}
+         */
+        default void voted(SkatAi.DecisionContext context, Map<Card, Integer> votes,
+                           Map<Card, Integer> cushion, int worldsSearched,
+                           boolean cushionAsked, Card chosen) {}
     }
 
     /**
@@ -1091,12 +1109,15 @@ public final class SearchAiProvider implements SkatAiProvider {
 
             Map<Card, Integer> scores = votes;
             Map<Card, Integer> held = cushion;
-            if (temperature > 0) return sampleCard(legal, scores, searched);
+            if (temperature > 0) {
+                return tell(context, scores, held, searched, cushionAsked,
+                        sampleCard(legal, scores, searched));
+            }
             Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
             Comparator<Card> byCushion = Comparator.comparingInt(card -> held.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
             Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context, nullTies) : byCost.reversed();
-            return legal.stream()
+            return tell(context, scores, held, searched, cushionAsked, legal.stream()
                     // Among cards that win equally often, the one that wins by
                     // the wider margin where a margin was asked for, and then
                     // keep the points off the table. The last used to depend on
@@ -1108,7 +1129,23 @@ public final class SearchAiProvider implements SkatAiProvider {
                             .thenComparing(byCushion)
                             .thenComparing(rest)
                             .thenComparing(Comparator.comparing(Card::toString).reversed()))
-                    .orElse(legal.get(0));
+                    .orElse(legal.get(0)));
+        }
+
+        /** Shows the observer the tally behind {@code chosen}, and returns it unchanged. */
+        private Card tell(SkatAi.DecisionContext context, Map<Card, Integer> votes,
+                          Map<Card, Integer> cushion, int searched, boolean cushionAsked,
+                          Card chosen) {
+            CardPlayObserver observer = cardPlay.observer;
+            if (observer == null) return chosen;
+            try {
+                observer.voted(context, Collections.unmodifiableMap(new LinkedHashMap<>(votes)),
+                        Collections.unmodifiableMap(new LinkedHashMap<>(cushion)),
+                        searched, cushionAsked, chosen);
+            } catch (RuntimeException watchingIsNotPlaying) {
+                // As in report(): a logger with a bug does not get to lose the game.
+            }
+            return chosen;
         }
 
         /**

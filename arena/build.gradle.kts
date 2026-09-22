@@ -133,6 +133,21 @@ tasks.register<JavaExec>("nullAudit") {
     forwardProperties()
 }
 
+/**
+ * Where, card by card, our declarer loses the games par wins with the same ten
+ * cards. See DeclaringAuditMain and tools/declaring-audit.sh.
+ *
+ * ./gradlew :arena:declaringAudit --args="--seeds=11,12,13 --boards=200 --threads=16 --out=arena-logs/par-audit"
+ */
+tasks.register<JavaExec>("declaringAudit") {
+    group = "verification"
+    description = "Replays the par matches' declarer games and solves the true position before every card"
+    mainClass.set("dev.skatklar.training.arena.DeclaringAuditMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:export --args="--boards=50000 --threads=4" */
 tasks.register<JavaExec>("export") {
     group = "verification"
