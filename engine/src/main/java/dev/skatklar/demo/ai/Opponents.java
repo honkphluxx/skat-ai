@@ -257,12 +257,20 @@ public final class Opponents {
         // pairing on top of the two, +0.80 [+0.26, +1.34] paired by board
         // against XSkat, non-negative against JSkat and go-skat). See
         // arena/README.md, 2026-09-14 to 2026-09-16, and Level.playsAdaptively.
+        //
+        // And the fourth switch, 2026-09-22: a declarer that has no card left
+        // that wins asks which card keeps it out of Schneider before it falls
+        // to the tiebreaks (SearchAiProvider.withLadder). +1.30 [+0.47, +2.12]
+        // in exact pairing at fixed contracts over six seeds, none negative;
+        // it cannot fire on a defender or in the auction, adds no throws, and
+        // costs about 14% of a table's card-play CPU, all of it on the
+        // declarer's lost boards. docs/training-plan.md, Phase D.
         return new PerSeatAiProvider(seat -> {
             SearchAiProvider player = new SearchAiProvider(new GreedyAiProvider(),
                     level.personality(), seed * 31L + seat.ordinal(), believed);
             if (adaptively) {
                 player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION)
-                        .withRuleTiebreak();
+                        .withRuleTiebreak().withLadder();
             }
             player = player.withNullWorlds(level.personality().worlds() * NULL_WORLD_MULTIPLE)
                     .withNullTiebreak(NullOrder.LOW_RANK)

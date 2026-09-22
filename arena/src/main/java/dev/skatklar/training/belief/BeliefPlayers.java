@@ -235,7 +235,13 @@ public final class BeliefPlayers {
         // that seats a level's own personality and the arena measures the
         // reference one (same 32 worlds, different risk and aggression). The
         // card-play levers are what has to match here, and they do.
-        registry.register(nullVariant("belief-32-shipped", 32, NullOrder.LOW_RANK, 128, loader));
+        // Since 2026-09-22 that includes the ladder, so this is the ladder
+        // variant under the status name; belief-32-shipped-ladder stays as the
+        // id the ladder run's logs carry, and belief-32-shipped-flat is the
+        // player before it, for anyone re-reading that pairing.
+        registry.register(ladderVariant("belief-32-shipped", loader));
+        registry.register(renamed(nullVariant("belief-32-shipped-flat", 32, NullOrder.LOW_RANK, 128, loader),
+                "The shipped player before the ladder (2026-09-22)"));
         // Phase D: the shipped player with the two buried cards chosen by search
         // instead of by rule. Ten candidates -- pairs from the five cards the
         // heuristic wants least, which over 264 declared boards gives up none of
@@ -248,8 +254,10 @@ public final class BeliefPlayers {
                     "The shipped player, discard searched over " + worlds + " worlds"));
         }
         // Phase D, the line choice: the shipped player asking one rung down
-        // when no card reaches 61 in any world. Exactly paired with
-        // belief-32-shipped on every decision where some card still wins.
+        // when no card reaches 61 in any world. Exactly paired with the
+        // player before it (belief-32-shipped-flat) on every decision where
+        // some card still wins. Shipped 2026-09-22; the same player as
+        // belief-32-shipped now, kept under the id tools/ladder.sh logged.
         registry.register(renamed(ladderVariant("belief-32-shipped-ladder", loader),
                 "The shipped player, asking for the Schneider rung on a lost board"));
 
