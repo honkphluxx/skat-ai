@@ -4,6 +4,8 @@
 #   ./tools/declaring-audit.sh             six seeds, 200 boards each (~1 h)
 #   ./tools/declaring-audit.sh --quick     seed 11, 30 boards
 #   ./tools/declaring-audit.sh --seeds="11 12 13"
+#   ./tools/declaring-audit.sh --player=belief-32-shipped-ladder
+#                                          a variant; its files carry its id
 #
 # declaring-par.sh --split prices the card-play share of the gap to par (4.06)
 # and cannot say where it is: the arena's per-board CSV is one number a board,
@@ -41,12 +43,13 @@ for arg in "$@"; do
         --quick)      QUICK=true ;;
         --threads=*)  THREADS="${arg#*=}" ;;
         --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
+        --player=*)   PLAYER_ARG="${arg#*=}" ;;
         -h|--help)    sed -n '2,24p' "$AUDIT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
 
-US=belief-32-shipped
+US=${PLAYER_ARG:-belief-32-shipped}
 PAR=solver-heuristic-discard
 LOG=arena-logs/par-audit
 PARLOG=arena-logs/par
@@ -58,6 +61,9 @@ if $QUICK; then LOG=arena-logs/quick/par-audit; PARLOG=arena-logs/quick/par; BOA
 mkdir -p "$LOG"
 
 stamp=$(date '+%Y%m%d-%H%M%S')
+# A variant's files go in a folder of their own, so they never overwrite the
+# shipped player's -- and its report names the player.
+[ "$US" != belief-32-shipped ] && LOG="$LOG/$US" && mkdir -p "$LOG"
 report="$LOG/declaring-audit-$stamp.txt"
 echo "declaring-audit started $(date '+%Y-%m-%d %H:%M:%S')   seeds=$SEEDS boards=$BOARDS threads=$THREADS"
 echo "report: $report"

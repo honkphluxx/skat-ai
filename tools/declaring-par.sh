@@ -8,6 +8,10 @@
 #                                        disk are skipped, and the closing line
 #                                        pools every seed found in the log folder
 #   ./tools/declaring-par.sh --split --seeds="11 12 13 14 15 16"
+#   ./tools/declaring-par.sh --split --player=belief-32-shipped-ladder
+#                                        the same for a variant; its logs carry
+#                                        its own id, so nothing on disk is reused
+#                                        or overwritten
 #                                        also plays solver-heuristic-discard, which
 #                                        cheats at every card but buries our pair,
 #                                        and splits the gap into the discard's
@@ -54,12 +58,13 @@ for arg in "$@"; do
         --threads=*)  THREADS="${arg#*=}" ;;
         --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
         --split)      SPLIT=true ;;
+        --player=*)   PLAYER_ARG="${arg#*=}" ;;
         -h|--help)    sed -n '2,29p' "$PAR_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
 
-US=belief-32-shipped
+US=${PLAYER_ARG:-belief-32-shipped}
 LOG=arena-logs/par
 SUMMARY=arena-logs/summary-par.txt
 BOARDS=200

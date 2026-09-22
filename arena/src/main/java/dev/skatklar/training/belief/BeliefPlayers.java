@@ -247,6 +247,11 @@ public final class BeliefPlayers {
                     discardVariant("belief-32-shipped-discard-" + worlds, worlds, 5, loader),
                     "The shipped player, discard searched over " + worlds + " worlds"));
         }
+        // Phase D, the line choice: the shipped player asking one rung down
+        // when no card reaches 61 in any world. Exactly paired with
+        // belief-32-shipped on every decision where some card still wins.
+        registry.register(renamed(ladderVariant("belief-32-shipped-ladder", loader),
+                "The shipped player, asking for the Schneider rung on a lost board"));
 
         Path candidate = locateCandidate();
         if (candidate != null) {
@@ -285,6 +290,20 @@ public final class BeliefPlayers {
                 SkatAiProvider player = shipped.newProvider(seed);
                 return player instanceof SearchAiProvider search
                         ? search.withDiscardSearch(discardWorlds, candidates, 0L) : player;
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
+    /** The shipped player, with {@link SearchAiProvider#withLadder()} on. */
+    private static Contestant ladderVariant(String id, Loader loader) {
+        Contestant shipped = nullVariant(id, 32, NullOrder.LOW_RANK, 128, loader);
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() { return shipped.displayName(); }
+            @Override public SkatAiProvider newProvider(long seed) {
+                SkatAiProvider player = shipped.newProvider(seed);
+                return player instanceof SearchAiProvider search ? search.withLadder() : player;
             }
             @Override public String toString() { return id; }
         };

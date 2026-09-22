@@ -374,14 +374,40 @@ public final class SearchAiProvider implements SkatAiProvider {
      * constructors and the fourteenth was the one that made it unreadable.
      */
     public static final class CardPlaySettings {
-        static final CardPlaySettings NONE = new CardPlaySettings(0L, null);
+        static final CardPlaySettings NONE = new CardPlaySettings(0L, null, false);
         final long budgetNanos;
         final CardPlayObserver observer;
+        final boolean ladder;
 
-        CardPlaySettings(long budgetNanos, CardPlayObserver observer) {
+        CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder) {
             this.budgetNanos = Math.max(0L, budgetNanos);
             this.observer = observer;
+            this.ladder = ladder;
         }
+    }
+
+    /** Card points the declarer must reach to stay out of Schneider. */
+    static final int SCHNEIDER_RUNG = 31;
+
+    /**
+     * The same player, with a second question for the declarer on a board
+     * it believes lost. See {@link #chooseCard}'s ladder step.
+     *
+     * <p>Phase D's audit (docs/training-plan.md) found the card-play gap to
+     * par almost entirely on boards lost against perfect defence: on a third
+     * of the declarer's decisions every legal card has zero votes, the card
+     * falls to a tiebreak with no objective, and the game is Schneidered
+     * twice as often as par's while drawing fewer of the defenders' mistakes.
+     * With this set, a declarer whose top vote is zero on a trump contract
+     * asks the same worlds the same null-window question one rung down --
+     * which card keeps it out of Schneider in the most worlds -- and, among
+     * those tied, at the rung plus the margin, exactly as the cushion does
+     * at 61. Nothing changes on any decision where some card still wins.
+     * Off unless asked for; registered in the arena as
+     * {@code belief-32-shipped-ladder} and gated there before it ships.
+     */
+    public SearchAiProvider withLadder() {
+        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer, true));
     }
 
     /**
@@ -410,12 +436,12 @@ public final class SearchAiProvider implements SkatAiProvider {
 
     /** The same player, with a ceiling on one card decision. See {@link #cardPlay}. */
     public SearchAiProvider withCardBudget(long nanos) {
-        return withCardPlay(new CardPlaySettings(nanos, cardPlay.observer));
+        return withCardPlay(new CardPlaySettings(nanos, cardPlay.observer, cardPlay.ladder));
     }
 
     /** The same player, telling {@code observer} what each card cost. */
     public SearchAiProvider withCardPlayObserver(CardPlayObserver observer) {
-        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, observer));
+        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, observer, cardPlay.ladder));
     }
 
     private SearchAiProvider withCardPlay(CardPlaySettings settings) {
@@ -1107,17 +1133,40 @@ public final class SearchAiProvider implements SkatAiProvider {
             }
             report(context, asked, searched, cushionAsked, startedAt);
 
-            Map<Card, Integer> scores = votes;
-            Map<Card, Integer> held = cushion;
+            // The ladder: a declarer that has no card left that wins asks
+            // which card keeps it out of Schneider, and only then falls to
+            // the tiebreak. The observer is still shown the first question's
+            // tally -- the audit's tables are about that question, on every
+            // player alike -- and the chosen card.
+            Map<Card, Integer> rung = null;
+            Map<Card, Integer> rungHeld = null;
+            if (cardPlay.ladder && context.mySeat == context.game.declarer
+                    && playsForCardPoints(context.game.contract) && topVoteIsZero(votes)) {
+                Map<Card, Integer> asked31 = new LinkedHashMap<>();
+                for (Card card : legal) asked31.put(card, 0);
+                tallyOverWorlds(context, sampled, legal, asked31, false, SCHNEIDER_RUNG, deadline);
+                if (!topVoteIsZero(asked31)) {
+                    rung = asked31;
+                    rungHeld = new LinkedHashMap<>();
+                    for (Card card : legal) rungHeld.put(card, 0);
+                    if (marginPoints > 0 && topVoteIsShared(asked31)) {
+                        tallyOverWorlds(context, sampled, legal, rungHeld, false,
+                                SCHNEIDER_RUNG + marginPoints, deadline);
+                    }
+                }
+            }
+            Map<Card, Integer> scores = rung != null ? rung : votes;
+            Map<Card, Integer> held = rung != null ? rungHeld : cushion;
+            Map<Card, Integer> shown = votes;
             if (temperature > 0) {
-                return tell(context, scores, held, searched, cushionAsked,
+                return tell(context, shown, cushion, searched, cushionAsked,
                         sampleCard(legal, scores, searched));
             }
             Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
             Comparator<Card> byCushion = Comparator.comparingInt(card -> held.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
             Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context, nullTies) : byCost.reversed();
-            return tell(context, scores, held, searched, cushionAsked, legal.stream()
+            return tell(context, shown, cushion, searched, cushionAsked, legal.stream()
                     // Among cards that win equally often, the one that wins by
                     // the wider margin where a margin was asked for, and then
                     // keep the points off the table. The last used to depend on
@@ -1250,6 +1299,11 @@ public final class SearchAiProvider implements SkatAiProvider {
             return scores.size() == context.legalCards.size() ? scores : null;
         }
 
+        private static boolean topVoteIsZero(Map<Card, Integer> votes) {
+            for (int count : votes.values()) if (count > 0) return false;
+            return true;
+        }
+
         private static boolean topVoteIsShared(Map<Card, Integer> votes) {
             int best = Integer.MIN_VALUE;
             int holders = 0;
@@ -1296,6 +1350,18 @@ public final class SearchAiProvider implements SkatAiProvider {
                                     List<WorldSampler.World> sampled, List<Card> legal,
                                     Map<Card, Integer> into, boolean forTheCushion,
                                     long deadlineNanos) {
+            return tallyOverWorlds(context, sampled, legal, into, forTheCushion, 0, deadlineNanos);
+        }
+
+        /**
+         * @param rungPoints when positive, the question is "does the declarer
+         *        still reach this many card points" instead of the target --
+         *        the ladder's question; {@code forTheCushion} is then ignored
+         */
+        private int tallyOverWorlds(SkatAi.DecisionContext context,
+                                    List<WorldSampler.World> sampled, List<Card> legal,
+                                    Map<Card, Integer> into, boolean forTheCushion,
+                                    int rungPoints, long deadlineNanos) {
             int chunks = Math.min(worldThreads, sampled.size());
             if (chunks <= 1) {
                 int searched = 0;
@@ -1308,7 +1374,8 @@ public final class SearchAiProvider implements SkatAiProvider {
                             && System.nanoTime() - deadlineNanos >= 0) {
                         break;
                     }
-                    if (forTheCushion) castCushion(context, sample, into);
+                    if (rungPoints > 0) castRung(context, sample, into, rungPoints);
+                    else if (forTheCushion) castCushion(context, sample, into);
                     else castVotes(context, sample, into);
                     searched++;
                 }
@@ -1335,7 +1402,8 @@ public final class SearchAiProvider implements SkatAiProvider {
                         int index = cursor.getAndIncrement();
                         if (index >= sampled.size()) break;
                         WorldSampler.World sample = sampled.get(index);
-                        if (forTheCushion) castCushion(context, sample, tally);
+                        if (rungPoints > 0) castRung(context, sample, tally, rungPoints);
+                        else if (forTheCushion) castCushion(context, sample, tally);
                         else castVotes(context, sample, tally);
                         searched++;
                     }
@@ -1407,6 +1475,22 @@ public final class SearchAiProvider implements SkatAiProvider {
             int target = targetIn(context, sample);
             int shifted = iAmTheDeclarer ? target + marginPoints : target - marginPoints;
             if (shifted >= 1) tally(context, sample, played, shifted, iAmTheDeclarer, cushion);
+        }
+
+        /**
+         * The ladder's question: does the declarer, in this world, still reach
+         * {@code points} -- an absolute count, skat included, not the target.
+         * A rung already reached, or one nobody can reach, answers the same
+         * for every card and decides nothing, which is correct.
+         */
+        private void castRung(SkatAi.DecisionContext context, WorldSampler.World sample,
+                              Map<Card, Integer> into, int points) {
+            List<Card> played = new ArrayList<>(3);
+            for (SkatAi.PlayedCard play : context.currentTrick.plays) played.add(play.card);
+            int banked = context.derived.cardPoints.getOrDefault(context.game.declarer, 0)
+                    + SkatRules.cardPoints(sample.skat());
+            int needed = points - banked;
+            if (needed >= 1) tally(context, sample, played, needed, true, into);
         }
 
         /** The card points the declarer still needs in this world, by this player's risk. */

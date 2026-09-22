@@ -770,6 +770,54 @@ against is not the defence it will meet.
   claim almost by construction. Gate unchanged:
   `./tools/declaring-par.sh --split`, the card-play share, from 4.06.
 
+  **The ladder, measured 2026-09-22: +1.30 [+0.47, +2.12], resolved, and it
+  came out where the audit said it would.** `belief-32-shipped-ladder` is the
+  shipped player with one addition (`SearchAiProvider.withLadder`): a
+  declarer whose every card has zero votes on a trump contract asks the same
+  worlds which card keeps it at 31 -- out of Schneider -- and among those
+  tied, which holds 31 plus the usual margin; identical to the shipped player
+  on every decision where some card still wins. `./tools/ladder.sh`, six
+  seeds, 200 boards, three instruments:
+
+  | | shipped | ladder |
+  | --- | --- | --- |
+  | ladder - shipped, fixed contracts, exact pairing, six seeds | | **+1.30** [+0.47, +2.12] game pts/game; +0.41 / +1.67 / +0.84 / +1.82 / +2.41 / +0.63, four resolved alone, none negative; win rate up on four seeds, level on two; 0 rule violations |
+  | `--split`, card play's share of the gap to par | 4.06 [1.6, 6.5] | **2.27** [-0.1, 4.6] |
+  | `--split`, the gap to par | 4.99 [2.0, 8.0] | 3.21 [0.7, 5.8] |
+  | audit: cold boards won | 415 of 424, share 0.57 | 415 of 424, share 0.57 -- untouched, as the construction says |
+  | audit: not-cold boards, share | 3.47 | **1.71** |
+  | of it, both lost but charged differently (the Schneider row) | 0.68 | **0.00** |
+  | audit: not-cold boards won | 149 = 23.8% (par 30.4%) | **164 = 26.2%** |
+  | only par wins / only we win | 70 / 29 | 66 / 40 |
+  | gifts drawn in not-cold games | 25.4% | 27.8% |
+  | our throws | 54 in 50 games | 54 in 50 games -- none added |
+  | flat-zero games won | 25 of 492 | 40 of 492 |
+
+  Read against the expectation written into the script before it ran: the
+  Schneider row was worth about 0.7 and it went to zero exactly; the gift
+  row was worth up to 3.5 and the ladder took about a third of it, fifteen
+  more games won on the boards where only a mistake can win. The ceiling
+  did not move -- the nine cold games are still lost and par still never
+  throws -- and nothing regressed: the cold rows are the same numbers to
+  the game, and the throw count is the same 54. The zero check passed on
+  all twelve lines, so the three instruments were reading the same games.
+
+  What is left on this item is 1.71 on the not-cold boards, and it is a
+  different question from the one the ladder answered: the ladder gives a
+  lost declarer an objective, but the objective is still a double-dummy
+  threshold, and a defender's mistake is drawn by keeping *chances* alive
+  rather than by holding a guaranteed 31. Par's line -- the most it can
+  guarantee, then points -- does that as a by-product. A second rung at 46,
+  or "the card that keeps 61 reachable in the most worlds *if one defender
+  card were misplayed*", are the two shapes; neither is cheap to gate, and
+  the item ships as it stands first.
+
+  **Gate passed.** Resolved positive at fixed contracts, and the declaring
+  column moved by 1.78 [0.4, 3.2] on the split. What ships is the switch
+  turned on in `Opponents` for every level -- the ladder cannot fire on a
+  defender or in the auction, so the field gates
+  (`tools/overnight-arena.sh`) are a regression check, not the decision.
+
 **Gate:** each change resolved positive at fixed contracts; the declaring column
 moves.
 
