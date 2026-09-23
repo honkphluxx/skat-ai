@@ -148,6 +148,21 @@ tasks.register<JavaExec>("declaringAudit") {
     forwardProperties()
 }
 
+/**
+ * Phase B2 step 1: how often the worlds a player samples are the world on the
+ * table, by trick. See BeliefShareMain and tools/belief-share.sh.
+ *
+ * ./gradlew :arena:beliefShare --args="--seeds=11,12,13 --boards=200 --threads=16"
+ */
+tasks.register<JavaExec>("beliefShare") {
+    group = "verification"
+    description = "Reads the sampled worlds off real games and scores them against the deal"
+    mainClass.set("dev.skatklar.training.arena.BeliefShareMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:export --args="--boards=50000 --threads=4" */
 tasks.register<JavaExec>("export") {
     group = "verification"

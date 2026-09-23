@@ -364,6 +364,14 @@ public final class SearchAiProvider implements SkatAiProvider {
         default void voted(SkatAi.DecisionContext context, Map<Card, Integer> votes,
                            Map<Card, Integer> cushion, int worldsSearched,
                            boolean cushionAsked, Card chosen) {}
+
+        /**
+         * The worlds a decision drew, before any of them is searched. A
+         * default no-op, for {@code BeliefShareMain}: how often a sampled
+         * world is the world on the table is a question about the sampler
+         * in play, and it has to be asked of the player's own draw.
+         */
+        default void sampled(SkatAi.DecisionContext context, List<WorldSampler.World> worlds) {}
     }
 
     /**
@@ -1124,6 +1132,13 @@ public final class SearchAiProvider implements SkatAiProvider {
                 return blind.chooseCard(context);
             }
             if (sampled.isEmpty()) return blind.chooseCard(context);
+            if (cardPlay.observer != null) {
+                try {
+                    cardPlay.observer.sampled(context, Collections.unmodifiableList(sampled));
+                } catch (RuntimeException watchingIsNotPlaying) {
+                    // As in report(): a logger with a bug does not get to lose the game.
+                }
+            }
 
             Map<Card, Integer> votes = alphaMuScores(context, sampled);
             Map<Card, Integer> cushion = new LinkedHashMap<>();
