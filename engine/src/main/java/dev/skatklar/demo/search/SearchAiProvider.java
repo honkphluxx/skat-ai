@@ -388,6 +388,8 @@ public final class SearchAiProvider implements SkatAiProvider {
 
     /** Card points the declarer must reach to stay out of Schneider. */
     static final int SCHNEIDER_RUNG = 31;
+    /** Card points that win the game: the rung above it, for a player aiming higher. */
+    static final int WINNING_RUNG = 61;
 
     /**
      * The same player, with a second question for the declarer on a board
@@ -447,17 +449,27 @@ public final class SearchAiProvider implements SkatAiProvider {
     private SearchAiProvider withCardPlay(CardPlaySettings settings) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, nullWorlds, nullTies, worldThreads, settings);
+                ruleTies, nullWorlds, nullTies, worldThreads, settings, discard);
     }
+
+    /** What the card play was told to do. Package-private, for the test that keeps it that way. */
+    CardPlaySettings cardPlaySettings() { return cardPlay; }
 
     /** One chunk's answer: its tally, and how many worlds went into it. */
     private record Tally(Map<Card, Integer> counts, int worlds) {}
 
     /** The same player, spreading one decision's worlds. See {@link #worldThreads}. */
     public SearchAiProvider withWorldThreads(int threads) {
+        // Every setting carried, including the card-play ones. This builder
+        // used to call the constructor that resets them, and since Opponents
+        // applies it after the ladder and before the budget, the app's
+        // declarer shipped for a day (4ae37c9) without the ladder it had been
+        // given -- found because the beginner level, which the belief retrain
+        // could not touch, played byte for byte the same games with the
+        // switch on and off. SettingsChainTest holds the line now.
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
-                ruleTies, nullWorlds, nullTies, threads);
+                ruleTies, nullWorlds, nullTies, threads, cardPlay, discard);
     }
 
     /** The same player, settling a Null's ties that way. See {@link #nullTies}. */
@@ -651,8 +663,11 @@ public final class SearchAiProvider implements SkatAiProvider {
      * @param nanos how long one seat may take; zero or less removes the ceiling
      */
     public SearchAiProvider withBiddingBudget(long nanos) {
+        // The same repair as withWorldThreads: this one reset the world
+        // threads and the card play as well.
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth, nanos,
-                temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullTies);
+                temperature, adaptiveBidding, passRule, marginPoints, ruleTies, nullWorlds, nullTies,
+                worldThreads, cardPlay, discard);
     }
 
     /**
@@ -1142,17 +1157,29 @@ public final class SearchAiProvider implements SkatAiProvider {
             Map<Card, Integer> rungHeld = null;
             if (cardPlay.ladder && context.mySeat == context.game.declarer
                     && playsForCardPoints(context.game.contract) && topVoteIsZero(votes)) {
-                Map<Card, Integer> asked31 = new LinkedHashMap<>();
-                for (Card card : legal) asked31.put(card, 0);
-                tallyOverWorlds(context, sampled, legal, asked31, false, SCHNEIDER_RUNG, deadline);
-                if (!topVoteIsZero(asked31)) {
-                    rung = asked31;
+                // Two rungs, asked in order and the first that is not flat
+                // taken: 61 for a personality whose target sits above it (a
+                // cautious player aims at 61 plus a reach, and a vote that is
+                // flat at 77 says nothing about whether the game can still be
+                // won -- the beginner level, which aims at 77, played byte for
+                // byte the same games before this rung existed), then 31. The reference player's
+                // target is 61 itself, so for it the first rung is the
+                // question just asked and is skipped.
+                int aimed = personality.targetFor(0);
+                for (int points : new int[] {WINNING_RUNG, SCHNEIDER_RUNG}) {
+                    if (points >= aimed) continue;
+                    Map<Card, Integer> askedAt = new LinkedHashMap<>();
+                    for (Card card : legal) askedAt.put(card, 0);
+                    tallyOverWorlds(context, sampled, legal, askedAt, false, points, deadline);
+                    if (topVoteIsZero(askedAt)) continue;
+                    rung = askedAt;
                     rungHeld = new LinkedHashMap<>();
                     for (Card card : legal) rungHeld.put(card, 0);
-                    if (marginPoints > 0 && topVoteIsShared(asked31)) {
+                    if (marginPoints > 0 && topVoteIsShared(askedAt)) {
                         tallyOverWorlds(context, sampled, legal, rungHeld, false,
-                                SCHNEIDER_RUNG + marginPoints, deadline);
+                                points + marginPoints, deadline);
                     }
+                    break;
                 }
             }
             Map<Card, Integer> scores = rung != null ? rung : votes;
