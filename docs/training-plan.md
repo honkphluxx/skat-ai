@@ -552,10 +552,61 @@ changes what the sweep measures.
    Null inference looks like the simpler problem.
 4. Train. Same recipe, same interpreter warning.
 
-**Gates, all three:**
-- true-world share at tricks 1–3 clears the point where the oracle curve
-  starts paying — the sweep's lowest registered rungs, `belief-5` to
-  `belief-15`, are exactly the yardstick, and they cost one match each;
+**Step 1 measured, 2026-09-23** (`tools/belief-share.sh`, three seeds, 200
+boards, the shipped belief and the uniform sampler on the same games, the
+sampled worlds read off each player's own draw):
+
+| tricks 1-3 | exact | placed, belief | placed, uniform |
+| --- | --- | --- | --- |
+| as declarer | 0.01% | 51.3% | 50.5% |
+| as defender | 0.01% | **49.3%** | 42.4% |
+
+Seeds agree to a tenth. Two things the plan had wrong, and one it did not
+know.
+
+*The gate below cannot be met by any honest sampler.* "Exact" -- all twenty
+unseen cards in their true places -- is 0.01% at tricks 1-3 for the belief
+and for uniform alike, and one decision in twenty-two sees even one such
+world by trick five. The oracle sweep's lowest rung mixes the truth in at
+5%, five hundred times that. So `belief-5` is not a yardstick the belief
+can be measured against; it is a different object. The number that moves is
+*placement*: the share of unseen cards a sampled world puts in the right
+hand. The gate is restated on it.
+
+*The belief is a defender's belief.* On defence it places 49.3% against
+uniform's 42.4% -- seven points, on every seed and every contract (Grand is
+the one it helps least, 46.8). As declarer it places **51.3% against
+50.5%**: less than a point. The auction is the evidence the net reads, and
+the declarer's auction is two opponents who mostly passed; the defenders'
+auction is a declarer who bid. This is consistent with everything measured
+before it -- the +25 at `belief-25` is a declaring number in an experiment
+where the truth was mixed in for every seat, Phase D found the declarer's
+worlds calibrated but the declarer's line the problem, and defence has
+never been where the points were -- but it was never stated, and it sets
+Phase P's ceiling: a generation that trains on more of the same evidence
+will move the defender's column and not the declarer's.
+
+*What would move the declarer's column* is not more of the same corpus.
+The encoding already carries the declarer's own discard, every seat's
+highest bid and every card played by every seat, so the thin margin is not
+a missing field. Read by trick, the belief's declarer placement climbs
+50.3 to 52.1 over tricks 1-3 and uniform's 50.0 to 51.0: the same slope,
+one point apart. That is the filter doing the work in both -- a card that
+did not follow suit is a void in both samplers -- and the net adding about
+a point from the auction and nothing from the play. There are two possible
+reasons and the run cannot separate them: the net does not learn what a
+defender's chosen card says, or there is nothing to learn because the
+corpus's defenders are search players, whose choice among equal cards is a
+tiebreak and not a signal. Human defenders signal; that is the one thing
+the ISS archive would settle and self-play cannot, and it is why that
+permission is still worth asking for. Until then, a generation of Phase P
+should be measured on this table before its night of gates, and expected
+to move the right-hand column.
+
+**Gates, all three, restated:**
+- placement at tricks 1–3, as declarer, clears uniform by more than the
+  two points the belief has today -- `tools/belief-share.sh`, and the
+  defender's column must not fall;
 - `belief-v2` − `belief` at fixed contracts, resolved and positive;
 - `belief-v2` − `belief-25` closes rather than holds.
 
@@ -817,6 +868,34 @@ against is not the defence it will meet.
   turned on in `Opponents` for every level -- the ladder cannot fire on a
   defender or in the auction, so the field gates
   (`tools/overnight-arena.sh`) are a regression check, not the decision.
+
+  **Shipped 4ae37c9, and the field gates caught that it had not shipped.**
+  `--redo=belief-32-shipped` moved every shipped row the right way (vs
+  adaptive-margin +0.44 to +0.82, vs xskat +0.61 to +0.97, vs jskat-new
+  +11.8 to +12.8, go-skat level, and vs `solver` at oracle contracts **-6.56
+  to -3.50 on all three seeds** -- predicted not to move, and wrong: a
+  makeable board is lost from our seat against perfect defence all the time,
+  and not being Schneidered there is worth three points). `--redo=app-`
+  then read `app-beginner-on` against `-off` **byte for byte identical**
+  to the pre-ladder night. Beginner samples uniform worlds, so the belief
+  retrain of 2026-09-20 cannot touch it, and a switch that was really on
+  would have to. It was not: `withBiddingBudget` and `withWorldThreads`
+  built the new player from a constructor that resets the card-play
+  settings, and `Opponents.seat` applies both after `.withLadder()`. The
+  club and expert rows had moved -- because of the retrained belief. Fixed
+  in c29d1c2 with `SettingsChainTest`, which builds the app's own chain and
+  reads it back and failed on both counts before the fix; and while there,
+  a rung at 61 for a personality that aims above it (beginner 77, club
+  65), whose vote is flat at its target and says nothing about whether the
+  game can still be won. The reference player aims at 61 and is unchanged
+  to the board.
+
+  The app rows, re-measured with the ladder in them (2026-09-23):
+  beginner on/off +2.93 to **+3.28** [+0.6, +6.0], the row that had to
+  move; club on/off +2.39 to +2.70; beginner-club -5.18 to -3.82, club-expert
+  -4.45 to -4.27, expert-analyst -3.15 to -3.21 -- the levels stay three to
+  four apart and nothing went down. The `belief-32-shipped` rows of 09-22
+  were valid all along: that contestant applies the ladder last.
 
 **Gate:** each change resolved positive at fixed contracts; the declaring column
 moves.
