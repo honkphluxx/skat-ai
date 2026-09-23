@@ -371,7 +371,8 @@ public final class SearchAiProvider implements SkatAiProvider {
          * world is the world on the table is a question about the sampler
          * in play, and it has to be asked of the player's own draw.
          */
-        default void sampled(SkatAi.DecisionContext context, List<WorldSampler.World> worlds) {}
+        default void sampled(SkatAi.DecisionContext context, BeliefEncoding.Evidence evidence,
+                             List<WorldSampler.World> worlds) {}
     }
 
     /**
@@ -1123,8 +1124,9 @@ public final class SearchAiProvider implements SkatAiProvider {
                     ? nullWorlds : personality.worlds();
 
             List<WorldSampler.World> sampled;
+            BeliefEncoding.Evidence seen = evidence(context);
             try {
-                sampled = worlds.sample(evidence(context), asked, random);
+                sampled = worlds.sample(seen, asked, random);
             } catch (IllegalStateException inconsistent) {
                 // The position does not add up, which means this player is being
                 // driven through a lifecycle it does not model. Play on rather
@@ -1134,7 +1136,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             if (sampled.isEmpty()) return blind.chooseCard(context);
             if (cardPlay.observer != null) {
                 try {
-                    cardPlay.observer.sampled(context, Collections.unmodifiableList(sampled));
+                    cardPlay.observer.sampled(context, seen, Collections.unmodifiableList(sampled));
                 } catch (RuntimeException watchingIsNotPlaying) {
                     // As in report(): a logger with a bug does not get to lose the game.
                 }

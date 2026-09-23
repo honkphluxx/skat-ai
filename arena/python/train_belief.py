@@ -31,7 +31,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from belief_data import SPLIT_RULE, Corpus, Forgetting, score, uniform_baseline
+from belief_data import SPLIT_RULE, Corpus, Forgetting, is_declarer, score, uniform_baseline
 
 CLASSES = 3
 CARDS = 32
@@ -116,6 +116,18 @@ def main():
                         help="use only this many records; for a quick smoke run")
     parser.add_argument("--export-only", action="store_true",
                         help="skip training and export the ONNX from belief.pt")
+    parser.add_argument("--declarer-weight", type=float, default=1.0,
+                        help="how many times more often a declarer's record is drawn "
+                             "than a defender's. 1 is the corpus as it is, where two "
+                             "records in three are a defender's; 0 means to parity. "
+                             "The B2 experiment of 2026-09-23: the shipped belief "
+                             "places a defender's unseen cards seven points better "
+                             "than uniform and a declarer's less than one, and this "
+                             "is the cheap test of whether that is the two-to-one "
+                             "ratio or the evidence")
+    parser.add_argument("--declarer-only", action="store_true",
+                        help="train on the declarer's records alone, the defenders' "
+                             "dropped: the other end of the same experiment")
     args = parser.parse_args()
 
     torch.manual_seed(args.seed)
@@ -131,6 +143,27 @@ def main():
     print(f"encoding v{corpus.version}, {corpus.size} inputs")
     print(f"{len(train):,} training records, {len(val):,} held out "
           f"({len(np.unique(board[val])):,} whole boards)")
+
+    # The declarer's records, drawn more often if asked. Done by repeating
+    # their indices in the training order rather than by weighting the loss,
+    # so the batches, the schedule and every other number stay what they were;
+    # a weight of 2 means each declarer record is seen twice an epoch and an
+    # epoch is correspondingly longer.
+    declaring_train = is_declarer(corpus, x[train])
+    declarer_share = declaring_train.mean()
+    weight = args.declarer_weight
+    if weight == 0:
+        weight = (1 - declarer_share) / max(declarer_share, 1e-9)
+    print(f"declarer records: {declarer_share:.1%} of training; weight {weight:.2f}")
+    if args.declarer_only:
+        train = train[declaring_train]
+        print(f"  declarer only: {len(train):,} training records")
+    elif weight != 1.0:
+        extra = int(round(weight)) - 1
+        if abs(weight - round(weight)) > 0.05:
+            print(f"  (rounded to {extra + 1}: records are repeated whole)")
+        train = np.concatenate([train] + [train[declaring_train]] * extra) if extra > 0 else train
+        print(f"  {len(train):,} training records after weighting")
 
     # Which contracts the model will actually have been shown. Recorded because
     # the sampler has to know: a model asked about a contract absent from its
@@ -158,8 +191,17 @@ def main():
     mask_val = mask[val]
     baseline = np.repeat(uniform_baseline(corpus, x_val)[:, None, :], CARDS, axis=1)
     base_accuracy, base_nll = score(baseline, target_val, mask_val)
+    # And by role, because the two baselines differ (a declarer guesses over two
+    # hands, a defender over two and the skat) and the margin over each is the
+    # number the arena's belief-share probe reads in play.
+    declaring_val = is_declarer(corpus, x_val)
+    base_by_role = {}
+    for role, rows in (("declarer", declaring_val), ("defender", ~declaring_val)):
+        if rows.any():
+            base_by_role[role] = score(baseline[rows], target_val[rows], mask_val[rows])[0]
     del baseline
-    print(f"uniform sampler baseline: {base_accuracy:.1%} correct, nll {base_nll:.4f}")
+    print(f"uniform sampler baseline: {base_accuracy:.1%} correct, nll {base_nll:.4f}"
+          + "".join(f"; as {role} {acc:.1%}" for role, acc in base_by_role.items()))
     print()
 
     device = torch.device(args.device)
@@ -218,9 +260,14 @@ def main():
             steps += 1
 
         accuracy, nll = evaluate(model, x_val, target_val, mask_val, device)
+        by_role = ""
+        for role, rows in (("declarer", declaring_val), ("defender", ~declaring_val)):
+            if role in base_by_role:
+                role_accuracy, _ = evaluate(model, x_val[rows], target_val[rows], mask_val[rows], device)
+                by_role += f"   {role} {role_accuracy - base_by_role[role]:+.1%}"
         print(f"epoch {epoch:3d}  train {running / max(steps, 1):.4f}   "
               f"val {accuracy:.1%} / {nll:.4f}   "
-              f"over baseline {accuracy - base_accuracy:+.1%}   "
+              f"over baseline {accuracy - base_accuracy:+.1%}{by_role}   "
               f"{time.time() - started:.0f}s")
         if nll < best:
             best = nll
@@ -305,6 +352,8 @@ def write_descriptor(out, corpus, args, accuracy, nll, base_accuracy, base_nll, 
         "split_seed": args.seed,
         "split_fraction": args.val_fraction,
         "trained_on": str(pathlib.Path(args.data).resolve().name),
+        "declarer_weight": 0.0 if args.declarer_only else args.declarer_weight,
+        "declarer_only": args.declarer_only,
     }, indent=2) + "\n")
 
 

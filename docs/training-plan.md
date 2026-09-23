@@ -603,10 +603,74 @@ permission is still worth asking for. Until then, a generation of Phase P
 should be measured on this table before its night of gates, and expected
 to move the right-hand column.
 
+**2026-09-23/24: two hypotheses, one experiment, and the answer was
+neither.** Philipp's first thought was the two-to-one ratio -- two records in
+three are a defender's -- and `tools/belief-declarer.sh` was written to test
+it (three nets from the shipped corpus at declarer weight 1, parity and
+declarer-only; `train_belief.py --declarer-weight`, `eval_belief.py
+--by-role`). Its first step runs before any training and answered the
+question on its own: **the shipped model, held out by role, places the
+declarer's unseen cards at 62.4% against a 51.1% baseline (+11.3)** and the
+defenders' at 67.5 against 44.7 (+22.8). In play the same model read +0.8 and
++6.9. So the net knows more about the declarer's hands than ever reaches
+the table, the ratio is not the cause, and the three-net run is moot. (The
+run did not train anyway: `--quick` had written three-epoch nets into the
+night's model directories and the resume check kept them. Fixed; the quick
+nets now live under `-quick`.)
+
+Where it goes, measured in the container with the net's own argmax read
+at every decision beside the drawn worlds (`BeliefShareMain` now prints
+both):
+
+| tricks 1-3, net argmax on the unseen cards | as declarer | as defender |
+| --- | --- | --- |
+| corpus records, full memory (20k of shard 0) | 58.7 | 63.5 |
+| the same with the bidding block zeroed | 56.8 | 63.2 |
+| **in play, fixed contracts** (36 games) | **49.2** | 60.3 |
+| in play, the real auction (32 games) | 53.3 | 62.4 |
+| uniform | 50.7 | 45.7 |
+
+*First: the fixed-contract instrument strips the auction.* A game started
+by `restartWithContract` has no bids, so `bidding_present` is 0 at every
+decision of every fixed-contract match, and the declarer's belief -- whose
+evidence is mostly the auction -- reads at uniform there while the
+defender's, fed by the contract and the declarer's identity, barely
+notices. With the real auction the declarer's argmax is back at 53 and the
+defender's at the corpus figure. Every fixed-contract number that seats a
+belief player, `--split` included, was taken with the declarer's belief
+switched off by the instrument; the pairings between two belief players
+are still fair (both blind alike), but the belief's worth to the declarer
+was never measured, and the app, which has an auction, is better than the
+arena said. The fix is in the engine: record the auction's `BidEvent`s,
+carry them in `FixedContract`, and have `restartWithContract` replay them
+to every seat before the exchange. It changes every fixed-contract
+baseline, so it is a re-baseline night after it lands.
+
+*Second: the sequential sampler loses most of what the net knows.* As a
+defender the net's argmax is right on 60% of the unseen cards and the
+worlds it draws place 48.5% (uniform 42.4): two thirds of the margin gone
+between the net and the deal. The mechanism is in `WorldSampler`: cards are
+dealt one at a time in a *random* order, each to a place in proportion to
+the belief, and once a hand is full every later card is forced -- so what
+gets forced is whatever came last, not what the net was unsure of.
+`WorldSampler.confidentFirst()` deals the surest cards first: +1.3 for the
+defender and +0.5 for the declarer at tricks 1-3 in the same games,
+registered as `belief-32-shipped-confident` for the gate. It is a first
+step, not the answer; a sampler that draws from the per-card marginals
+*subject to* the capacities (a Sinkhorn pass over the belief, or swap
+moves after the draw) is where the other five points are, and it is the
+B2 work that pays on both seats.
+
+The residual after both -- corpus 56.8 without bids against 53.3 in the
+auction -- is small enough to be the population (our own defenders play
+the corpus's card, not always the corpus's choice) and is the part human
+data would speak to. Not the first thing to chase.
+
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
   two points the belief has today -- `tools/belief-share.sh`, and the
-  defender's column must not fall;
+  defender's column must not fall; measured with the auction replayed
+  into the fixed-contract game, once that lands;
 - `belief-v2` − `belief` at fixed contracts, resolved and positive;
 - `belief-v2` − `belief-25` closes rather than holds.
 

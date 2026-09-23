@@ -240,6 +240,12 @@ public final class BeliefPlayers {
         // id the ladder run's logs carry, and belief-32-shipped-flat is the
         // player before it, for anyone re-reading that pairing.
         registry.register(ladderVariant("belief-32-shipped", loader));
+        // B2, 2026-09-24: the shipped player with the sampler dealing the
+        // cards the belief is surest about first. The net's held-out margin
+        // as declarer is +11 points and the sampled worlds carry under one of
+        // it to the table; this is the first candidate for where it goes.
+        registry.register(renamed(confidentVariant("belief-32-shipped-confident", loader),
+                "The shipped player, the surest cards dealt first"));
         registry.register(renamed(nullVariant("belief-32-shipped-flat", 32, NullOrder.LOW_RANK, 128, loader),
                 "The shipped player before the ladder (2026-09-22)"));
         // Phase D: the shipped player with the two buried cards chosen by search
@@ -298,6 +304,24 @@ public final class BeliefPlayers {
                 SkatAiProvider player = shipped.newProvider(seed);
                 return player instanceof SearchAiProvider search
                         ? search.withDiscardSearch(discardWorlds, candidates, 0L) : player;
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
+    /** The shipped player over a {@link BeliefWorldSource#withConfidentFirst()} source. */
+    private static Contestant confidentVariant(String id, Loader loader) {
+        Personality personality = new Personality(32, Personality.REFERENCE.memory(),
+                Personality.REFERENCE.risk(), Personality.REFERENCE.aggression());
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() { return "The shipped player, confident-first sampling"; }
+            @Override public SkatAiProvider newProvider(long seed) {
+                return new SearchAiProvider(new GreedyAiProvider(), personality, seed,
+                        new BeliefWorldSource(loader.get()).withConfidentFirst())
+                        .withAdaptiveBidding(PassRule.DEFAULT).withMarginTiebreak(15)
+                        .withRuleTiebreak().withNullWorlds(128)
+                        .withNullTiebreak(NullOrder.LOW_RANK).withLadder();
             }
             @Override public String toString() { return id; }
         };

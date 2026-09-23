@@ -52,14 +52,35 @@ public final class BeliefWorldSource implements WorldSource {
      * that is right more often than not.
      */
     private final double sharpness;
+    private final boolean confidentFirst;
 
     public BeliefWorldSource(BeliefModel model) {
         this(model, 1.0);
     }
 
     public BeliefWorldSource(BeliefModel model, double sharpness) {
+        this(model, sharpness, false);
+    }
+
+    private BeliefWorldSource(BeliefModel model, double sharpness, boolean confidentFirst) {
         this.model = model;
         this.sharpness = sharpness;
+        this.confidentFirst = confidentFirst;
+    }
+
+    /** The same source, dealing the surest cards first. See {@link WorldSampler#confidentFirst()}. */
+    public BeliefWorldSource withConfidentFirst() {
+        return new BeliefWorldSource(model, sharpness, true);
+    }
+
+    /**
+     * The belief itself, per card and place, before any world is drawn --
+     * for a probe that wants to know what the net said as distinct from what
+     * the sampler made of it. Null when the model cannot be asked.
+     */
+    public double[][] belief(BeliefEncoding.Evidence evidence) {
+        if (!model.sawContract(evidence.context().game.contract)) return null;
+        return beliefFor(evidence);
     }
 
     @Override
@@ -94,6 +115,7 @@ public final class BeliefWorldSource implements WorldSource {
                         WorldSource.knownSkat(evidence), evidence.rememberedPlays(),
                         evidence.rememberedVoids())
                 .weightedBy((card, place) -> weight(belief, observer, card, place));
+        if (confidentFirst) sampler = sampler.confidentFirst();
 
         List<WorldSampler.World> worlds = new ArrayList<>(count);
         for (int drawn = 0; drawn < count; drawn++) {

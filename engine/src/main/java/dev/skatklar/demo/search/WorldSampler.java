@@ -8,6 +8,7 @@ import dev.skatklar.demo.ai.SkatAi;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -57,6 +58,8 @@ public final class WorldSampler {
     private final Map<SkatAi.Seat, Set<SkatAi.FollowClass>> voids;
     /** Null for the uniform sampler, which is what every caller gets by default. */
     private Weights weights;
+    /** Deal the cards the belief is surest about first. See {@link #confidentFirst()}. */
+    private boolean confidentFirst;
 
     private WorldSampler(Contract contract, SkatAi.Seat observer, List<Card> myCards,
                          List<Card> unknown, int[] needed, int skatSlots, List<Card> knownSkat,
@@ -181,8 +184,24 @@ public final class WorldSampler {
         // those cards while every seat is still open makes it rare.
         List<Card> order = new ArrayList<>(unknown);
         Collections.shuffle(order, random);
-        order.sort((left, right) -> Integer.compare(
-                placesFor(left).size(), placesFor(right).size()));
+        if (confidentFirst && weights != null) {
+            // Among equally constrained cards, the ones the belief is surest
+            // about first, so the capacities bite on the cards it is least sure
+            // about. The shuffle before this still breaks the remaining ties.
+            Map<Card, Double> confidence = new HashMap<>();
+            for (Card card : order) {
+                double best = 0;
+                for (int place : placesFor(card)) best = Math.max(best, weights.weight(card, place));
+                confidence.put(card, best);
+            }
+            order.sort((left, right) -> {
+                int byPlaces = Integer.compare(placesFor(left).size(), placesFor(right).size());
+                return byPlaces != 0 ? byPlaces : Double.compare(confidence.get(right), confidence.get(left));
+            });
+        } else {
+            order.sort((left, right) -> Integer.compare(
+                    placesFor(left).size(), placesFor(right).size()));
+        }
 
         int[] remaining = needed.clone();
         int skatLeft = skatSlots;
@@ -269,7 +288,29 @@ public final class WorldSampler {
         WorldSampler weighted = new WorldSampler(contract, observer, myCards, unknown,
                 needed, skatSlots, knownSkat, voids);
         weighted.weights = weights;
+        weighted.confidentFirst = confidentFirst;
         return weighted;
+    }
+
+    /**
+     * The same sampler, dealing the cards the belief is surest about first.
+     *
+     * <p>The sequential draw places one card at a time in proportion to the
+     * belief over the places still open, in a random order. Once a hand is
+     * full every later card is forced into the other, whatever the belief
+     * said -- and for a declarer there are exactly twenty cards for twenty
+     * places in two hands, so the forcing starts early and lands on whichever
+     * cards happened to come last. With this set the order is by confidence
+     * instead, so what gets forced is what the belief did not know anyway.
+     * Legality is untouched: the capacities, the voids and the retry are the
+     * same, only the order of the deal changes.
+     */
+    public WorldSampler confidentFirst() {
+        WorldSampler ordered = new WorldSampler(contract, observer, myCards, unknown,
+                needed, skatSlots, knownSkat, voids);
+        ordered.weights = weights;
+        ordered.confidentFirst = true;
+        return ordered;
     }
 
     /** Seats (0..2) that may hold this card, plus 3 for the skat. */

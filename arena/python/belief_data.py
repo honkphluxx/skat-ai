@@ -268,6 +268,20 @@ def uniform_baseline(corpus, x):
     return slots / np.maximum(total, 1e-6)
 
 
+def is_declarer(corpus, x):
+    """
+    Which records were observed from the declarer's chair.
+
+    The ``declarer`` field is one-hot over me / left / right / nobody, relative
+    to the observing seat, so its first slot is the answer. Works on packed
+    bytes and on unpacked floats alike: a one-hot is the top or the bottom of
+    the range either way, and the threshold is half of it.
+    """
+    declarer = corpus.slice(x, "declarer")
+    top = corpus.scale if x.dtype != np.float32 else 1.0
+    return declarer[:, 0] > top / 2
+
+
 def score(probabilities, target, mask):
     """Accuracy and mean negative log likelihood over the masked cards only."""
     picked = probabilities.argmax(axis=-1)

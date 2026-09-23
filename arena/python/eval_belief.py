@@ -38,7 +38,7 @@ import sys
 import numpy as np
 import torch
 
-from belief_data import SPLIT_RULE, Corpus, score, uniform_baseline
+from belief_data import is_declarer, SPLIT_RULE, Corpus, score, uniform_baseline
 from train_belief import CARDS, BeliefNet, evaluate
 
 CONTRACTS = ("Diamonds", "Hearts", "Spades", "Clubs", "Grand", "Null", "Ramsch")
@@ -122,6 +122,11 @@ def main():
     parser.add_argument("--data", required=True)
     parser.add_argument("--by-contract", action="store_true",
                         help="one line per contract as well as the total")
+    parser.add_argument("--by-role", action="store_true",
+                        help="the declarer's records and the defenders' apart. The "
+                             "uniform baseline differs by role -- a declarer guesses "
+                             "over two hands, a defender over two hands and the skat "
+                             "-- so only the margin over it compares across the two")
     parser.add_argument("--all", action="store_true",
                         help="score every record, not only the held-out boards")
     parser.add_argument("--val-fraction", type=float, default=0.1)
@@ -159,6 +164,11 @@ def main():
     print()
 
     report("everything", model, x, target, mask, corpus, device)
+    if args.by_role:
+        print()
+        declaring = is_declarer(corpus, x)
+        report("as declarer", model, x[declaring], target[declaring], mask[declaring], corpus, device)
+        report("as defender", model, x[~declaring], target[~declaring], mask[~declaring], corpus, device)
     if args.by_contract:
         print()
         contract = corpus.slice(x, "contract")
