@@ -2,6 +2,7 @@ package dev.skatklar.training.arena;
 
 import dev.skatklar.demo.Contract;
 import dev.skatklar.demo.ai.SkatAi;
+import java.util.List;
 
 /**
  * Decides which contract a board is played at when the auction is taken out of
@@ -42,6 +43,16 @@ public interface ContractSource {
      */
     FixedContract contractFor(Board board);
 
-    /** A declarer, a contract, and the bid it must cover under the overbid rule. */
-    record FixedContract(SkatAi.Seat declarer, Contract contract, int bidValue) {}
+    /**
+     * A declarer, a contract, the bid it must cover under the overbid rule --
+     * and the auction that produced them, replayed to every seat before the
+     * exchange so the belief's bidding evidence is what it would be at a real
+     * table. Empty for a source that priced the board without an auction.
+     */
+    record FixedContract(SkatAi.Seat declarer, Contract contract, int bidValue,
+                         List<SkatAi.BidEvent> auction) {
+        public FixedContract(SkatAi.Seat declarer, Contract contract, int bidValue) {
+            this(declarer, contract, bidValue, List.of());
+        }
+    }
 }

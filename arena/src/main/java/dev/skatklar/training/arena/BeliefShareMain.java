@@ -196,7 +196,7 @@ public final class BeliefShareMain {
         table_[0] = engine;
         try {
             engine.restartWithContract(board.deal(), board.round(), fixed.declarer(),
-                    fixed.contract(), fixed.bidValue(), Collections.emptySet());
+                    fixed.contract(), fixed.bidValue(), Collections.emptySet(), fixed.auction());
             for (int step = 0; step < 128; step++) {
                 GameEngine.Snapshot s = engine.snapshot();
                 if (s.gameComplete()) break;

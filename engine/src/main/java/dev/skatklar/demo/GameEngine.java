@@ -878,7 +878,28 @@ public final class GameEngine {
         initializeTrickPlay();
     }
 
+    /**
+     * Every bid and pass of the last headless auction, in order.
+     *
+     * <p>Kept so that a game fixed to that auction's outcome can be told how
+     * the outcome came about: the arena's {@code --fixed-contract} mode runs a
+     * bidder's auction to choose the declarer and contract, then plays the
+     * board by {@link #restartWithContract}, and until 2026-09-24 the players
+     * at that table were never told a bid had been made. Every fixed-contract
+     * measurement therefore ran with the bidding block of the belief's evidence
+     * empty -- which the declarer's belief, whose evidence is mostly the
+     * auction, felt as a fall to uniform. Empty after an interactive auction,
+     * which reports through {@link Auction} instead.
+     */
+    private final List<SkatAi.BidEvent> auctionLog = new ArrayList<>();
+
+    /** The bids and passes of the last headless auction, first to last. */
+    public synchronized List<SkatAi.BidEvent> auctionLog() {
+        return List.copyOf(auctionLog);
+    }
+
     private void loadDeal(SkatDeck.Deal deal) {
+        auctionLog.clear();
         hands[HUMAN].clear();
         hands[OPPONENT_ONE].clear();
         hands[OPPONENT_TWO].clear();
@@ -1052,7 +1073,32 @@ public final class GameEngine {
                                                  SkatAi.Seat declarer, Contract contract,
                                                  int bidValue,
                                                  Set<SkatAi.Seat> occupiedHumanSeats) {
+        restartWithContract(deal, round, declarer, contract, bidValue, occupiedHumanSeats, List.of());
+    }
+
+    /**
+     * As above, and every seat first hears {@code auction} -- the bids and
+     * passes that produced this declarer and contract, as {@link #auctionLog()}
+     * reported them -- so a player's picture of the other hands is what it
+     * would have been at a table where that auction was played.
+     *
+     * <p>The declarer hears it after its {@code prepareDeal} (which resets what
+     * a player remembers of an auction) and before the exchange. The other two
+     * seats hear it through a session that is opened for the purpose and closed
+     * again, <em>without</em> {@code prepareDeal}: that call prices the hand,
+     * and pricing two more hands a game would double what a fixed-contract
+     * match costs for a number nobody reads. A provider that keeps what it
+     * hears on the provider, as the search player does, keeps it; one that
+     * cannot take a bid before a deal simply does not hear the auction, as
+     * before, and no violation is recorded for it.
+     */
+    public synchronized void restartWithContract(SkatDeck.Deal deal, SkatAi.RoundPosition round,
+                                                 SkatAi.Seat declarer, Contract contract,
+                                                 int bidValue,
+                                                 Set<SkatAi.Seat> occupiedHumanSeats,
+                                                 List<SkatAi.BidEvent> auction) {
         Objects.requireNonNull(deal, "deal");
+        Objects.requireNonNull(auction, "auction");
         Objects.requireNonNull(round, "round");
         Objects.requireNonNull(declarer, "declarer");
         Objects.requireNonNull(contract, "contract");
@@ -1063,10 +1109,23 @@ public final class GameEngine {
         if (occupiedHumanSeats != null) humanSeats.addAll(occupiedHumanSeats);
         loadDeal(deal);
 
+        if (!auction.isEmpty()) {
+            for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+                if (seat == declarer) continue;
+                try (SkatAiSession listener = aiProviders.providerFor(seat).createSession()) {
+                    for (SkatAi.BidEvent event : auction) listener.bidObserved(event);
+                } catch (RuntimeException cannotListen) {
+                    // See the javadoc: this seat plays as if it had not heard.
+                }
+            }
+        }
         SkatAiSession exchange = aiProviders.providerFor(declarer).createSession();
         try {
             exchange.prepareDeal(new SkatAi.DealContext(round, declarer,
                     new LinkedHashSet<>(hands[declarer.ordinal()]), AUTO_BIDDING_CONTRACTS));
+            for (SkatAi.BidEvent event : auction) {
+                try { exchange.bidObserved(event); } catch (RuntimeException cannotListen) { break; }
+            }
             // The contract was chosen before the deal was handed out, so the
             // declarer is told it. Without this it discards for a guess -- and
             // on a Null that guess is a trump game every time, which buries the
@@ -1136,6 +1195,7 @@ public final class GameEngine {
 
     private void observe(EnumMap<SkatAi.Seat, SkatAiSession> bidders,
                          SkatAi.BidEvent event) {
+        auctionLog.add(event);
         for (Map.Entry<SkatAi.Seat, SkatAiSession> bidder : bidders.entrySet()) {
             try { bidder.getValue().bidObserved(event); }
             catch (RuntimeException invalid) {

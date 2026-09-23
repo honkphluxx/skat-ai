@@ -77,7 +77,7 @@ public final class GameRunner {
         }
         try {
             engine.restartWithContract(board.deal(), board.round(), fixed.declarer(),
-                    fixed.contract(), fixed.bidValue(), Collections.emptySet());
+                    fixed.contract(), fixed.bidValue(), Collections.emptySet(), fixed.auction());
             return finish(engine, board);
         } finally {
             engine.close();

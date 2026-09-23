@@ -49,7 +49,8 @@ public final class AuctionContractSource implements ContractSource {
             // to -- which is also why this source undercounts how often the
             // bidder passes.
             if (definition.isRamsch()) return null;
-            return new FixedContract(definition.declarer, definition.contract, definition.bidValue);
+            return new FixedContract(definition.declarer, definition.contract, definition.bidValue,
+                    engine.auctionLog());
         } finally {
             engine.close();
         }

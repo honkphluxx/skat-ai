@@ -233,7 +233,7 @@ public final class DeclaringAuditMain {
         }
         try {
             engine.restartWithContract(board.deal(), board.round(), fixed.declarer(),
-                    fixed.contract(), fixed.bidValue(), Collections.emptySet());
+                    fixed.contract(), fixed.bidValue(), Collections.emptySet(), fixed.auction());
             List<Decision> decisions = new ArrayList<>(30);
             Boolean cold = null;
             for (int step = 0; step < 128; step++) {
