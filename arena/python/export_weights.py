@@ -52,6 +52,13 @@ def main():
     directory = pathlib.Path(args.model)
     descriptor = json.loads((directory / "model.json").read_text())
     inputs = descriptor["inputs"]
+    if descriptor.get("bid_structure"):
+        # The Java encoder does not spell the auction out yet. Written as it
+        # is, the file would load, fail the input-size check at the first
+        # decision and send the player to the uniform sampler for the whole
+        # night -- a measured +0.000, not an error. Refuse instead.
+        sys.exit("this model reads the derived auction inputs (bid_structure) and "
+                 "BeliefEncoding has no counterpart yet: not exportable for the player")
     hidden = descriptor["hidden"]
     layers = descriptor["layers"]
     outputs = descriptor["cards"] * len(descriptor["classes"])

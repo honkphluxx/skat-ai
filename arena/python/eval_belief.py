@@ -38,7 +38,8 @@ import sys
 import numpy as np
 import torch
 
-from belief_data import is_declarer, SPLIT_RULE, Corpus, score, uniform_baseline
+from belief_data import (BID_STRUCTURE_WIDTH, SPLIT_RULE, Corpus, is_declarer, score,
+                         uniform_baseline, with_bid_structure)
 from train_belief import CARDS, BeliefNet, evaluate
 
 CONTRACTS = ("Diamonds", "Hearts", "Spades", "Clubs", "Grand", "Null", "Ramsch")
@@ -52,6 +53,8 @@ def load(directory, inputs, device):
     """The saved net, rebuilt from the shape model.json recorded beside it."""
     path = pathlib.Path(directory)
     spec = json.loads((path / "model.json").read_text())
+    if spec.get("bid_structure"):
+        inputs += BID_STRUCTURE_WIDTH
     if spec["inputs"] != inputs:
         raise ValueError(
             f"{path.name} wants {spec['inputs']} inputs and this corpus has "
@@ -103,12 +106,12 @@ def audit(spec, name, data_name, seed, fraction, scoring_all):
         print(f"  (trained on {spec['trained_on']}, scored on {data_name})")
 
 
-def report(name, model, x, target, mask, corpus, device):
+def report(name, model, x, target, mask, corpus, device, prepare=lambda a: a):
     """One line: how often the model is right, and how often guessing is."""
     if len(x) == 0:
         print(f"  {name:12s}          no records")
         return
-    accuracy, nll = evaluate(model, x, target, mask, device)
+    accuracy, nll = evaluate(model, prepare(x), target, mask, device)
     baseline = np.repeat(uniform_baseline(corpus, x)[:, None, :], CARDS, axis=1)
     base_accuracy, _ = score(baseline, target, mask)
     print(f"  {name:12s} {len(x):9,d} records   {accuracy:6.1%} correct   "
@@ -157,18 +160,22 @@ def main():
 
     device = torch.device(args.device)
     model, spec = load(args.model, corpus.size, device)
-    print(f"encoding v{corpus.version}, {corpus.size} inputs, "
-          f"{spec['hidden']}x{spec['layers']}")
+    print(f"encoding v{corpus.version}, {corpus.size} inputs"
+          + (f" + {BID_STRUCTURE_WIDTH} derived from the auction" if spec.get("bid_structure") else "")
+          + f", {spec['hidden']}x{spec['layers']}")
+    # The raw vector stays what the baseline and the slices below read; the
+    # derived auction inputs are appended only on the way into the net.
+    prepare = (lambda a: with_bid_structure(corpus, a)) if spec.get("bid_structure") else (lambda a: a)
     audit(spec, pathlib.Path(args.model).name, pathlib.Path(args.data).resolve().name,
           args.seed, args.val_fraction, args.all)
     print()
 
-    report("everything", model, x, target, mask, corpus, device)
+    report("everything", model, x, target, mask, corpus, device, prepare)
     if args.by_role:
         print()
         declaring = is_declarer(corpus, x)
-        report("as declarer", model, x[declaring], target[declaring], mask[declaring], corpus, device)
-        report("as defender", model, x[~declaring], target[~declaring], mask[~declaring], corpus, device)
+        report("as declarer", model, x[declaring], target[declaring], mask[declaring], corpus, device, prepare)
+        report("as defender", model, x[~declaring], target[~declaring], mask[~declaring], corpus, device, prepare)
     if args.by_contract:
         print()
         contract = corpus.slice(x, "contract")
@@ -176,7 +183,7 @@ def main():
             rows = contract[:, slot] > 0.5
             if not rows.any():
                 continue
-            report(label, model, x[rows], target[rows], mask[rows], corpus, device)
+            report(label, model, x[rows], target[rows], mask[rows], corpus, device, prepare)
 
 
 if __name__ == "__main__":

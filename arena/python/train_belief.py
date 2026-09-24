@@ -31,7 +31,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from belief_data import SPLIT_RULE, Corpus, Forgetting, is_declarer, score, uniform_baseline
+from belief_data import (BID_STRUCTURE_WIDTH, SPLIT_RULE, Corpus, Forgetting, is_declarer,
+                         score, uniform_baseline, with_bid_structure)
 
 CLASSES = 3
 CARDS = 32
@@ -128,9 +129,22 @@ def main():
     parser.add_argument("--declarer-only", action="store_true",
                         help="train on the declarer's records alone, the defenders' "
                              "dropped: the other end of the same experiment")
+    parser.add_argument("--init-seed", type=int, default=None,
+                        help="seed for the weights, the batch order and the forgetting, "
+                             "when it should differ from --seed; the held-out split "
+                             "stays on --seed, so two runs that differ only here are "
+                             "scored on the same boards and their gap is the noise "
+                             "floor a real difference has to clear")
+    parser.add_argument("--bid-structure", action="store_true",
+                        help="append the auction spelled out -- each seat's highest "
+                             "bid as a magnitude bucket, the base values that divide "
+                             "it and the multiplier they imply, as in Solinas, "
+                             "Rebstock and Buro 2019 -- derived from the corpus, "
+                             "fifty-one inputs more. See belief_data.bid_structure")
     args = parser.parse_args()
 
-    torch.manual_seed(args.seed)
+    init_seed = args.seed if args.init_seed is None else args.init_seed
+    torch.manual_seed(init_seed)
     corpus = Corpus(args.data)
     # Packed: the features stay the bytes on disk and are unpacked a batch at
     # a time. A night's corpus is five million records, which as float32 is
@@ -140,7 +154,10 @@ def main():
     if args.limit:
         x, target, mask, board = (a[:args.limit] for a in (x, target, mask, board))
     train, val = corpus.split_by_board(board, args.val_fraction, seed=args.seed)
-    print(f"encoding v{corpus.version}, {corpus.size} inputs")
+    inputs = corpus.size + (BID_STRUCTURE_WIDTH if args.bid_structure else 0)
+    prepare = (lambda a: with_bid_structure(corpus, a)) if args.bid_structure else (lambda a: a)
+    print(f"encoding v{corpus.version}, {corpus.size} inputs"
+          + (f" + {BID_STRUCTURE_WIDTH} derived from the auction" if args.bid_structure else ""))
     print(f"{len(train):,} training records, {len(val):,} held out "
           f"({len(np.unique(board[val])):,} whole boards)")
 
@@ -200,12 +217,15 @@ def main():
         if rows.any():
             base_by_role[role] = score(baseline[rows], target_val[rows], mask_val[rows])[0]
     del baseline
+    # The derived inputs are appended after the baseline and the role split
+    # have read the raw ones; the model sees the wider vector from here on.
+    x_val = prepare(x_val)
     print(f"uniform sampler baseline: {base_accuracy:.1%} correct, nll {base_nll:.4f}"
           + "".join(f"; as {role} {acc:.1%}" for role, acc in base_by_role.items()))
     print()
 
     device = torch.device(args.device)
-    model = BeliefNet(corpus.size, args.hidden, args.layers).to(device)
+    model = BeliefNet(inputs, args.hidden, args.layers).to(device)
     parameters = sum(p.numel() for p in model.parameters())
     print(f"model: {parameters:,} parameters, {parameters * 4 / 1e6:.1f} MB as float32")
 
@@ -215,7 +235,7 @@ def main():
     optimiser = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-2)
     schedule = torch.optim.lr_scheduler.OneCycleLR(
         optimiser, max_lr=args.lr, total_steps=args.epochs * steps_per_epoch)
-    forgetting = Forgetting(corpus, seed=args.seed)
+    forgetting = Forgetting(corpus, seed=init_seed)
 
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -223,12 +243,12 @@ def main():
     best_epoch = 0
     best_train = float("nan")
     best_scores = (0.0, float("inf"))
-    rng = np.random.default_rng(args.seed)
+    rng = np.random.default_rng(init_seed)
 
     if args.export_only:
         model.load_state_dict(torch.load(out / "belief.pt"))
         accuracy, nll = evaluate(model, x_val, target_val, mask_val, device)
-        export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll, seen)
+        export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll, seen, prepare)
         print(f"exported from belief.pt: {accuracy:.1%} correct, nll {nll:.4f}")
         return
 
@@ -246,7 +266,8 @@ def main():
             # generated set of shards serves every personality and the dropout
             # distribution stays a knob rather than a property of the files.
             forgotten, _ = forgetting.apply(corpus.unpack(x[rows]))
-            xb = torch.from_numpy(forgotten).to(device)
+            # After forgetting, so a forgotten auction is not spelled out.
+            xb = torch.from_numpy(prepare(forgotten)).to(device)
             tb = torch.from_numpy(target[rows].astype(np.int64)).to(device)
             mb = torch.from_numpy(mask[rows]).to(device)
 
@@ -282,7 +303,7 @@ def main():
     # run that takes hours.
     model.load_state_dict(torch.load(out / "belief.pt"))
     try:
-        export(model, corpus, out, args, *best_scores, base_accuracy, base_nll, seen)
+        export(model, corpus, out, args, *best_scores, base_accuracy, base_nll, seen, prepare)
         print(f"\nbest held-out nll {best:.4f} at epoch {best_epoch} of {args.epochs}, "
               f"where training loss stood at {best_train:.4f}; "
               f"weights and ONNX in {out}")
@@ -305,15 +326,17 @@ def main():
               "missing module, requirements.txt is the answer.")
 
 
-def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll, contracts):
+def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll, contracts,
+           prepare=lambda a: a):
     """ONNX for the app, plus fixtures so the Java side can prove it agrees."""
     model.eval()
+    inputs = model.trunk[0].in_features
     # The descriptor first, because the two steps below have their own
     # dependencies and a failure in either used to take model.json down with
     # them -- leaving belief.pt on disk beside nothing that says what shape it
     # is, which export_weights.py needs and which --export-only cannot rebuild.
     write_descriptor(out, corpus, args, accuracy, nll, base_accuracy, base_nll, contracts)
-    dummy = torch.zeros(1, corpus.size, device=next(model.parameters()).device)
+    dummy = torch.zeros(1, inputs, device=next(model.parameters()).device)
     torch.onnx.export(
         model, dummy, out / "belief.onnx",
         input_names=["features"], output_names=["logits"],
@@ -325,16 +348,22 @@ def export(model, corpus, out, args, accuracy, nll, base_accuracy, base_nll, con
     # the same input is the failure this whole file format exists to prevent, and
     # it is otherwise invisible until the player is mysteriously weak.
     x, _, _, _ = corpus.load(limit=16)
-    sample = torch.from_numpy(x[:16]).to(dummy.device)
+    x = prepare(x[:16])
+    sample = torch.from_numpy(x).to(dummy.device)
     with torch.no_grad():
         logits = model(sample).cpu().numpy()
-    np.savez(out / "fixtures.npz", features=x[:16], logits=logits)
+    np.savez(out / "fixtures.npz", features=x, logits=logits)
 
 def write_descriptor(out, corpus, args, accuracy, nll, base_accuracy, base_nll, contracts):
     """What the loaders read: shape, encoding, split, and what it was shown."""
     (out / "model.json").write_text(json.dumps({
         "encoding_version": corpus.version,
-        "inputs": corpus.size,
+        "inputs": corpus.size + (BID_STRUCTURE_WIDTH if args.bid_structure else 0),
+        # Derived from bids_by_seat at the input, not exported in the corpus:
+        # a loader that sees this true must spell the auction out the same way
+        # (belief_data.bid_structure) or feed the net a vector it cannot read.
+        "bid_structure": bool(args.bid_structure),
+        "init_seed": args.seed if args.init_seed is None else args.init_seed,
         "cards": CARDS,
         "classes": ["left", "right", "skat"],
         "hidden": args.hidden,

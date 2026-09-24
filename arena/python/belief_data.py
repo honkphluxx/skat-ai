@@ -243,6 +243,73 @@ class Forgetting:
         out[:, present] *= keep
 
 
+# The auction, spelled out. Solinas, Rebstock and Buro (AAAI 2019), whose
+# card-location net this belief descends from, do not hand their net a bid as a
+# number: each opponent's highest bid arrives as a *type* (which game the bid
+# implies) and a *magnitude* bucketed so that bids sharing a multiplier fall
+# together (18-24, 27-36, 40-48, 50-72, over 72), "because the bid multiplier
+# is a strong predictor for the locations of jacks in particular". Ours arrives
+# as the value over a hundred, quantised to a byte, and whether three layers of
+# GELU can recover "divisible by eleven, so spades, so a multiplier of three,
+# so two jacks" from 0.13 is the question this block lets a training run ask.
+#
+# Derived, not exported: the corpus already holds the value, so the same shards
+# serve both the control and the candidate, and it is computed on the batch
+# *after* forgetting, so a forgotten auction stays forgotten here too. Per
+# relative seat (me, left, right), in this order:
+#
+#   1  no bid from this seat (passed before saying a value)
+#   5  magnitude: 18-24, 27-36, 40-48, 50-72, >72
+#   6  a base value that divides the bid: diamonds 9, hearts 10, spades 11,
+#      clubs 12, grand 24, or a Null price (23, 35, 46, 59) -- several may be
+#      set, which is the ambiguity the paper notes, left to the net
+#   5  the smallest suit multiplier the bid admits: 2, 3, 4, 5, 6 and more
+#
+# Seventeen a seat, fifty-one in all, appended after the encoded inputs. The
+# Java encoder has no counterpart yet, on purpose: this is measured held out
+# by role first, and only a net that pays there earns the port.
+
+BID_BUCKETS = ((18, 24), (27, 36), (40, 48), (50, 72), (73, 10 ** 9))
+BID_BASES = (9, 10, 11, 12, 24)
+NULL_PRICES = (23, 35, 46, 59)
+BID_STRUCTURE_PER_SEAT = 1 + len(BID_BUCKETS) + len(BID_BASES) + 1 + 5
+BID_STRUCTURE_WIDTH = 3 * BID_STRUCTURE_PER_SEAT
+
+
+def bid_structure(corpus, x):
+    """The fifty-one derived auction inputs for a batch of unpacked features."""
+    bids = np.rint(corpus.slice(x, "bids_by_seat") * 100).astype(np.int64)
+    present = corpus.slice(x, "bidding_present")[:, 0] > 0.5
+    out = np.zeros((len(x), BID_STRUCTURE_WIDTH), dtype=np.float32)
+    for seat in range(3):
+        b = bids[:, seat]
+        at = seat * BID_STRUCTURE_PER_SEAT
+        out[:, at] = (b == 0)
+        at += 1
+        for lo, hi in BID_BUCKETS:
+            out[:, at] = (b >= lo) & (b <= hi)
+            at += 1
+        for base in BID_BASES:
+            out[:, at] = (b > 0) & (b % base == 0)
+            at += 1
+        out[:, at] = np.isin(b, NULL_PRICES)
+        at += 1
+        smallest = np.full(len(x), 0, dtype=np.int64)
+        for base in (12, 11, 10, 9):
+            divides = (b > 0) & (b % base == 0)
+            smallest = np.where(divides, b // base, smallest)
+        for slot, multiplier in enumerate((2, 3, 4, 5)):
+            out[:, at + slot] = smallest == multiplier
+        out[:, at + 4] = smallest >= 6
+    out *= present[:, None]
+    return out
+
+
+def with_bid_structure(corpus, x):
+    """The batch with the derived auction inputs appended."""
+    return np.concatenate([x, bid_structure(corpus, x)], axis=1)
+
+
 def uniform_baseline(corpus, x):
     """
     What the current sampler already believes, as probabilities.
