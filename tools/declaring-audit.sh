@@ -6,6 +6,10 @@
 #   ./tools/declaring-audit.sh --seeds="11 12 13"
 #   ./tools/declaring-audit.sh --player=belief-32-shipped-ladder
 #                                          a variant; its files carry its id
+#   ./tools/declaring-audit.sh --player=belief-32-shipped-candidate \
+#                              --candidate=belief-model-bids-structure
+#                                          the shipped player with another
+#                                          net (-Dbelief.model.candidate.dir)
 #
 # declaring-par.sh --split prices the card-play share of the gap to par (4.06)
 # and cannot say where it is: the arena's per-board CSV is one number a board,
@@ -44,7 +48,8 @@ for arg in "$@"; do
         --threads=*)  THREADS="${arg#*=}" ;;
         --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
         --player=*)   PLAYER_ARG="${arg#*=}" ;;
-        -h|--help)    sed -n '2,24p' "$AUDIT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --candidate=*) CANDIDATE="${arg#*=}" ;;
+        -h|--help)    sed -n '2,28p' "$AUDIT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -64,11 +69,14 @@ stamp=$(date '+%Y%m%d-%H%M%S')
 # A variant's files go in a folder of their own, so they never overwrite the
 # shipped player's -- and its report names the player.
 [ "$US" != belief-32-shipped ] && LOG="$LOG/$US" && mkdir -p "$LOG"
+PROPS=""
+[ -n "${CANDIDATE:-}" ] && PROPS="-Dbelief.model.candidate.dir=$CANDIDATE" && LOG="$LOG/$(basename "$CANDIDATE")" && mkdir -p "$LOG"
 report="$LOG/declaring-audit-$stamp.txt"
 echo "declaring-audit started $(date '+%Y-%m-%d %H:%M:%S')   seeds=$SEEDS boards=$BOARDS threads=$THREADS"
 echo "report: $report"
 
-./gradlew --console=plain -q --no-daemon :arena:declaringAudit \
+# shellcheck disable=SC2086 -- $PROPS is deliberately word-split
+./gradlew --console=plain -q --no-daemon $PROPS :arena:declaringAudit \
     --args="--player=$US --par=$PAR --seeds=${SEEDS// /,} --boards=$BOARDS --threads=$THREADS --quiet --out=$ROOT/$LOG" \
     > "$report" 2>&1 || { mv "$report" "$LOG/declaring-audit-$stamp.failed.txt"; echo "FAILED -- see $LOG/declaring-audit-$stamp.failed.txt"; exit 1; }
 

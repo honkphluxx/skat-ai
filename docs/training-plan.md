@@ -818,6 +818,40 @@ boards. The pairing continues on seeds 14-16 (`--seeds="14 15 16"
 decision is made on six. CPU: the first layer is 512x357 instead of
 512x306, a few percent of the net and nothing of the search.
 
+*Six seeds (2026-09-24, evening):* seeds 14-16 came in at -2.08, -2.37
+and -2.36, each resolved on its own, all of it from declaring (-3.2,
+-3.0, -3.9 a game) with defending flat. **Pooled over six: -1.08 [-2.71,
++0.55]** by the seed-level t, which is wide because seed 12 sits at
++1.59; at the board level it is not ambiguous -- of the 312 boards in
+1,049 that scored differently, the candidate lost 190 and won 122, a tilt
+of nearly four standard deviations, and it declares fewer winners in
+five seeds of six. **Not shipped.** A net that places the declarer's
+unseen cards better, by the belief's own instrument, costs the declarer
+about a point a game at the table.
+
+Before naming a cause, one was ruled out. `CalibrationProbe` (container,
+72 games, seeds 12-13) reads both nets on the same decisions of the same
+games, by role and by what the card is, with a calibration table of
+confidence against hit rate:
+
+| declarer, tricks 1-3 | p(true) shipped | p(true) spelled out | argmax shipped | argmax spelled out |
+| --- | --- | --- | --- | --- |
+| jacks | 55.2 | 57.1 | 58.6 | 63.0 |
+| other trumps | 50.3 | 51.0 | 52.7 | 55.1 |
+| plain cards | 52.3 | 53.7 | 56.1 | 58.4 |
+
+Better on every class, the jacks most, and the calibration is the same
+shape for both (both a little sure of themselves in the 0.80-0.95 bin,
+neither more than the other). So the loss is not in what the belief
+knows and not in how sure it is; it is in what the search does with a
+belief of that shape, and that is the declaring audit's question, not
+the probe's. Next: `tools/declaring-audit.sh` (which now takes
+`--candidate=`) on seeds 14-16 for the shipped player and for the
+candidate, same boards, same contracts -- throws and gifts by vote class
+and by trick, side by side. Whatever it says, the encoding stays: the
+derivation is a width the model asks for, and a model that does not ask
+gets the vector it always got.
+
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
   two points the belief has today -- `tools/belief-share.sh`, and the
