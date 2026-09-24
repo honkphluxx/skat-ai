@@ -186,6 +186,34 @@ public class BeliefWorldSourceTest {
         }
     }
 
+    /**
+     * A model that reads the auction spelled out says so by its width, and the
+     * source derives the block for it; one that does not gets the plain vector.
+     * Neither is refused, and the wide one is refused only if it lies about it.
+     */
+    @Test public void aModelThatWantsTheAuctionSpelledOutGetsIt() {
+        int[] seen = new int[2];
+        BeliefModel wide = new BeliefModel() {
+            @Override public float[] logits(float[] features) {
+                seen[0] = features.length;
+                assertEquals(BeliefEncoding.BID_STRUCTURE_SIZE, features.length);
+                return new float[32 * BeliefEncoding.CLASSES];
+            }
+            @Override public int inputs() { return BeliefEncoding.BID_STRUCTURE_SIZE; }
+        };
+        BeliefModel plain = new BeliefModel() {
+            @Override public float[] logits(float[] features) {
+                seen[1] = features.length;
+                return new float[32 * BeliefEncoding.CLASSES];
+            }
+            @Override public int inputs() { return BeliefEncoding.SIZE; }
+        };
+        assertEquals(20, new BeliefWorldSource(wide).sample(evidence(SkatAi.Seat.HUMAN), 20, new Random(3)).size());
+        assertEquals(20, new BeliefWorldSource(plain).sample(evidence(SkatAi.Seat.HUMAN), 20, new Random(3)).size());
+        assertEquals("the wide model was asked, with the derived block", BeliefEncoding.BID_STRUCTURE_SIZE, seen[0]);
+        assertEquals("the plain model was asked, without it", BeliefEncoding.SIZE, seen[1]);
+    }
+
     @Test public void everySampledWorldIsStillALegalDeal() {
         Card watched = unseenFor(SkatAi.Seat.HUMAN).get(0);
         List<WorldSampler.World> worlds =

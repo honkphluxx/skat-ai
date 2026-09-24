@@ -52,9 +52,11 @@ final class ModelDirectory {
             throw new IOException("model was trained on encoding v" + version
                     + ", this build speaks v" + BeliefEncoding.VERSION);
         }
-        if (inputs != BeliefEncoding.SIZE) {
+        boolean spelledOut = json.matches("(?s).*\"bid_structure\"\\s*:\\s*true.*");
+        int expected = spelledOut ? BeliefEncoding.BID_STRUCTURE_SIZE : BeliefEncoding.SIZE;
+        if (inputs != expected) {
             throw new IOException("model wants " + inputs + " inputs, the encoding produces "
-                    + BeliefEncoding.SIZE);
+                    + expected + (spelledOut ? " with the auction spelled out" : ""));
         }
         return inputs;
     }
@@ -103,6 +105,20 @@ final class ModelDirectory {
         for (int row = 0; row < features.rows(); row++) {
             float[] one = new float[features.columns()];
             for (int at = 0; at < one.length; at++) one[at] = features.at(row, at);
+            if (one.length == BeliefEncoding.BID_STRUCTURE_SIZE) {
+                // The trainer derived the auction block in Python from the
+                // first SIZE inputs; this build must derive the same fifty-one
+                // numbers from them, or the model reads a different auction.
+                float[] mine = BeliefEncoding.bidStructure(one);
+                for (int at = 0; at < mine.length; at++) {
+                    if (mine[at] != one[BeliefEncoding.SIZE + at]) {
+                        throw new IOException("this build and the trainer spell the auction "
+                                + "out differently: derived input " + at + " of fixture "
+                                + row + " is " + mine[at] + " here and "
+                                + one[BeliefEncoding.SIZE + at] + " in the trainer");
+                    }
+                }
+            }
             float[] got = model.logits(one);
             if (got == null || got.length != outputs) {
                 throw new IOException("the model answered with "

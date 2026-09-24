@@ -767,6 +767,35 @@ held out by role (`eval_belief.py --by-role`), then with
 `tools/belief-share.sh`, whose declarer column now reads 52.1 with the
 auction present and whose gate is unchanged.
 
+**2026-09-24, step 5: the auction spelled out. Held out by role first,
+and it pays.** `belief_data.bid_structure` derives, per relative seat,
+whether the seat bid at all, the paper's five magnitude buckets, which
+base values divide the bid (diamonds to grand, and the Null prices) and
+the smallest suit multiplier it admits: fifty-one inputs, from the
+`bids_by_seat` the corpus already holds (a bid over a hundred survives the
+byte exactly; above 100 both sides read 100), computed after forgetting so
+a forgotten auction stays forgotten. `tools/belief-bids.sh` trained the
+shipped corpus three ways at the same split and twenty epochs:
+
+| held out by role, argmax over uniform | as declarer | as defender | nll |
+| --- | --- | --- | --- |
+| control, the inputs as they are (init seed 1) | 62.4 (+11.3) | 67.5 (+22.8) | 0.6562 |
+| control2, the same at init seed 2 -- the noise floor | 62.3 (+11.2) | 67.5 (+22.8) | 0.6564 |
+| **the auction spelled out** | **63.3 (+12.2)** | 67.7 (+23.0) | 0.6524 |
+
+Nine times the floor, on the seat that needed it. So the net could not
+recover the divisibility from a scalar on its own, and the paper's feature
+was worth what the paper said it was. Ported: `BeliefEncoding.bidStructure`
+mirrors the Python bit for bit (checked on all 50,000 records of a shard
+head, and by `ModelDirectory.checkParity` against the trainer's fixtures on
+every load); a model that reads the block says so by its width
+(`BID_STRUCTURE_SIZE`, 357), `BeliefWorldSource` derives it for such a
+model and hands the plain vector to any other, the corpus stays at 306 and
+every shard already written serves both. What is not yet known is the
+points: `tools/belief-bids-gate.sh` seats the net as the candidate against
+the shipped one -- belief-share for the placed% (the declarer's 52.1 is
+the number to beat), then the fixed-contract pairing over three seeds.
+
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
   two points the belief has today -- `tools/belief-share.sh`, and the

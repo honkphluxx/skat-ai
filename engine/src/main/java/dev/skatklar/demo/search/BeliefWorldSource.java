@@ -138,6 +138,11 @@ public final class BeliefWorldSource implements WorldSource {
         float[] logits;
         try {
             features = BeliefEncoding.encode(evidence);
+            // A model that reads the auction spelled out says so by its width;
+            // the block is derived here, from the same vector the trainer saw.
+            if (model.inputs() == BeliefEncoding.BID_STRUCTURE_SIZE) {
+                features = BeliefEncoding.withBidStructure(features);
+            }
             if (model.inputs() > 0 && model.inputs() != features.length) return null;
             logits = model.logits(features);
         } catch (RuntimeException unavailable) {

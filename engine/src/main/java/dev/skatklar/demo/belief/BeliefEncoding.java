@@ -5,6 +5,7 @@ import dev.skatklar.demo.Contract;
 import dev.skatklar.demo.SkatDeck;
 import dev.skatklar.demo.ai.SkatAi;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -193,6 +194,90 @@ public final class BeliefEncoding {
 
     /** The layout, in order. Written to the spec file the trainer reads. */
     public static final List<Field> FIELDS = Collections.unmodifiableList(LAYOUT);
+
+    /*
+     * The auction, spelled out -- derived at the input, not exported.
+     *
+     * Solinas, Rebstock and Buro (AAAI 2019), whose card-location net this
+     * belief descends from, hand their net each opponent's highest bid as a
+     * game type and a magnitude bucketed so that bids sharing a multiplier fall
+     * together, "because the bid multiplier is a strong predictor for the
+     * locations of jacks in particular". BIDS_BY_SEAT carries the value over a
+     * hundred, and a net trained on that alone places a declarer's unseen
+     * cards 62.4% right held out; the same net with this block appended,
+     * 63.3% (tools/belief-bids.sh, 2026-09-24; two controls differ by 0.1).
+     *
+     * Derived rather than encoded so the corpus stays at SIZE and every shard
+     * already written serves a model with or without it: arena/python/
+     * belief_data.py computes the same fifty-one numbers from the same field
+     * on the way into the trainer, after forgetting, and this is its mirror.
+     * The two must agree bit for bit, which the arena checks on every load
+     * against the trainer's own fixtures (ModelDirectory.checkParity). A
+     * model that reads them says so by its width: BID_STRUCTURE_SIZE inputs.
+     *
+     * Per relative seat (me, left, right), in this order:
+     *   1  no bid from this seat (passed before saying a value)
+     *   5  magnitude: 18-24, 27-36, 40-48, 50-72, over 72
+     *   5  a base value that divides the bid: diamonds 9, hearts 10, spades 11,
+     *      clubs 12, grand 24 -- several may be set, the ambiguity left to
+     *      the net
+     *   1  a Null price: 23, 35, 46, 59
+     *   5  the smallest suit multiplier the bid admits: 2, 3, 4, 5, 6 and more
+     * All zero when the auction is not remembered.
+     */
+
+    /** Derived inputs per seat; see the comment above. */
+    public static final int BID_STRUCTURE_PER_SEAT = 17;
+    /** Derived inputs in all, appended after {@link #SIZE}. */
+    public static final int BID_STRUCTURE_WIDTH = 3 * BID_STRUCTURE_PER_SEAT;
+    /** The input width of a model that reads the auction spelled out. */
+    public static final int BID_STRUCTURE_SIZE = SIZE + BID_STRUCTURE_WIDTH;
+    private static final int[][] BID_BUCKETS = {{18, 24}, {27, 36}, {40, 48}, {50, 72}, {73, Integer.MAX_VALUE}};
+    private static final int[] BID_BASES = {9, 10, 11, 12, 24};
+    private static final int[] NULL_PRICES = {23, 35, 46, 59};
+
+    /**
+     * The fifty-one derived auction inputs for one encoded vector.
+     *
+     * <p>Reads {@link #BIDS_BY_SEAT} and {@link #BIDDING_PRESENT} back out of
+     * {@code features} rather than the evidence, so that the trainer, which only
+     * ever sees the vector, and the player derive from the same thing. The
+     * vector is quantised to a byte on its way into the corpus: a bid over a
+     * hundred survives that exactly, the step being under half a point, but
+     * the byte cannot hold more than 1.0, so a bid above 100 -- a handful an
+     * evening -- reaches the trainer as 100. It is clipped the same way here,
+     * or the two would spell those few auctions differently.
+     */
+    public static float[] bidStructure(float[] features) {
+        float[] out = new float[BID_STRUCTURE_WIDTH];
+        if (features[BIDDING_PRESENT.offset()] <= 0.5f) return out;
+        for (int seat = 0; seat < 3; seat++) {
+            int bid = Math.min(100, Math.round(features[BIDS_BY_SEAT.offset() + seat] * 100f));
+            int at = seat * BID_STRUCTURE_PER_SEAT;
+            out[at++] = bid == 0 ? 1 : 0;
+            for (int[] bucket : BID_BUCKETS) out[at++] = bid >= bucket[0] && bid <= bucket[1] ? 1 : 0;
+            for (int base : BID_BASES) out[at++] = bid > 0 && bid % base == 0 ? 1 : 0;
+            boolean nullPrice = false;
+            for (int price : NULL_PRICES) nullPrice |= bid == price;
+            out[at++] = nullPrice ? 1 : 0;
+            int smallest = 0;
+            for (int base : new int[] {12, 11, 10, 9}) {
+                if (bid > 0 && bid % base == 0) smallest = bid / base;
+            }
+            for (int multiplier = 2; multiplier <= 5; multiplier++) {
+                out[at++] = smallest == multiplier ? 1 : 0;
+            }
+            out[at] = smallest >= 6 ? 1 : 0;
+        }
+        return out;
+    }
+
+    /** {@code features} with the derived auction inputs appended: {@link #BID_STRUCTURE_SIZE} wide. */
+    public static float[] withBidStructure(float[] features) {
+        float[] out = Arrays.copyOf(features, SIZE + BID_STRUCTURE_WIDTH);
+        System.arraycopy(bidStructure(features), 0, out, SIZE, BID_STRUCTURE_WIDTH);
+        return out;
+    }
 
     /**
      * The label: for every card, where it actually is, from the observer's seat.

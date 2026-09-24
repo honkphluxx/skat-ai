@@ -52,13 +52,10 @@ def main():
     directory = pathlib.Path(args.model)
     descriptor = json.loads((directory / "model.json").read_text())
     inputs = descriptor["inputs"]
-    if descriptor.get("bid_structure"):
-        # The Java encoder does not spell the auction out yet. Written as it
-        # is, the file would load, fail the input-size check at the first
-        # decision and send the player to the uniform sampler for the whole
-        # night -- a measured +0.000, not an error. Refuse instead.
-        sys.exit("this model reads the derived auction inputs (bid_structure) and "
-                 "BeliefEncoding has no counterpart yet: not exportable for the player")
+    # A model that reads the auction spelled out (bid_structure) is 357 wide
+    # and says so by its width alone: BeliefWorldSource derives the block
+    # when the model wants BID_STRUCTURE_SIZE inputs, and the arena checks
+    # the Java derivation against the fixtures' tail on every load.
     hidden = descriptor["hidden"]
     layers = descriptor["layers"]
     outputs = descriptor["cards"] * len(descriptor["classes"])

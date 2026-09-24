@@ -278,6 +278,8 @@ BID_STRUCTURE_WIDTH = 3 * BID_STRUCTURE_PER_SEAT
 
 def bid_structure(corpus, x):
     """The fifty-one derived auction inputs for a batch of unpacked features."""
+    # The byte holds at most 1.0, so a bid above 100 arrives here as 100; the
+    # Java side clips to 100 before deriving, for the same auction both ways.
     bids = np.rint(corpus.slice(x, "bids_by_seat") * 100).astype(np.int64)
     present = corpus.slice(x, "bidding_present")[:, 0] > 0.5
     out = np.zeros((len(x), BID_STRUCTURE_WIDTH), dtype=np.float32)
