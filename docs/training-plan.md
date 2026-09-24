@@ -723,12 +723,57 @@ confident-first, in the container, then register the winner as
 uniform draws a decision instead of N belief draws, which is cheaper per
 draw; the budget is the same 32 worlds.
 
+**2026-09-24, later: step 4 measured before it was built, and finding B
+is withdrawn.** The probe (`ReweightProbe`, container, 72 fixed-contract
+games over seeds 12 and 13, the shipped player's own decisions) reads
+every sampler against the same truth at tricks 1-3, and adds the yardstick
+that was missing on the 23rd: *the probability the net itself gives the
+true place of each unseen card*, which is exactly what an ideal draw from
+its marginals would place.
+
+| tricks 1-3, placed% | as declarer | as defender |
+| --- | --- | --- |
+| uniform | 50.4 | 42.4 |
+| sequential draw (the shipped sampler) | 52.5 | 49.6 |
+| confident-first | 52.3 | 50.7 |
+| paper's estimator: 1024 uniform worlds reweighted by ∏ marginals | 52.7 | 51.1 |
+| the same target, sequential proposal corrected (SIR, K=1024) | 52.3 | 51.2 |
+| **ideal draw from the net's marginals: mean p(true place)** | **52.6** | **50.8** |
+| net argmax | 56.1 | 61.2 |
+
+The sampler loses nothing for the declarer and about a point for the
+defender; the paper's estimator, sampled properly (effective sample size
+300-500 of 1024 with the corrected sequential proposal, 25 of 1024 from
+uniform candidates for a defender, whose product is far more peaked),
+lands within a point of the ideal too. The "two thirds of the margin
+lost between the net and the deal" of the 23rd compared two different
+quantities: argmax accuracy is the share of cards whose *most likely*
+place is right, and a draw from a 60/40 belief lands right 52% of the
+time, not 60%. The gap between 61 and 51 for the defender is the net's
+uncertainty, not the sampler's loss, and no sampler recovers it --
+sharpening the marginals would, at the price of the calibration the vote
+depends on, and the sharpness exponent was swept for the 16-world player
+and left at 1 (§5). Confident-first stays a registered variant
+(+1 for the defender here, +1.08 unresolved in the pairing) and is not
+shipped. Step 4 is closed without code, which is what the probe was for.
+
+What is left for the declarer's belief is the net: its marginals place
++2.2 over uniform for the declarer and +8.4 for a defender, and that is
+what reaches the table. The levers are the ones the paper and the
+23rd's residual point at -- the bid as type and multiplier-bucketed
+magnitude rather than a raw value, the defenders' choices as evidence,
+and human games -- and each is a training-side change measured first
+held out by role (`eval_belief.py --by-role`), then with
+`tools/belief-share.sh`, whose declarer column now reads 52.1 with the
+auction present and whose gate is unchanged.
+
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
   two points the belief has today -- `tools/belief-share.sh`, and the
   defender's column must not fall; measured with the auction replayed
   into the fixed-contract game (33a5ac9): 52.1 against 50.5 today, with
-  the net's argmax at 55.7 -- the gap between the two is the sampler's;
+  the net's argmax at 55.7 -- the gap between the two is the net's
+  uncertainty, not the sampler's (2026-09-24, later);
 - `belief-v2` − `belief` at fixed contracts, resolved and positive;
 - `belief-v2` − `belief-25` closes rather than holds.
 
