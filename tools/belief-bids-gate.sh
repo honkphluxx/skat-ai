@@ -5,6 +5,10 @@
 #   ./tools/belief-bids-gate.sh --quick
 #   ./tools/belief-bids-gate.sh --threads=8
 #   ./tools/belief-bids-gate.sh --model=belief-model-bids-structure
+#   ./tools/belief-bids-gate.sh --seeds="14 15 16" --pair-only
+#                                             three more seeds of the pairing;
+#                                             the pooled line reads every seed
+#                                             on disk, so the first three count
 #
 # tools/belief-bids.sh (2026-09-24) trained the shipped corpus three ways and
 # held the nets out by role: the inputs as they are place a declarer's unseen
@@ -43,10 +47,13 @@ QUICK=false
 THREADS=16
 MODEL=belief-model-bids-structure
 PYTHON=${SKATKLAR_PYTHON:-}
+PAIR_ONLY=false
 for arg in "$@"; do
     case "$arg" in
         --quick)      QUICK=true ;;
         --threads=*)  THREADS="${arg#*=}" ;;
+        --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
+        --pair-only)  PAIR_ONLY=true ;;
         --model=*)    MODEL="${arg#*=}" ;;
         --python=*)   PYTHON="${arg#*=}" ;;
         -h|--help)    sed -n '2,30p' "$GATE_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -65,6 +72,7 @@ fi
 
 LOGROOT=arena-logs; PAIR_SEEDS="11 12 13"; BOARDS=200; QUICKFLAG=""
 if $QUICK; then LOGROOT=arena-logs/quick; PAIR_SEEDS="11"; BOARDS=30; QUICKFLAG="--quick"; fi
+[ -n "${SEEDS_ARG:-}" ] && PAIR_SEEDS="$SEEDS_ARG"
 SUMMARY=$LOGROOT/summary-belief-bids-gate.txt
 LOG=$LOGROOT/belief-bids-gate; mkdir -p "$LOG"
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
@@ -85,14 +93,18 @@ fi
 [ -f STOP ] && { say "STOP"; exit 0; }
 
 # 2. The probe.
-say "--- 2. belief-share.sh, candidate against shipped (shipped: declarer 52.1 / 50.5, defender 49.7 / 42.4) ---"
-./tools/belief-share.sh --candidate="$MODEL" --players=belief-32-shipped-candidate,belief-32-shipped --threads="$THREADS" $QUICKFLAG \
-    | grep -E "^belief|as declarer|as defender|tricks 1-3|FAILED" | sed 's/^/      /' | tee -a "$SUMMARY"
-[ -f STOP ] && { say "STOP"; exit 0; }
+if $PAIR_ONLY; then
+    say "--- 2. belief-share.sh skipped (--pair-only) ---"
+else
+    say "--- 2. belief-share.sh, candidate against shipped (shipped: declarer 52.1 / 50.5, defender 49.7 / 42.4) ---"
+    ./tools/belief-share.sh --candidate="$MODEL" --players=belief-32-shipped-candidate,belief-32-shipped --threads="$THREADS" $QUICKFLAG \
+        | grep -E "^belief|as declarer|as defender|tricks 1-3|FAILED" | sed 's/^/      /' | tee -a "$SUMMARY"
+    [ -f STOP ] && { say "STOP"; exit 0; }
+fi
 
-# 3. The pairing.
+# 3. The pairing. Pooled over every seed on disk for this model, so a
+# second run with --seeds adds to the first rather than replacing it.
 say "--- 3. belief-32-shipped-candidate ($MODEL) vs belief-32-shipped, fixed contracts ---"
-diffs=""
 for SEED in $PAIR_SEEDS; do
     [ -f STOP ] && break
     tag="$(basename "$MODEL")-vs-belief-32-shipped-cardplay-s$SEED"; $QUICK && tag="$tag-b$BOARDS"
@@ -104,6 +116,11 @@ for SEED in $PAIR_SEEDS; do
             > "$report" 2>&1 || { mv "$report" "$LOG/$tag.failed.txt"; say "      FAILED -- see $tag.failed.txt"; continue; }
     fi
     grep -E "^  from declaring|^  from defending|^wins as declarer| = .*game pts/game|^Resolved|^Not resolved" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
+done
+diffs=""
+for report in "$LOG/$(basename "$MODEL")"-vs-belief-32-shipped-cardplay-s*.txt; do
+    [ -f "$report" ] || continue
+    case "$report" in *-b[0-9]*.txt) $QUICK || continue ;; *) $QUICK && continue ;; esac
     d=$(grep -E " = .*game pts/game" "$report" | sed -E 's/.* = ([-+0-9.]+) game pts.*/\1/'); [ -n "$d" ] && diffs="$diffs $d"
 done
 echo "$diffs" | awk '{

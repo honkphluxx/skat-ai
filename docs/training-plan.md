@@ -796,6 +796,28 @@ points: `tools/belief-bids-gate.sh` seats the net as the candidate against
 the shipped one -- belief-share for the placed% (the declarer's 52.1 is
 the number to beat), then the fixed-contract pairing over three seeds.
 
+*At the table (2026-09-24, `tools/belief-bids-gate.sh`):* the belief
+moved, the points did not resolve.
+
+| tricks 1-3, placed% | as declarer | as defender |
+| --- | --- | --- |
+| belief-32-shipped | 52.1 | 49.7 |
+| **the auction spelled out, as belief-32-shipped-candidate** | **53.4** | **50.5** |
+| uniform | 50.5 | 42.4 |
+
+Plus 1.3 for the declarer and 0.8 for a defender, in the same games --
+the largest move the declarer's column has made, and the first gate
+passed with the defender's column rising rather than holding. The
+pairing, fixed contracts, seeds 11-13, 200 boards: -0.26, +1.59, -0.98,
+**pooled +0.12 [-3.17, +3.40]**; from declaring +0.7 a game on average,
+from defending -0.2. Not resolved, so not shipped: the second gate asks
+for resolved and positive, and a belief worth a point of placement is
+worth a fraction of a game point, under this instrument's noise at 600
+boards. The pairing continues on seeds 14-16 (`--seeds="14 15 16"
+--pair-only`; the pooled line reads every seed on disk), and the ship
+decision is made on six. CPU: the first layer is 512x357 instead of
+512x306, a few percent of the net and nothing of the search.
+
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
   two points the belief has today -- `tools/belief-share.sh`, and the
