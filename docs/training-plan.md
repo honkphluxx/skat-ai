@@ -666,11 +666,69 @@ auction -- is small enough to be the population (our own defenders play
 the corpus's card, not always the corpus's choice) and is the part human
 data would speak to. Not the first thing to chase.
 
+**2026-09-24: the auction replayed (33a5ac9), the re-baseline
+(`tools/rebaseline-auction.sh`), and what the paper says.** Every
+fixed-contract log the plan reads was taken again on the corrected
+instrument; the old ones are under `arena-logs/superseded-20260923-225652-
+no-auction-*`. Three readings, six / three / three seeds, 200 boards:
+
+| tricks 1-3, belief-32-shipped | placed% | uniform | net argmax% | confident-first% |
+| --- | --- | --- | --- | --- |
+| as declarer, auction stripped (09-23) | 51.3 | 50.5 | 49.2 | -- |
+| **as declarer, auction replayed** | **52.1** | 50.5 | **55.7** | 52.4 |
+| as defender, auction stripped (09-23) | 49.3 | 42.4 | 60.3 | -- |
+| as defender, auction replayed | 49.7 | 42.4 | 61.1 | 50.6 |
+
+The instrument is fixed: the net's argmax for the declarer rose from 49
+to 56, the auction-mode figure. What reached the table is +0.8 placed
+(51.3 to 52.1), and the split did not move -- **card play's share 2.24
+[1.6, 2.8]** against the ladder's 2.27 [-0.1, 4.6] on the same six seeds,
+discard 1.14 [0.3, 1.9], gap 3.37 [2.2, 4.6]; the self-match "we declare"
+column moved +0.18 a seed, noise. The par column moved +0.35, also noise
+(our defenders hear the auction now too). So finding A was real and worth
+nothing in points *until finding B is fixed*: the declarer's belief now
+knows six points more than uniform and the sampler delivers one and a
+half. `belief-32-shipped-confident` against `belief-32-shipped`, fixed
+contracts, exact pairing: +1.08 [-1.83, +3.98] over three seeds, two of
+three better from declaring; not resolved, not shipped, and not the fix.
+
+The fix is in the paper this belief descends from -- Solinas, Rebstock,
+Buro, *Improving Search with Supervised Learning in Trick-Based Card
+Games*, AAAI 2019 (arXiv 1903.09604) -- which never deals cards one at a
+time. It generates *legal* states first (the whole information set when
+it is small, otherwise a uniform sample of it without replacement) and
+weights each by the product of the net's per-card marginals, p(s|h) ∝
+∏ L(h)[c, loc(c, s)], then samples from that. Hand sizes are never
+violated because every candidate is a real deal, so there is nothing to
+force; the paper adds no further constraints and says suit-length ones
+"could be added". Our `WorldSampler` is a faster approximation of that
+estimator, and the approximation is where two thirds of the margin goes.
+Three more things from the same paper: its true-state sampling ratio is
+"uniformly larger for defender compared to soloist", for the two reasons
+we found (the declarer knows the skat; the declarer's choice of game
+leaks its hand), so a defender-tilted belief is structural; its bidding
+features are each opponent's highest bid as a *type* (which game the bid
+implies) and a *magnitude* bucketed to preserve the multiplier (18-24,
+27-36, 40-48, 50-72, >72), because the multiplier predicts the jacks,
+where ours are raw bids by seat; and it was trained on 20 million human
+games, which is the ISS question from the other end.
+
+**Next, B2 step 4: the paper's sampler.** Draw K uniform consistent
+worlds, weight by the product of marginals, resample the N the search
+uses; `WorldSampler` already draws uniform consistent worlds when every
+weight is 1. Measure before building it into a player: the same
+`BeliefShareMain` reading with K at 64, 256, 1024 beside sequential and
+confident-first, in the container, then register the winner as
+`belief-32-shipped-reweighted` and run the three gates. The cost is K
+uniform draws a decision instead of N belief draws, which is cheaper per
+draw; the budget is the same 32 worlds.
+
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
   two points the belief has today -- `tools/belief-share.sh`, and the
   defender's column must not fall; measured with the auction replayed
-  into the fixed-contract game, once that lands;
+  into the fixed-contract game (33a5ac9): 52.1 against 50.5 today, with
+  the net's argmax at 55.7 -- the gap between the two is the sampler's;
 - `belief-v2` − `belief` at fixed contracts, resolved and positive;
 - `belief-v2` − `belief-25` closes rather than holds.
 
