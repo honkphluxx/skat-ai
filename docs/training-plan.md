@@ -881,6 +881,27 @@ six seeds are re-run on the corrected slot before any of the numbers
 above are read again; the calibration probe and the belief-share
 figures stand, since neither depends on the card play.
 
+*On the corrected slot (2026-09-25):* belief-share reads as before,
+declarer 53.6 against 52.1, defender 50.4 against 49.7. The pairing,
+fixed contracts, six seeds: +0.01, +2.67, -0.38, -0.27, -0.70, -0.58,
+**pooled +0.13 [-1.21, +1.46]**; from declaring +0.25 a game on average,
+from defending -0.02. The ladder's +1.3 came back to the cent (-1.08
+became +0.13) and what is left is the net's own worth, which is nothing
+this instrument can see: a point and a half of placement for the
+declarer and three quarters for a defender buys at most a quarter of a
+game point, and resolving a quarter of a point takes twenty thousand
+boards. **Step 5 closes here, not shipped.** Gate one passed, gate two
+did not, and gate three was not run. The encoding stays in the tree
+for the day a net is worth enough to need it; the model directory stays
+on disk. What the week says, put plainly: the belief's marginal accuracy
+is no longer the binding constraint on points at this table. The shipped
+belief is worth +2.4 over uniform; the next point of accuracy is worth
+a fraction of that, and the search converts it at the rate a point of
+placement deserves. The plan's own ranking has said since the 9th where
+the next lever is -- the auction -- and Phase A is blocked on a decision
+about void mode, not on code (§4, "Phase A is blocked on one decision").
+That decision is the next thing to make.
+
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
   two points the belief has today -- `tools/belief-share.sh`, and the
