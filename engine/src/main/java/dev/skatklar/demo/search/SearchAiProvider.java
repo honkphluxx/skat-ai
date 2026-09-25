@@ -13,6 +13,7 @@ import dev.skatklar.demo.ramsch.RamschPolicy;
 import dev.skatklar.demo.solve.DoubleDummySolver;
 import dev.skatklar.demo.solve.NullSolver;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -387,12 +388,51 @@ public final class SearchAiProvider implements SkatAiProvider {
         final long budgetNanos;
         final CardPlayObserver observer;
         final boolean ladder;
+        final TrapOrder trap;
 
         CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder) {
+            this(budgetNanos, observer, ladder, TrapOrder.OFF);
+        }
+
+        CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder,
+                         TrapOrder trap) {
             this.budgetNanos = Math.max(0L, budgetNanos);
             this.observer = observer;
             this.ladder = ladder;
+            this.trap = trap == null ? TrapOrder.OFF : trap;
         }
+    }
+
+    /**
+     * What a declarer does with a game it believes lost, besides the ladder.
+     *
+     * <p>The SkatZero audit (docs/training-plan.md, section 2.9) found the
+     * whole of the declaring gap to it in the games our declarer sees at flat
+     * zero -- every legal card losing in every sampled world. There we win 7%
+     * and SkatZero, which has no notion of a lost game, 20%, because its lines
+     * leave the defenders more ways to hand the game back and the same
+     * defenders take them. The trap tally asks, per card and world, what share
+     * of the next defender's legal replies would let the declarer reach the
+     * target after all (see {@link #trapWidth}), and adds it up over the
+     * worlds. Two orders, because the ladder's Schneider defence is worth
+     * +1.30 and a trap that is not sprung may be a line that is Schneidered:
+     *
+     * <ul>
+     *   <li>{@link #TRAP_FIRST}: the widest trap, the ladder's 31-point rung
+     *       as its tiebreak;
+     *   <li>{@link #SAFETY_FIRST}: the ladder's card as today, and among the
+     *       cards that hold 31 equally often, the widest trap.
+     * </ul>
+     *
+     * Only ever asked on a trump contract, for the declarer, at flat zero;
+     * every other decision is byte for byte what it was.
+     */
+    public enum TrapOrder { OFF, TRAP_FIRST, SAFETY_FIRST }
+
+    /** The same player, with a trap tally at flat zero. See {@link TrapOrder}. */
+    public SearchAiProvider withTrap(TrapOrder order) {
+        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer,
+                cardPlay.ladder, order));
     }
 
     /** Card points the declarer must reach to stay out of Schneider. */
@@ -418,7 +458,8 @@ public final class SearchAiProvider implements SkatAiProvider {
      * {@code belief-32-shipped-ladder} and gated there before it ships.
      */
     public SearchAiProvider withLadder() {
-        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer, true));
+        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer, true,
+                cardPlay.trap));
     }
 
     /**
@@ -447,18 +488,77 @@ public final class SearchAiProvider implements SkatAiProvider {
 
     /** The same player, with a ceiling on one card decision. See {@link #cardPlay}. */
     public SearchAiProvider withCardBudget(long nanos) {
-        return withCardPlay(new CardPlaySettings(nanos, cardPlay.observer, cardPlay.ladder));
+        return withCardPlay(new CardPlaySettings(nanos, cardPlay.observer, cardPlay.ladder,
+                cardPlay.trap));
     }
 
     /** The same player, telling {@code observer} what each card cost. */
     public SearchAiProvider withCardPlayObserver(CardPlayObserver observer) {
-        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, observer, cardPlay.ladder));
+        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, observer, cardPlay.ladder,
+                cardPlay.trap));
     }
 
     private SearchAiProvider withCardPlay(CardPlaySettings settings) {
         return new SearchAiProvider(delegate, personality, seed, worlds, alphaMuDepth,
                 biddingBudgetNanos, temperature, adaptiveBidding, passRule, marginPoints,
                 ruleTies, nullWorlds, nullTies, worldThreads, settings, discard);
+    }
+
+    /**
+     * The share of the next defender's legal replies, after the declarer plays
+     * {@code card}, from which the declarer still reaches {@code needed} card
+     * points against perfect play -- how wide a trap {@code card} sets.
+     *
+     * <p>{@code hands} are the three hands by seat, the declarer's including
+     * {@code card}; {@code trick} the cards already in the current trick, led
+     * by {@code leader}; {@code needed} counts the current trick. If the card
+     * completes the trick, the trick is scored and the next lead taken by its
+     * winner: a defender who leads is the one whose replies are counted, and
+     * a declarer who leads again is credited with the widest trap among its
+     * leads. Zero when no defender has a card left to play.
+     */
+    static double trapWidth(Contract contract, SkatAi.Seat declarer, SkatAi.Seat me,
+                            List<? extends Collection<Card>> hands, SkatAi.Seat leader,
+                            List<Card> trick, int needed, Card card) {
+        List<List<Card>> after = new ArrayList<>(3);
+        for (Collection<Card> hand : hands) after.add(new ArrayList<>(hand));
+        after.get(me.ordinal()).remove(card);
+        List<Card> played = new ArrayList<>(trick);
+        played.add(card);
+        if (played.size() < 3) {
+            return defenderGiftShare(contract, declarer, me.next(), after, leader, played, needed);
+        }
+        List<SkatAi.PlayedCard> plays = new ArrayList<>(3);
+        SkatAi.Seat seat = leader;
+        for (Card inTrick : played) {
+            plays.add(new SkatAi.PlayedCard(seat, inTrick));
+            seat = seat.next();
+        }
+        SkatAi.Seat winner = SkatRules.trickWinner(contract, plays);
+        int still = winner == declarer ? needed - SkatRules.cardPoints(played) : needed;
+        if (still < 1) return 1.0;
+        if (winner != declarer) {
+            return defenderGiftShare(contract, declarer, winner, after, winner, List.of(), still);
+        }
+        double widest = 0;
+        for (Card lead : after.get(declarer.ordinal())) {
+            widest = Math.max(widest,
+                    trapWidth(contract, declarer, declarer, after, declarer, List.of(), still, lead));
+        }
+        return widest;
+    }
+
+    /** Of {@code defender}'s legal cards here, the share that let the declarer reach {@code needed}. */
+    private static double defenderGiftShare(Contract contract, SkatAi.Seat declarer,
+                                            SkatAi.Seat defender, List<List<Card>> hands,
+                                            SkatAi.Seat leader, List<Card> trick, int needed) {
+        if (hands.get(defender.ordinal()).isEmpty()) return 0;
+        List<DoubleDummySolver.Verdict> replies = DoubleDummySolver.movesReaching(contract,
+                declarer, defender, hands, leader, trick, needed);
+        if (replies.isEmpty()) return 0;
+        int gifts = 0;
+        for (DoubleDummySolver.Verdict reply : replies) if (reply.reachesTarget()) gifts++;
+        return gifts / (double) replies.size();
     }
 
     /** What the card play was told to do. Package-private, for the test that keeps it that way. */
@@ -1206,8 +1306,39 @@ public final class SearchAiProvider implements SkatAiProvider {
                 return tell(context, shown, cushion, searched, cushionAsked,
                         sampleCard(legal, scores, searched));
             }
-            Comparator<Card> byVotes = Comparator.comparingInt(card -> scores.getOrDefault(card, 0));
-            Comparator<Card> byCushion = Comparator.comparingInt(card -> held.getOrDefault(card, 0));
+
+            // The trap tally, on the same decisions the ladder is asked on and
+            // for the same seat: see TrapOrder. Where it is off, or not asked,
+            // the three keys below are the two the player always had and an
+            // empty third, so the card is the one it always was.
+            Map<Card, Integer> first = scores;
+            Map<Card, Integer> second = held;
+            Map<Card, Integer> third = Map.of();
+            if (cardPlay.trap != TrapOrder.OFF && context.mySeat == context.game.declarer
+                    && playsForCardPoints(context.game.contract) && topVoteIsZero(votes)) {
+                Map<Card, Integer> trap = new LinkedHashMap<>();
+                for (Card card : legal) trap.put(card, 0);
+                tallyOver(sampled, legal, trap, (sample, into) -> castTrap(context, sample, into),
+                        deadline);
+                if (cardPlay.trap == TrapOrder.TRAP_FIRST) {
+                    first = trap;
+                    second = rung != null ? rung : Map.of();
+                    third = rung != null ? rungHeld : cushion;
+                } else if (rung != null) {
+                    first = rung;
+                    second = trap;
+                    third = rungHeld;
+                } else {
+                    first = trap;
+                    second = cushion;
+                }
+            }
+            Map<Card, Integer> firstKey = first;
+            Map<Card, Integer> secondKey = second;
+            Map<Card, Integer> thirdKey = third;
+            Comparator<Card> byVotes = Comparator.comparingInt(card -> firstKey.getOrDefault(card, 0));
+            Comparator<Card> byCushion = Comparator.comparingInt(card -> secondKey.getOrDefault(card, 0));
+            Comparator<Card> byThird = Comparator.comparingInt(card -> thirdKey.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
             Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context, nullTies) : byCost.reversed();
             return tell(context, shown, cushion, searched, cushionAsked, legal.stream()
@@ -1220,6 +1351,7 @@ public final class SearchAiProvider implements SkatAiProvider {
                     // dial used to live.
                     .max(byVotes
                             .thenComparing(byCushion)
+                            .thenComparing(byThird)
                             .thenComparing(rest)
                             .thenComparing(Comparator.comparing(Card::toString).reversed()))
                     .orElse(legal.get(0)));
@@ -1406,6 +1538,22 @@ public final class SearchAiProvider implements SkatAiProvider {
                                     List<WorldSampler.World> sampled, List<Card> legal,
                                     Map<Card, Integer> into, boolean forTheCushion,
                                     int rungPoints, long deadlineNanos) {
+            WorldCaster caster = rungPoints > 0
+                    ? (sample, tally) -> castRung(context, sample, tally, rungPoints)
+                    : forTheCushion
+                            ? (sample, tally) -> castCushion(context, sample, tally)
+                            : (sample, tally) -> castVotes(context, sample, tally);
+            return tallyOver(sampled, legal, into, caster, deadlineNanos);
+        }
+
+        /** One world's contribution to a tally. */
+        private interface WorldCaster {
+            void cast(WorldSampler.World sample, Map<Card, Integer> into);
+        }
+
+        /** The worlds, sequentially or across {@link #worldThreads}, each cast into one tally. */
+        private int tallyOver(List<WorldSampler.World> sampled, List<Card> legal,
+                              Map<Card, Integer> into, WorldCaster caster, long deadlineNanos) {
             int chunks = Math.min(worldThreads, sampled.size());
             if (chunks <= 1) {
                 int searched = 0;
@@ -1418,9 +1566,7 @@ public final class SearchAiProvider implements SkatAiProvider {
                             && System.nanoTime() - deadlineNanos >= 0) {
                         break;
                     }
-                    if (rungPoints > 0) castRung(context, sample, into, rungPoints);
-                    else if (forTheCushion) castCushion(context, sample, into);
-                    else castVotes(context, sample, into);
+                    caster.cast(sample, into);
                     searched++;
                 }
                 return searched;
@@ -1446,9 +1592,7 @@ public final class SearchAiProvider implements SkatAiProvider {
                         int index = cursor.getAndIncrement();
                         if (index >= sampled.size()) break;
                         WorldSampler.World sample = sampled.get(index);
-                        if (rungPoints > 0) castRung(context, sample, tally, rungPoints);
-                        else if (forTheCushion) castCushion(context, sample, tally);
-                        else castVotes(context, sample, tally);
+                        caster.cast(sample, tally);
                         searched++;
                     }
                     return new Tally(tally, searched);
@@ -1535,6 +1679,27 @@ public final class SearchAiProvider implements SkatAiProvider {
                     + SkatRules.cardPoints(sample.skat());
             int needed = points - banked;
             if (needed >= 1) tally(context, sample, played, needed, true, into);
+        }
+
+        /**
+         * The trap tally: for every card, the share of the next defender's
+         * legal replies that would let the declarer reach the target after
+         * all, in thousandths, added into {@code into}. Only asked at flat
+         * zero, where no card reaches it against perfect defence in this
+         * world, so a reply that does is a mistake the defence can make.
+         */
+        private void castTrap(SkatAi.DecisionContext context, WorldSampler.World sample,
+                              Map<Card, Integer> into) {
+            List<Card> played = new ArrayList<>(3);
+            for (SkatAi.PlayedCard play : context.currentTrick.plays) played.add(play.card);
+            int needed = targetIn(context, sample);
+            if (needed < 1) return;
+            for (Card card : into.keySet()) {
+                double width = trapWidth(context.game.contract, context.game.declarer,
+                        context.mySeat, sample.hands(), context.currentTrick.leader, played,
+                        needed, card);
+                into.merge(card, (int) Math.round(1000 * width), Integer::sum);
+            }
         }
 
         /** The card points the declarer still needs in this world, by this player's risk. */

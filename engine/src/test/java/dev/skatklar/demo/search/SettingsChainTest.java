@@ -46,6 +46,21 @@ public class SettingsChainTest {
         assertTrue(player.cardPlaySettings().ladder);
     }
 
+    @Test public void theTrapSurvivesEveryBuilderAfterIt() {
+        SearchAiProvider player = base().withAdaptiveBidding().withMarginTiebreak(15)
+                .withRuleTiebreak().withLadder().withTrap(SearchAiProvider.TrapOrder.SAFETY_FIRST)
+                .withNullWorlds(24).withNullTiebreak(RuleTiebreak.NullOrder.LOW_RANK)
+                .withBiddingBudget(1_000L).withWorldThreads(2).withCardBudget(5L)
+                .withCardPlayObserver(report -> {}).withDiscardSearch(8, 5, 0L).withTemperature(0.1);
+        assertEquals(SearchAiProvider.TrapOrder.SAFETY_FIRST, player.cardPlaySettings().trap);
+        assertTrue(player.cardPlaySettings().ladder);
+        // And the ladder, applied after the trap, keeps it too.
+        player = base().withTrap(SearchAiProvider.TrapOrder.TRAP_FIRST).withLadder();
+        assertEquals(SearchAiProvider.TrapOrder.TRAP_FIRST, player.cardPlaySettings().trap);
+        assertEquals("off unless asked for", SearchAiProvider.TrapOrder.OFF,
+                base().withLadder().cardPlaySettings().trap);
+    }
+
     @Test public void theBiddingBudgetBuilderKeepsTheThreads() {
         // withBiddingBudget used to reset the world threads too; the order is
         // the app's, where the budget comes first.

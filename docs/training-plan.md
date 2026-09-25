@@ -183,6 +183,18 @@ then the pairing against the shipped player, then this row. SkatZero's
 48 of 238 is the ceiling a trap criterion can aim at; the gap's whole
 2.0 a game from declaring sits in those 238 games.
 
+*Built (2026-09-25):* `SearchAiProvider.TrapOrder` and `trapWidth`,
+registered as `belief-32-shipped-trap` (widest trap, 31 as tiebreak) and
+`belief-32-shipped-trap-safe` (31, then the widest trap), both the shipped
+player plus the tally and nothing else. `TrapWidthTest` checks the width
+against a brute-force minimax on 400 random three-card endgames through
+all three paths (reply inside the trick, a defender leading next, the
+declarer leading again), and fails on each of four seeded mistakes in it.
+A container smoke run, seed 14, 38 boards -- a hint, not a result: games
+won 16 / 20 / 17 (shipped / trap / trap-safe), flat-zero games won 1 / 5
+/ 2, Schneidered 3 / 3 / 3, audit wall time +3% / +2%. The measurement
+is `tools/trap.sh`.
+
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
 that is a discard finding for Phase D's list, not for this lever. And

@@ -248,6 +248,13 @@ public final class BeliefPlayers {
                 "The shipped player, the surest cards dealt first"));
         registry.register(renamed(nullVariant("belief-32-shipped-flat", 32, NullOrder.LOW_RANK, 128, loader),
                 "The shipped player before the ladder (2026-09-22)"));
+        // 2026-09-25, docs/training-plan.md section 2.9: at flat zero, the
+        // share of the defender's replies that hand the game back. Two orders
+        // against the ladder's 31-point rung; see SearchAiProvider.TrapOrder.
+        registry.register(trapVariant("belief-32-shipped-trap", SearchAiProvider.TrapOrder.TRAP_FIRST,
+                "The shipped player, the widest trap at flat zero, then 31", loader));
+        registry.register(trapVariant("belief-32-shipped-trap-safe", SearchAiProvider.TrapOrder.SAFETY_FIRST,
+                "The shipped player, 31 at flat zero, then the widest trap", loader));
         // Phase D: the shipped player with the two buried cards chosen by search
         // instead of by rule. Ten candidates -- pairs from the five cards the
         // heuristic wants least, which over 264 declared boards gives up none of
@@ -331,6 +338,21 @@ public final class BeliefPlayers {
                         .withAdaptiveBidding(PassRule.DEFAULT).withMarginTiebreak(15)
                         .withRuleTiebreak().withNullWorlds(128)
                         .withNullTiebreak(NullOrder.LOW_RANK).withLadder();
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
+    /** The shipped player -- ladder and all -- with a trap tally at flat zero. */
+    private static Contestant trapVariant(String id, SearchAiProvider.TrapOrder order,
+                                          String name, Loader loader) {
+        Contestant shipped = ladderVariant(id, loader);
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() { return name; }
+            @Override public SkatAiProvider newProvider(long seed) {
+                SkatAiProvider player = shipped.newProvider(seed);
+                return player instanceof SearchAiProvider search ? search.withTrap(order) : player;
             }
             @Override public String toString() { return id; }
         };

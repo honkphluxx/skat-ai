@@ -61,6 +61,24 @@ public class BeliefPlayersTwinTest {
         assertTrue("the shipped player has the ladder", shippedLadder);
         assertFalse("the flat variant has not -- so this reading can tell them apart", flatLadder);
         assertEquals("the candidate slot plays the shipped card play", shippedLadder, candidateLadder);
+
+        // The trap variants are the shipped player plus the trap and nothing else.
+        assertTrue("belief-32-shipped-trap keeps the ladder",
+                ladder(registry.resolve("belief-32-shipped-trap").newProvider(1)));
+        assertTrue("belief-32-shipped-trap-safe keeps the ladder",
+                ladder(registry.resolve("belief-32-shipped-trap-safe").newProvider(1)));
+        assertEquals("TRAP_FIRST", trap(registry.resolve("belief-32-shipped-trap").newProvider(1)));
+        assertEquals("SAFETY_FIRST", trap(registry.resolve("belief-32-shipped-trap-safe").newProvider(1)));
+        assertEquals("OFF", trap(registry.resolve("belief-32-shipped").newProvider(1)));
+    }
+
+    private static String trap(SkatAiProvider provider) throws Exception {
+        Method settings = SearchAiProvider.class.getDeclaredMethod("cardPlaySettings");
+        settings.setAccessible(true);
+        Object cardPlay = settings.invoke(provider);
+        Field trap = cardPlay.getClass().getDeclaredField("trap");
+        trap.setAccessible(true);
+        return String.valueOf(trap.get(cardPlay));
     }
 
     /** The ladder flag, read through the package-private accessor the engine's own tests use. */
