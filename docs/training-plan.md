@@ -434,7 +434,13 @@ decision to delegate rather than the stand-in ever playing.
 declaring against the Ramsch that passing buys -- but in void mode passing buys
 nothing, so under `--passed-in=void` it discounts against a penalty the mode
 has removed. Three ways out are set out at the end of the README; the choice
-changes what the sweep measures.
+changes what the sweep measures. *(Overtaken, 2026-09-13 to 15: the sweep
+ran in void mode with the discount left in -- the third way -- and the dial
+lost to its own guards; the adaptive bidder with the cushion shipped instead.
+The Ramsch discount still prices against the canon in the app, which is
+where it belongs. Nothing here is waiting on a decision any more; the
+paragraph stays as the record of why the void-mode auction numbers carry a
+constant offset.)*
 
 ### Phase B2 — belief v2 (the week that matters)
 
@@ -898,9 +904,12 @@ is no longer the binding constraint on points at this table. The shipped
 belief is worth +2.4 over uniform; the next point of accuracy is worth
 a fraction of that, and the search converts it at the rate a point of
 placement deserves. The plan's own ranking has said since the 9th where
-the next lever is -- the auction -- and Phase A is blocked on a decision
-about void mode, not on code (§4, "Phase A is blocked on one decision").
-That decision is the next thing to make.
+the next lever is -- the auction -- and that thread ran its course
+between the 13th and the 15th: the aggression dial lost to its own guards
+and the adaptive bidder with the cushion shipped (arena/README.md). What
+is left of the auction is the ceiling and the contract choice, which is
+the SkatZero gap's other half; the "blocked on one decision" line in §4
+was stale when this was written and is marked so now.
 
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
