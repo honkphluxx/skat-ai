@@ -118,6 +118,77 @@ overall. **Phase A moves ahead of Phase D**, and the Null variants are the first
 thing in it — a Null that can only ever be bid to 23 is a contract we own on
 paper and never play.
 
+## 2.9 Where the SkatZero gap is, 2026-09-25: the games our declarer gives up on
+
+`tools/skatzero-gap.sh`, two instruments on the player that ships.
+
+**The row.** `belief-32-shipped` − `skatzero`, oracle contracts, three
+seeds, 200 boards: −1.29, −1.93, −4.54, **pooled −2.59 [−6.87, +1.69]** --
+the 2026-09-17 shipped player read −2.57. Unchanged, but not in the same
+place: that day the whole gap was Null (39% of makeable Nulls won against
+78%); today Null is **18 of 18 for us against 16 of 18**, the Null levers
+did what they were bought for, and the suits are level (223 of 247 won
+against 222). What is left is Grand -- 245 of 260 against 253 -- and seed
+13, where SkatZero made five more Grands and three more Spades and the row
+resolved on its own at −4.54. Eight Grands in 260 is a difference at the
+edge of what three seeds can see, so the row alone does not say where the
+gap is. The audit does.
+
+**The audit.** `declaring-audit.sh --par=skatzero`: the same 529 boards
+at greedy's contracts, our defenders both times, the solver judging every
+card of both declarers. SkatZero wins 319 to our 302, from declaring −3.76
+against −5.75; on the not-cold boards it alone wins 44 and we alone win
+28. And the card play that does it is *worse* by the solver's lights:
+SkatZero throws 52 won positions in 44 games where we throw 33 in 29. It
+wins because our defenders hand it more games -- 142 gifts in 117 games
+against 118 in 102 -- and the place that happens is exact:
+
+| boards where our declarer saw every card at zero (238 of 529) | ours | SkatZero |
+| --- | --- | --- |
+| won | **17** (7%) | **48** (20%) |
+| defender decisions while the game was lost | 3,487 | 3,304 |
+| of them, positions with a card that gives the game away | 413 (11.8%) | 515 (15.6%) |
+| such positions three quarters or more of whose cards give it away | 19 | 40 |
+| gifts actually taken | 25 (6.1% of chances) | 58 (11.3%) |
+
+Everywhere else the two draw errors at the same rate (16.9% against 16.7%
+of chances on the not-cold boards as a whole). The difference is confined
+to the games our declarer has decided are lost -- 45% of the boards -- and
+there it is mechanical. At flat zero the ladder aims at 31: the Schneider
+defence that shipped for +1.30. That line cashes what it can and hands the
+rest over, and the defenders, offered nothing to get wrong, get nothing
+wrong: our trap count falls off after trick five (t6-t9: 160 chances to
+SkatZero's 218) and the traps we do leave are narrow. SkatZero, which has
+no notion of a lost game, keeps playing for the win, leaves twice as many
+wide traps, and the same defenders walk into them at twice the rate. The
+take rate rises with the width of the trap on both sides (under a quarter
+of the defender's cards losing: 3-4% taken; three quarters or more: 21%
+for ours, 40% for SkatZero's), so width is a proxy the solver can compute,
+and it is not the whole of it -- at equal width SkatZero's traps are still
+taken more often, which is the part no double-dummy criterion sees.
+
+**The lever, named.** In a position the vote calls lost in every world,
+a card's worth is not its floor but the share of the defender's replies
+that hand the game back -- and that share is one solver question per
+card per world, `movesReaching` asked from the defender's seat at the
+winning rung, the same cost as the rung tally the ladder already pays.
+The variant: at flat zero, tally that width over the sampled worlds and
+play the widest trap, with the 31-point rung as the tiebreak rather than
+the goal -- and its mirror, 31 first and the trap as the tiebreak, because
+the ladder's +1.30 was real and a trap that concedes Schneider in the
+worlds where it is not sprung may cost more than it wins. Both are
+measured before either ships: the audit against the solver (flat-zero
+games won, 17 today, and the Schneider count beside it), then the split,
+then the pairing against the shipped player, then this row. SkatZero's
+48 of 238 is the ceiling a trap criterion can aim at; the gap's whole
+2.0 a game from declaring sits in those 238 games.
+
+Two smaller readings from the same run. SkatZero's discard leaves the
+game cold on 19 boards where ours does not, against 6 the other way;
+that is a discard finding for Phase D's list, not for this lever. And
+the honesty control on the outside bot: 0 of 5,290 decisions changed
+under a reshuffle of the cards it cannot see.
+
 ## 2.8 B2 step 3 answered, 2026-09-20: one net, and it pays at Null
 
 **Share the network.** The mixed net -- the v2 trump corpus plus 323,524
