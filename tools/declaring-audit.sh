@@ -10,6 +10,11 @@
 #                              --candidate=belief-model-bids-structure
 #                                          the shipped player with another
 #                                          net (-Dbelief.model.candidate.dir)
+#   ./tools/declaring-audit.sh --par=skatzero
+#                                          another declarer in par's chair:
+#                                          the same boards, the same contracts,
+#                                          our defenders both times, and the
+#                                          solver still judging every card
 #
 # declaring-par.sh --split prices the card-play share of the gap to par (4.06)
 # and cannot say where it is: the arena's per-board CSV is one number a board,
@@ -49,13 +54,14 @@ for arg in "$@"; do
         --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
         --player=*)   PLAYER_ARG="${arg#*=}" ;;
         --candidate=*) CANDIDATE="${arg#*=}" ;;
-        -h|--help)    sed -n '2,28p' "$AUDIT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --par=*)      PAR_ARG="${arg#*=}" ;;
+        -h|--help)    sed -n '2,33p' "$AUDIT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
 
 US=${PLAYER_ARG:-belief-32-shipped}
-PAR=solver-heuristic-discard
+PAR=${PAR_ARG:-solver-heuristic-discard}
 LOG=arena-logs/par-audit
 PARLOG=arena-logs/par
 BOARDS=200
@@ -69,6 +75,7 @@ stamp=$(date '+%Y%m%d-%H%M%S')
 # A variant's files go in a folder of their own, so they never overwrite the
 # shipped player's -- and its report names the player.
 [ "$US" != belief-32-shipped ] && LOG="$LOG/$US" && mkdir -p "$LOG"
+[ "$PAR" != solver-heuristic-discard ] && LOG="$LOG/par-$PAR" && mkdir -p "$LOG"
 PROPS=""
 [ -n "${CANDIDATE:-}" ] && PROPS="-Dbelief.model.candidate.dir=$CANDIDATE" && LOG="$LOG/$(basename "$CANDIDATE")" && mkdir -p "$LOG"
 report="$LOG/declaring-audit-$stamp.txt"
