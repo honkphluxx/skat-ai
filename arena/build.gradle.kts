@@ -149,6 +149,21 @@ tasks.register<JavaExec>("declaringAudit") {
 }
 
 /**
+ * Does the vote rank the declarer's cards the way the table does? Plays every
+ * legal card out against the real defenders from recorded positions.
+ *
+ * ./gradlew :arena:rolloutAudit --args="--seeds=14,15,16 --boards=200 --rollouts=8 --per-band=12 --threads=16 --out=arena-logs/rollout"
+ */
+tasks.register<JavaExec>("rolloutAudit") {
+    group = "verification"
+    description = "Rolls every legal card out from recorded declarer positions and compares the order with the vote's"
+    mainClass.set("dev.skatklar.training.arena.RolloutAuditMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
+/**
  * Phase B2 step 1: how often the worlds a player samples are the world on the
  * table, by trick. See BeliefShareMain and tools/belief-share.sh.
  *
