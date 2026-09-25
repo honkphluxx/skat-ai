@@ -281,8 +281,17 @@ public final class BeliefPlayers {
             // LOW_RANK and 128 worlds shipped that is no longer
             // belief-32-adaptive-margin-ties. Without this the Null gate would
             // be measuring a new model behind last month's card play.
+            //
+            // Which is exactly what happened when the ladder shipped
+            // (2026-09-22): belief-32-shipped became ladderVariant and this
+            // slot stayed nullVariant, so a net measured through it played
+            // without the Schneider defence the shipped net had -- and read
+            // 1.1 points a game worse for it, with the Schneiders it took
+            // when losing (78 against 34 on the same 520 boards) as the only
+            // symptom. Built from the same function now, so the two cannot
+            // drift again; BeliefPlayersTwinTest holds them together.
             registry.register(renamed(
-                    nullVariant("belief-32-shipped-candidate", 32, NullOrder.LOW_RANK, 128, other),
+                    ladderVariant("belief-32-shipped-candidate", other),
                     "The shipped player with the candidate model " + candidate));
         }
     }

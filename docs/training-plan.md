@@ -852,6 +852,35 @@ and by trick, side by side. Whatever it says, the encoding stays: the
 derivation is a width the model asks for, and a model that does not ask
 gets the vector it always got.
 
+*The audit named it (2026-09-24, late).* Both audits on seeds 14-16, the
+same 520 boards: throws 38 in 31 games against 32 in 24, flat-zero
+decisions 36.8% against 36.2%, the vote calibrated alike, the lost games
+that were once won 13 against 12 -- nothing in the card play differed,
+except one line: the gap "of it: same result, different value" went from
+-0.09 to +0.70. The per-game files say what that is. **When the shipped
+declarer loses it is Schneidered 34 times in 245; the candidate, 78 times
+in 249** (par, on the same boards, 33 and 37). Mean declarer points in a
+lost game 41.6 against 36.8. Forty-four extra Schneiders at fifty-odd
+tournament points each is the whole 4.7 a game the candidate was short.
+That is the ladder's signature exactly -- the ladder is the Schneider
+defence, shipped 2026-09-22 for +1.30 -- and `BeliefPlayers` says why:
+when `belief-32-shipped` became `ladderVariant`, `belief-32-shipped-
+candidate` stayed `nullVariant`. Every net measured through the candidate
+slot since then played the shipped card play of the 21st against the
+shipped card play of the 22nd, and a net worth +1.3 of placement read
+-1.08 [-2.71, +0.55] for it: the ladder's +1.3 taken away, and the net's
+own worth, whatever it is, hidden inside the noise.
+
+Fixed: the slot is built from `ladderVariant` like the player it stands
+for, and `BeliefPlayersTwinTest` reads the ladder flag off both (and off
+`belief-32-shipped-flat`, which must differ, so the reading is a
+reading); it fails on the old line. The rule it enforces is the one
+written above it in the file and broken anyway: a gate that swaps the
+belief has to swap it underneath the player people actually get. The
+six seeds are re-run on the corrected slot before any of the numbers
+above are read again; the calibration probe and the belief-share
+figures stand, since neither depends on the card play.
+
 **Gates, all three, restated:**
 - placement at tricks 1–3, as declarer, clears uniform by more than the
   two points the belief has today -- `tools/belief-share.sh`, and the
