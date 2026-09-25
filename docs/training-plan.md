@@ -248,6 +248,41 @@ each to change some card the declarer plays -- the part no test of the
 helper could see; it fails with the depth not passed, or the trap never
 asked. `tools/trap.sh` now runs this pair by default.
 
+*Measured (2026-09-25, evening): nothing either -- the trap line closes.*
+Audit, seeds 14-16: won 273 / 270 against 275, flat-zero games won 13 /
+10 against 15, Schneidered 34 / 32 against 34. Pairing, seeds 11-13:
+two-defender trap-first **-0.18 [-1.06, +0.70]**, safety-first **+0.04
+[-0.66, +0.75]**. Four trap variants, one and two defenders, both
+orders: none moves the flat-zero games or the points. What SkatZero does
+in those games is not a width a double-dummy tally can see; the
+registrations stay as controls and nothing ships.
+
+**Where that leaves the question: how the worlds add up.** The shipped
+declarer's own decisions on those 520 boards, by the vote share of the
+card it played, against two outcomes -- whether the card wins in the
+true deal against perfect defence (what each world's vote assumes), and
+whether the game was in fact won at this table:
+
+| vote share of the card played | decisions | wins vs perfect defence | game actually won |
+| --- | --- | --- | --- |
+| 0 | 1,497 | 0.1% | 2.3% |
+| 1-25% | 274 | 8.0% | **31.0%** |
+| 26-50% | 204 | 25.0% | **46.1%** |
+| 51-75% | 215 | 57.2% | 70.2% |
+| 76-99% | 382 | 88.5% | 93.2% |
+| 100% | 1,497 | 99.7% | 100.0% |
+
+The vote is calibrated -- against the opponent it models, a defence that
+sees every card. Against the defence actually at the table it is
+pessimistic by twenty points in the middle band: a card the worlds give
+one chance in eight wins the game nearly one time in three. Every world
+is solved as if the defenders were omniscient, so the tally prices
+exactly the thing real defenders are not. Whether that mis-*ranks*
+cards, rather than only mis-levels them, is the question the next
+instrument has to answer: from recorded positions, play each legal card
+out against the real defenders several times and compare that ranking
+with the vote's.
+
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
 that is a discard finding for Phase D's list, not for this lever. And
