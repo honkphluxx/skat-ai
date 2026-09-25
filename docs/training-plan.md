@@ -195,6 +195,46 @@ won 16 / 20 / 17 (shipped / trap / trap-safe), flat-zero games won 1 / 5
 / 2, Schneidered 3 / 3 / 3, audit wall time +3% / +2%. The measurement
 is `tools/trap.sh`.
 
+*Measured (2026-09-25, `tools/trap.sh`): nothing, and the reason is
+visible.* The audit on seeds 14-16 against the shipped player on the same
+boards:
+
+| seeds 14-16, 520 boards | won | from declaring | flat-zero games won | Schneidered |
+| --- | --- | --- | --- | --- |
+| belief-32-shipped | 275 | -9.25 | 15 of 252 | 34 of 245 |
+| belief-32-shipped-trap | 276 | -9.34 | 16 of 252 | 37 of 244 |
+| belief-32-shipped-trap-safe | 277 | -9.02 | 17 of 252 | 33 of 243 |
+
+The pairing against the shipped player, seeds 11-13: trap-first +0.47,
+-0.81, -0.27, **pooled -0.20 [-1.80, +1.39]**; safety-first +0.56, -0.49,
+-0.18, **pooled -0.04 [-1.38, +1.31]**. Neither ships; the 38-board smoke
+was noise. The cost was invisible (games/s unchanged).
+
+Why, from the decision files: the variants played the shipped player's
+card at 1,050 of the first 1,150 flat-zero decisions (trap-first; 1,168 for
+safety-first) and diverged in 98 and 76 games of 520, always first at a
+flat-zero declarer decision -- so the gating is exact and the tally is
+simply flat most of the time. It is flat because it looks at the wrong
+defender. Split the gift chances by who is to play:
+
+| defender decisions while the game is lost, with a card that gives it back | right after the declarer | after the other defender |
+| --- | --- | --- |
+| SkatZero, s11-13 | 299 chances, 34 taken (11.4%) | 526 chances, **108 taken (20.5%)** |
+| shipped, s14-16 | 267, 21 (7.9%) | 466, 85 (18.2%) |
+| trap-first, s14-16 | 281, 21 (7.5%) | 471, 87 (18.5%) |
+
+Three quarters of the games handed back are handed back by the *second*
+defender to play after the declarer's card -- the partner of the one the
+width counts -- and those errors are taken at twice the rate. The one-ply
+width raised the chances it can see (267 to 281) and not the rate, and it
+cannot see the others at all. The lever is the same tally carried one
+defender further: for each card, the chance that a defender choosing at
+random among its legal cards hands the game back before the declarer is
+next to move -- the first defender's gifting share, plus, over its other
+replies, the second defender's. One more solver question per safe reply,
+a few times today's (unmeasurable) cost. That is the next variant; the
+two built today stay registered as its controls.
+
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
 that is a discard finding for Phase D's list, not for this lever. And
