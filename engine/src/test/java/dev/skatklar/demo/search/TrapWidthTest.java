@@ -32,16 +32,32 @@ public class TrapWidthTest {
             Contract.DIAMONDS, Contract.HEARTS, Contract.SPADES, Contract.CLUBS, Contract.GRAND};
 
     @Test public void theWidthIsTheShareOfRepliesThatHandTheGameBack() {
-        Random random = new Random(20260925L);
+        check(1, 20260925L);
+    }
+
+    /**
+     * Both defenders: a safe reply hands on to the next defender's chance, until
+     * the declarer is to move again. Four-card endgames as well as three, so a
+     * trick completed by the first defender's reply leaves a second trick to
+     * lead into.
+     */
+    @Test public void theTwoDefenderWidthCountsThePartnersChanceToo() {
+        check(2, 20260926L);
+    }
+
+    private static void check(int defenders, long seed) {
+        Random random = new Random(seed);
         int inTrick = 0, defenderLeads = 0, declarerLeadsAgain = 0, flatZero = 0, compared = 0;
+        int widerThanOne = 0;
         for (int position = 0; position < 400; position++) {
             Contract contract = CONTRACTS[random.nextInt(CONTRACTS.length)];
             SkatAi.Seat declarer = SkatAi.Seat.values()[random.nextInt(3)];
             SkatAi.Seat leader = SkatAi.Seat.values()[random.nextInt(3)];
             List<Card> deck = new ArrayList<>(SkatDeck.ordered());
             Collections.shuffle(deck, random);
+            int size = defenders == 2 && position % 2 == 0 ? 4 : 3;
             List<List<Card>> hands = new ArrayList<>();
-            for (int seat = 0; seat < 3; seat++) hands.add(new ArrayList<>(deck.subList(seat * 3, seat * 3 + 3)));
+            for (int seat = 0; seat < 3; seat++) hands.add(new ArrayList<>(deck.subList(seat * size, seat * size + size)));
             // The trick so far: from the leader up to the declarer.
             List<SkatAi.PlayedCard> trick = new ArrayList<>();
             for (SkatAi.Seat seat = leader; seat != declarer; seat = seat.next()) {
@@ -59,13 +75,20 @@ public class TrapWidthTest {
             for (int needed : new int[] {best + 1, Math.max(1, best), 1 + random.nextInt(best + 1)}) {
                 if (needed == best + 1) flatZero++;
                 for (Card card : legal) {
-                    double expected = bruteWidth(contract, declarer, hands, trick, needed, card);
-                    double got = SearchAiProvider.trapWidth(contract, declarer, declarer, hands,
-                            leader, trickCards, needed, card);
+                    double expected = bruteWidth(contract, declarer, hands, trick, needed, card, defenders);
+                    double got = defenders == 1
+                            ? SearchAiProvider.trapWidth(contract, declarer, declarer, hands,
+                                    leader, trickCards, needed, card)
+                            : SearchAiProvider.trapWidth(contract, declarer, declarer, hands,
+                                    leader, trickCards, needed, card, defenders);
                     assertEquals(contract + " " + declarer + " led by " + leader + " " + trickCards
                             + " hands " + hands + " needed " + needed + " card " + card,
                             expected, got, 1e-9);
                     compared++;
+                    if (defenders == 2 && got > SearchAiProvider.trapWidth(contract, declarer,
+                            declarer, hands, leader, trickCards, needed, card) + 1e-9) {
+                        widerThanOne++;
+                    }
                     if (trick.size() < 2) inTrick++;
                     else if (winnerAfter(contract, trick, declarer, card) == declarer) declarerLeadsAgain++;
                     else defenderLeads++;
@@ -77,6 +100,10 @@ public class TrapWidthTest {
         assertTrue("tricks completed, a defender on lead: " + defenderLeads, defenderLeads > 50);
         assertTrue("tricks completed, the declarer on lead again: " + declarerLeadsAgain, declarerLeadsAgain > 50);
         assertTrue(compared > 1000);
+        if (defenders == 2) {
+            assertTrue("the partner's chance adds to the width somewhere: " + widerThanOne,
+                    widerThanOne > 200);
+        }
     }
 
     // ------------------------------------------------------------ the brute force
@@ -89,34 +116,54 @@ public class TrapWidthTest {
     }
 
     private static double bruteWidth(Contract contract, SkatAi.Seat declarer, List<List<Card>> hands,
-                                     List<SkatAi.PlayedCard> trick, int needed, Card card) {
+                                     List<SkatAi.PlayedCard> trick, int needed, Card card, int defenders) {
         List<List<Card>> after = copy(hands);
         after.get(declarer.ordinal()).remove(card);
         List<SkatAi.PlayedCard> played = new ArrayList<>(trick);
         played.add(new SkatAi.PlayedCard(declarer, card));
-        if (played.size() < 3) return giftShare(contract, declarer, after, played, declarer.next(), needed);
+        if (played.size() < 3) return giftShare(contract, declarer, after, played, declarer.next(), needed, defenders);
         SkatAi.Seat winner = SkatRules.trickWinner(contract, played);
-        int points = 0;
-        for (SkatAi.PlayedCard play : played) points += SkatRules.cardPoints(play.card);
-        int still = winner == declarer ? needed - points : needed;
+        int still = winner == declarer ? needed - points(played) : needed;
         if (still < 1) return 1.0;
-        if (winner != declarer) return giftShare(contract, declarer, after, List.of(), winner, still);
+        if (winner != declarer) return giftShare(contract, declarer, after, List.of(), winner, still, defenders);
         double widest = 0;
         for (Card lead : after.get(declarer.ordinal())) {
-            widest = Math.max(widest, bruteWidth(contract, declarer, after, List.of(), still, lead));
+            widest = Math.max(widest, bruteWidth(contract, declarer, after, List.of(), still, lead, defenders));
         }
         return widest;
     }
 
+    private static int points(List<SkatAi.PlayedCard> trick) {
+        int points = 0;
+        for (SkatAi.PlayedCard play : trick) points += SkatRules.cardPoints(play.card);
+        return points;
+    }
+
     private static double giftShare(Contract contract, SkatAi.Seat declarer, List<List<Card>> hands,
-                                    List<SkatAi.PlayedCard> trick, SkatAi.Seat defender, int needed) {
+                                    List<SkatAi.PlayedCard> trick, SkatAi.Seat defender, int needed,
+                                    int decisions) {
         List<Card> replies = new ArrayList<>(SkatRules.legalCards(contract, hands.get(defender.ordinal()), trick));
-        if (replies.isEmpty()) return 0;
-        int gifts = 0;
+        if (replies.isEmpty() || decisions < 1) return 0;
+        double total = 0;
         for (Card reply : replies) {
-            if (afterMove(contract, declarer, hands, trick, defender, reply) >= needed) gifts++;
+            if (afterMove(contract, declarer, hands, trick, defender, reply) >= needed) { total += 1; continue; }
+            if (decisions == 1) continue;
+            List<List<Card>> after = copy(hands);
+            after.get(defender.ordinal()).remove(reply);
+            List<SkatAi.PlayedCard> played = new ArrayList<>(trick);
+            played.add(new SkatAi.PlayedCard(defender, reply));
+            if (played.size() < 3) {
+                if (defender.next() == declarer) continue;
+                total += giftShare(contract, declarer, after, played, defender.next(), needed, decisions - 1);
+                continue;
+            }
+            SkatAi.Seat winner = SkatRules.trickWinner(contract, played);
+            int still = winner == declarer ? needed - points(played) : needed;
+            if (still < 1) { total += 1; continue; }
+            if (winner == declarer) continue;
+            total += giftShare(contract, declarer, after, List.of(), winner, still, decisions - 1);
         }
-        return gifts / (double) replies.size();
+        return total / replies.size();
     }
 
     /** The declarer's card points from the current trick on, after {@code seat} plays {@code card}. */

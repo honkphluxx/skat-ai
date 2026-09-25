@@ -235,6 +235,19 @@ replies, the second defender's. One more solver question per safe reply,
 a few times today's (unmeasurable) cost. That is the next variant; the
 two built today stay registered as its controls.
 
+*Built:* `TrapOrder.TRAP_FIRST_BOTH` and `SAFETY_FIRST_BOTH`, registered as
+`belief-32-shipped-trap2` and `-trap2-safe`; `trapWidth` takes the number
+of defender decisions to look through. A safe reply hands on to the next
+defender's chance, uniform over its legal cards, until the declarer is
+to move again -- the count stops there without asking, since after a safe
+reply every declarer card would answer no. `TrapWidthTest` checks the
+two-defender width against the brute force on three- and four-card
+endgames (it adds to the one-defender width in over 200 of them), and
+`TrapOrderGameTest` plays deals out and requires the trap, and the depth,
+each to change some card the declarer plays -- the part no test of the
+helper could see; it fails with the depth not passed, or the trap never
+asked. `tools/trap.sh` now runs this pair by default.
+
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
 that is a discard finding for Phase D's list, not for this lever. And

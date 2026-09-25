@@ -427,7 +427,29 @@ public final class SearchAiProvider implements SkatAiProvider {
      * Only ever asked on a trump contract, for the declarer, at flat zero;
      * every other decision is byte for byte what it was.
      */
-    public enum TrapOrder { OFF, TRAP_FIRST, SAFETY_FIRST }
+    public enum TrapOrder {
+        OFF(0, false), TRAP_FIRST(1, true), SAFETY_FIRST(1, false),
+        /**
+         * As {@link #TRAP_FIRST}, counting both defenders' chances before the
+         * declarer is next to move. The one-defender width measured nothing
+         * (2026-09-25): three quarters of the games handed back are handed
+         * back by the second defender to play after the declarer's card, and
+         * the first-defender width is flat at nine flat-zero decisions in ten.
+         */
+        TRAP_FIRST_BOTH(2, true),
+        /** As {@link #SAFETY_FIRST}, counting both defenders; see {@link #TRAP_FIRST_BOTH}. */
+        SAFETY_FIRST_BOTH(2, false);
+
+        /** How many defender decisions the width looks through. */
+        final int defenders;
+        /** Whether the trap outranks the ladder's 31-point rung. */
+        final boolean trapFirst;
+
+        TrapOrder(int defenders, boolean trapFirst) {
+            this.defenders = defenders;
+            this.trapFirst = trapFirst;
+        }
+    }
 
     /** The same player, with a trap tally at flat zero. See {@link TrapOrder}. */
     public SearchAiProvider withTrap(TrapOrder order) {
@@ -507,58 +529,108 @@ public final class SearchAiProvider implements SkatAiProvider {
     /**
      * The share of the next defender's legal replies, after the declarer plays
      * {@code card}, from which the declarer still reaches {@code needed} card
-     * points against perfect play -- how wide a trap {@code card} sets.
-     *
-     * <p>{@code hands} are the three hands by seat, the declarer's including
-     * {@code card}; {@code trick} the cards already in the current trick, led
-     * by {@code leader}; {@code needed} counts the current trick. If the card
-     * completes the trick, the trick is scored and the next lead taken by its
-     * winner: a defender who leads is the one whose replies are counted, and
-     * a declarer who leads again is credited with the widest trap among its
-     * leads. Zero when no defender has a card left to play.
+     * points against perfect play -- how wide a trap {@code card} sets. The
+     * one-defender width; see the overload.
      */
     static double trapWidth(Contract contract, SkatAi.Seat declarer, SkatAi.Seat me,
                             List<? extends Collection<Card>> hands, SkatAi.Seat leader,
                             List<Card> trick, int needed, Card card) {
+        return trapWidth(contract, declarer, me, hands, leader, trick, needed, card, 1);
+    }
+
+    /**
+     * The chance that the defence hands the game back, after the declarer plays
+     * {@code card}, within its next {@code defenders} decisions -- each defender
+     * choosing uniformly among its legal cards, and the count stopping as soon
+     * as the declarer is to move again.
+     *
+     * <p>A reply from which the declarer reaches {@code needed} against perfect
+     * play counts one; any other reply counts the chance that the defender to
+     * move after it hands the game back, while decisions remain. {@code hands}
+     * are the three hands by seat, the declarer's including {@code card};
+     * {@code trick} the cards already in the current trick, led by
+     * {@code leader}; {@code needed} counts the current trick. A completed
+     * trick is scored and the next lead taken by its winner; a declarer who
+     * leads again is credited with the widest trap among its leads. Zero when
+     * no defender has a card left to play.
+     */
+    static double trapWidth(Contract contract, SkatAi.Seat declarer, SkatAi.Seat me,
+                            List<? extends Collection<Card>> hands, SkatAi.Seat leader,
+                            List<Card> trick, int needed, Card card, int defenders) {
         List<List<Card>> after = new ArrayList<>(3);
         for (Collection<Card> hand : hands) after.add(new ArrayList<>(hand));
         after.get(me.ordinal()).remove(card);
         List<Card> played = new ArrayList<>(trick);
         played.add(card);
         if (played.size() < 3) {
-            return defenderGiftShare(contract, declarer, me.next(), after, leader, played, needed);
+            return giftChance(contract, declarer, me.next(), after, leader, played, needed, defenders);
         }
+        SkatAi.Seat winner = winnerOf(contract, leader, played);
+        int still = winner == declarer ? needed - SkatRules.cardPoints(played) : needed;
+        if (still < 1) return 1.0;
+        if (winner != declarer) {
+            return giftChance(contract, declarer, winner, after, winner, List.of(), still, defenders);
+        }
+        double widest = 0;
+        for (Card lead : after.get(declarer.ordinal())) {
+            widest = Math.max(widest, trapWidth(contract, declarer, declarer, after, declarer,
+                    List.of(), still, lead, defenders));
+        }
+        return widest;
+    }
+
+    /**
+     * With {@code defender} to move: the chance, over uniform replies, that
+     * the defence hands the game back within {@code decisions} of its moves,
+     * before the declarer is to move again.
+     */
+    private static double giftChance(Contract contract, SkatAi.Seat declarer,
+                                     SkatAi.Seat defender, List<List<Card>> hands,
+                                     SkatAi.Seat leader, List<Card> trick, int needed,
+                                     int decisions) {
+        if (decisions < 1 || hands.get(defender.ordinal()).isEmpty()) return 0;
+        List<DoubleDummySolver.Verdict> replies = DoubleDummySolver.movesReaching(contract,
+                declarer, defender, hands, leader, trick, needed);
+        if (replies.isEmpty()) return 0;
+        double total = 0;
+        for (DoubleDummySolver.Verdict reply : replies) {
+            if (reply.reachesTarget()) { total += 1; continue; }
+            if (decisions == 1) continue;
+            List<List<Card>> after = new ArrayList<>(3);
+            for (List<Card> hand : hands) after.add(new ArrayList<>(hand));
+            after.get(defender.ordinal()).remove(reply.card());
+            List<Card> played = new ArrayList<>(trick);
+            played.add(reply.card());
+            // The reply was safe, so the declarer cannot reach the target from
+            // here against perfect play: when it is the declarer's turn next,
+            // every card it has would answer "no", and the count stops without
+            // asking. Nor can a trick this reply completes have been the
+            // declarer's to reach it with -- which is why the target carries
+            // over unchanged to a defender who wins it and leads.
+            if (played.size() < 3) {
+                SkatAi.Seat next = defender.next();
+                if (next == declarer) continue;
+                total += giftChance(contract, declarer, next, after, leader, played, needed,
+                        decisions - 1);
+                continue;
+            }
+            SkatAi.Seat winner = winnerOf(contract, leader, played);
+            if (winner == declarer) continue;
+            total += giftChance(contract, declarer, winner, after, winner, List.of(), needed,
+                    decisions - 1);
+        }
+        return total / replies.size();
+    }
+
+    /** Who takes a complete trick of {@code played}, led by {@code leader}. */
+    private static SkatAi.Seat winnerOf(Contract contract, SkatAi.Seat leader, List<Card> played) {
         List<SkatAi.PlayedCard> plays = new ArrayList<>(3);
         SkatAi.Seat seat = leader;
         for (Card inTrick : played) {
             plays.add(new SkatAi.PlayedCard(seat, inTrick));
             seat = seat.next();
         }
-        SkatAi.Seat winner = SkatRules.trickWinner(contract, plays);
-        int still = winner == declarer ? needed - SkatRules.cardPoints(played) : needed;
-        if (still < 1) return 1.0;
-        if (winner != declarer) {
-            return defenderGiftShare(contract, declarer, winner, after, winner, List.of(), still);
-        }
-        double widest = 0;
-        for (Card lead : after.get(declarer.ordinal())) {
-            widest = Math.max(widest,
-                    trapWidth(contract, declarer, declarer, after, declarer, List.of(), still, lead));
-        }
-        return widest;
-    }
-
-    /** Of {@code defender}'s legal cards here, the share that let the declarer reach {@code needed}. */
-    private static double defenderGiftShare(Contract contract, SkatAi.Seat declarer,
-                                            SkatAi.Seat defender, List<List<Card>> hands,
-                                            SkatAi.Seat leader, List<Card> trick, int needed) {
-        if (hands.get(defender.ordinal()).isEmpty()) return 0;
-        List<DoubleDummySolver.Verdict> replies = DoubleDummySolver.movesReaching(contract,
-                declarer, defender, hands, leader, trick, needed);
-        if (replies.isEmpty()) return 0;
-        int gifts = 0;
-        for (DoubleDummySolver.Verdict reply : replies) if (reply.reachesTarget()) gifts++;
-        return gifts / (double) replies.size();
+        return SkatRules.trickWinner(contract, plays);
     }
 
     /** What the card play was told to do. Package-private, for the test that keeps it that way. */
@@ -1320,7 +1392,7 @@ public final class SearchAiProvider implements SkatAiProvider {
                 for (Card card : legal) trap.put(card, 0);
                 tallyOver(sampled, legal, trap, (sample, into) -> castTrap(context, sample, into),
                         deadline);
-                if (cardPlay.trap == TrapOrder.TRAP_FIRST) {
+                if (cardPlay.trap.trapFirst) {
                     first = trap;
                     second = rung != null ? rung : Map.of();
                     third = rung != null ? rungHeld : cushion;
@@ -1697,7 +1769,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             for (Card card : into.keySet()) {
                 double width = trapWidth(context.game.contract, context.game.declarer,
                         context.mySeat, sample.hands(), context.currentTrick.leader, played,
-                        needed, card);
+                        needed, card, cardPlay.trap.defenders);
                 into.merge(card, (int) Math.round(1000 * width), Integer::sum);
             }
         }

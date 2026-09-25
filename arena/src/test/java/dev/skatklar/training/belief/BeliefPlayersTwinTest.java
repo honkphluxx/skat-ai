@@ -70,6 +70,10 @@ public class BeliefPlayersTwinTest {
         assertEquals("TRAP_FIRST", trap(registry.resolve("belief-32-shipped-trap").newProvider(1)));
         assertEquals("SAFETY_FIRST", trap(registry.resolve("belief-32-shipped-trap-safe").newProvider(1)));
         assertEquals("OFF", trap(registry.resolve("belief-32-shipped").newProvider(1)));
+        assertTrue(ladder(registry.resolve("belief-32-shipped-trap2").newProvider(1)));
+        assertTrue(ladder(registry.resolve("belief-32-shipped-trap2-safe").newProvider(1)));
+        assertEquals("TRAP_FIRST_BOTH", trap(registry.resolve("belief-32-shipped-trap2").newProvider(1)));
+        assertEquals("SAFETY_FIRST_BOTH", trap(registry.resolve("belief-32-shipped-trap2-safe").newProvider(1)));
     }
 
     private static String trap(SkatAiProvider provider) throws Exception {

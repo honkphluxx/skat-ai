@@ -255,6 +255,12 @@ public final class BeliefPlayers {
                 "The shipped player, the widest trap at flat zero, then 31", loader));
         registry.register(trapVariant("belief-32-shipped-trap-safe", SearchAiProvider.TrapOrder.SAFETY_FIRST,
                 "The shipped player, 31 at flat zero, then the widest trap", loader));
+        // The same, counting both defenders before the declarer moves again:
+        // the one-defender width saw a quarter of the games handed back.
+        registry.register(trapVariant("belief-32-shipped-trap2", SearchAiProvider.TrapOrder.TRAP_FIRST_BOTH,
+                "The shipped player, the widest two-defender trap at flat zero, then 31", loader));
+        registry.register(trapVariant("belief-32-shipped-trap2-safe", SearchAiProvider.TrapOrder.SAFETY_FIRST_BOTH,
+                "The shipped player, 31 at flat zero, then the widest two-defender trap", loader));
         // Phase D: the shipped player with the two buried cards chosen by search
         // instead of by rule. Ten candidates -- pairs from the five cards the
         // heuristic wants least, which over 264 declared boards gives up none of

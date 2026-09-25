@@ -8,6 +8,8 @@
 #                                        three more seeds of the pairing; the
 #                                        pooled line reads every seed on disk
 #   ./tools/trap.sh --players=belief-32-shipped-trap-safe
+#                                        the one-defender variants of the first
+#                                        run; the default is the two-defender pair
 #   ./tools/trap.sh --threads=8
 #
 # docs/training-plan.md section 2.9: SkatZero's whole declaring edge over the
@@ -19,6 +21,15 @@
 #
 #   belief-32-shipped-trap        the widest trap, the ladder's 31 as tiebreak
 #   belief-32-shipped-trap-safe   the ladder's card, the widest trap as tiebreak
+#
+# Measured 2026-09-25 at one defender: nothing (-0.20 and -0.04 pooled), and
+# the decision files said why -- three quarters of the games handed back are
+# handed back by the second defender after the declarer's card, which a
+# one-defender width cannot see. The default is now the same pair counting
+# both defenders before the declarer moves again (TrapOrder.*_BOTH):
+#
+#   belief-32-shipped-trap2       the widest two-defender trap, then 31
+#   belief-32-shipped-trap2-safe  31, then the widest two-defender trap
 #
 # 1. The declaring audit for both on seeds 14-16 -- the shipped player's audit
 #    of 2026-09-24 on the same boards is the control -- and one table from the
@@ -46,7 +57,7 @@ cd "$(dirname "$TRAP_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
 QUICK=false; THREADS=16; AUDIT=true; PAIR=true
-PLAYERS="belief-32-shipped-trap belief-32-shipped-trap-safe"
+PLAYERS="belief-32-shipped-trap2 belief-32-shipped-trap2-safe"
 for arg in "$@"; do
     case "$arg" in
         --quick)       QUICK=true ;;
