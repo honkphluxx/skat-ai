@@ -163,6 +163,21 @@ seeds 14-16 (`tools/trap.sh --pair-only --players=belief-64-shipped
 --seeds="14 15 16"`), which the pooled line then reads with the first
 three.
 
+*T1 passed (2026-09-26, seeds 14-16 added).* Seed 14 +0.84 [-0.87,
++2.56], 15 +0.78 [-1.03, +2.59], 16 +0.85 [-1.71, +3.41]; pooled over
+six seeds **+1.67 [+0.25, +3.10]**, resolved, and all six seeds
+positive. The later three are smaller than the first (seed 12's +4.30
+carries the early mean), so the honest size is between one and two game
+points a game. The defending column now moves too (12.95 / 12.41, 14.59
+/ 13.33, 12.58 / 11.83). Price confirmed at about 1.7 times the
+shipped player's time a game (1,453, 1,370 and 1,341 s a match).
+**The teacher is `belief-64-shipped`.** The defenders-only variant was
+wanted only to save phone time, which the teacher no longer needs, and
+is dropped. At about 0.6 games a second on the host, the first 50,000
+games take about a day, so T2's speed-ups wait: I1 is next. Open and
+cheap to settle beside it: whether 128 worlds is better still (the
+exporter does not care which teacher it records).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
