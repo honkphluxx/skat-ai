@@ -330,7 +330,47 @@ the player's own sampled worlds, a card chosen by their mean, scored on
 the true-deal rollouts recorded here. Built the same day as
 `tools/world-rollout.sh` (`WorldRolloutMain`; `WorldRolloutTest` holds
 the rebuilt world board to the recorded game when the world is the true
-deal, and to the history in every sampled world); not yet run.
+deal, and to the history in every sampled world).
+
+*Measured (2026-09-26): the same worlds, used better, buy little.*
+`tools/world-rollout.sh`, the audit's 144 decisions, all 32 tallied
+worlds, one rollout a card a world -- 26,688 rollouts, none failed; the
+record check found all 144 decisions again with the same card and vote.
+Scored on the audit's true-deal rollouts, game points a decision:
+
+| band | agree | vote's card | rollout's pick | best (knows the deal) | rollout - vote, 95% | est. of vote's card |
+| --- | --- | --- | --- | --- | --- | --- |
+| flat zero | 58% | -51.38 | -50.72 | -49.75 | +0.65 [-0.44, +1.74] | -52.54 |
+| 1-25% | 58% | -24.90 | -28.02 | -18.84 | **-3.12 [-6.20, -0.03]** | -20.46 |
+| 26-75% | 53% | -1.04 | +3.66 | +9.07 | +4.70 [-1.02, +10.42] | +2.09 |
+| 76-99% | 50% | +20.51 | +22.46 | +24.81 | +1.95 [-0.45, +4.36] | +21.37 |
+| all | 55% | -14.20 | -13.16 | -8.68 | **+1.05 [-0.71, +2.80]** | -12.38 |
+
+Three readings. The rollouts get the *level* right where the vote did not:
+their estimate of the vote's card is within two to four points of what
+the table paid, band by band. They do not get a clearly better *card*:
++1.05 a decision, unresolved, worse in the low band, and where the two
+disagree the true deal scores both cards the same in three decisions of
+four (the disagreement is mostly between equivalent cards). The middle
+band's +4.70 is the only hint, on 36 decisions. Post hoc, the rollout
+used only as a tiebreak among the vote's top cards reads +0.81 [-0.67,
++2.30] -- a look chosen after the data, so not evidence. Against the
+distance to the card that is best in the true deal (5.5 points a
+decision here, before its noise), a better use of the same worlds
+recovers perhaps one; the rest is information. The rollout defenders do
+not see the declarer's hand, so this also bounds, for one card, what
+playing on the defenders' ignorance of that hand is worth against these
+defenders. At about ten CPU-minutes a decision it is an instrument, not
+a player, and nothing here is built into one.
+
+Where this leaves 2.9: the vote is not the lever -- neither its
+counting nor its omniscient defenders cost a resolved point. What the
+gifts SkatZero draws are made of (worked out from the audit's decision
+files the same day): two thirds of all gifts, for both declarers, are a
+defender's *lead*, not a reply inside the trick -- SkatZero 97 of 142
+against our 78 of 118 on the same boards, and 16 against 6 wrong
+discards, mostly low cards. Both are defender judgements about the
+declarer's hand.
 
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
