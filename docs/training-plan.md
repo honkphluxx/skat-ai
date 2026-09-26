@@ -283,6 +283,52 @@ instrument has to answer: from recorded positions, play each legal card
 out against the real defenders several times and compare that ranking
 with the vote's.
 
+*Measured (2026-09-26): the rollout audit.* `tools/rollout-audit.sh`
+(`RolloutAuditMain`): the shipped declarer's games on seeds 14-16 are
+recorded; from 36 decisions in each band of the played card's vote share,
+every legal card is forced and the game played on eight times by the same
+four players at the table, the random streams shared across cards. The
+replay check reproduced 24 of 24 recorded games card for card.
+
+| band | vote's card best at the table | vote's card wins | best card wins | split-half shortfall, g.p. a decision |
+| --- | --- | --- | --- | --- |
+| flat zero | 83% | 3.5% | 5.6% | +0.50 |
+| 1-25% | 61% | 22.6% | 31.9% | +2.25 |
+| 26-75% | 67% | 60.1% | 73.6% | +6.67 |
+| 76-99% | 61% | 89.6% | 96.9% | +3.56 |
+
+The shortfall is not the price of the aggregation alone. The rollouts are
+played on the true deal, so "best at the table" is chosen by someone who
+knows where the cards are; the shortfall is the value of that knowledge
+plus whatever the vote gets wrong with the knowledge it has. The CSVs
+separate the two roughly -- game points a decision, averaged per probe:
+
+| band | vote's card | cards tied with it at the top | cards the vote ranks lower | cards that win in the true deal (probes) |
+| --- | --- | --- | --- | --- |
+| flat zero | -51.4 | -51.8 | -- | -- |
+| 1-25% | -24.9 | -25.2 | -30.0 | +18.0 (3) |
+| 26-75% | -1.0 | -0.1 | -8.7 | +23.7 (18) |
+| 76-99% | +20.5 | +20.4 | +9.1 | +22.9 (33) |
+
+Where the vote ranks one card above another, the table agrees: the
+cards it ranks lower are 5 to 11 points worse against the real
+defenders, and among the cards it ties at the top the table has no
+preference. What beats its card is the card that wins in the true deal,
+by 20 to 40 points -- a card the vote cannot tell from the others
+without seeing the deal. So the pessimism of the table above mis-levels
+the vote and, on this evidence, does not mis-rank it: most of the
+shortfall is information. At flat zero no single card recovers the game
+against these defenders (the best 5.6%, all cards within half a point),
+so SkatZero's flat-zero wins are not one better card at that moment --
+they are made earlier, or over several cards, which forcing one card
+cannot show. Two limits: the per-decision shortfalls do not add up per
+game, and eight rollouts a card are noisy (the split-half estimate keeps
+the selection bias out, not the noise). What this audit cannot say is how
+much the vote loses against a better use of the same worlds; the next
+instrument asks that with the information held equal -- rollouts inside
+the player's own sampled worlds, a card chosen by their mean, scored on
+the true-deal rollouts recorded here.
+
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
 that is a discard finding for Phase D's list, not for this lever. And
