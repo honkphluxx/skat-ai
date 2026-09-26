@@ -202,7 +202,7 @@ public final class DeclaringAuditMain {
      * singleton, seeded as it seeds it, and stopped before every card to ask
      * the solver what the position is worth.
      */
-    private static Game play(Board board, long seed, ContractSource.FixedContract fixed,
+    static Game play(Board board, long seed, ContractSource.FixedContract fixed,
                              Contestant declaring, Contestant defending, boolean watchTheVote) {
         SkatAi.Seat declarer = fixed.declarer();
         Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);

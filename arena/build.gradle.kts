@@ -149,6 +149,21 @@ tasks.register<JavaExec>("declaringAudit") {
 }
 
 /**
+ * The same declarer against two defences: our defenders, and another's, on the
+ * same boards, every card solved. See DefendingAuditMain and tools/defending-audit.sh.
+ *
+ * ./gradlew :arena:defendingAudit --args="--seeds=14,15,16 --boards=200 --defenders=skatzero --threads=16 --out=arena-logs/defending-audit/skatzero"
+ */
+tasks.register<JavaExec>("defendingAudit") {
+    group = "verification"
+    description = "Plays our declarer against our defenders and another's, and solves the true position before every card"
+    mainClass.set("dev.skatklar.training.arena.DefendingAuditMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
+/**
  * Does the vote rank the declarer's cards the way the table does? Plays every
  * legal card out against the real defenders from recorded positions.
  *
