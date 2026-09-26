@@ -441,6 +441,35 @@ move those cards) or a belief that cannot separate the cases (more
 worlds would not). A defender with 64 worlds in the same audit decides
 between them.
 
+*Measured (2026-09-26): twice the worlds close about half the defence's
+gap.* `belief-64-shipped` (705f2b3, the shipped player with 64 worlds a
+trump card) in SkatZero's place, same audit, same-games OK:
+
+| defence | declarer won | declarer g.p./game | not-cold games given away | gifts (trump games) | onto the partner's card |
+| --- | --- | --- | --- | --- | --- |
+| ours, 32 worlds | 275 | -9.25 | 76 | 106 | 22 |
+| ours, 64 worlds | 264 | -11.05 | 61 | 90 | 13 |
+| SkatZero | 255 | -12.34 | 58 | 86 | 9 |
+
+Every column moves the same way, most of the way to SkatZero on the
+gifts and about sixty per cent of it on wins and points. Alone it is
+not resolved: the boards only one defence loses split 31 to 20 (sign
+test p about 0.16). So the close calls are in good part sampling noise,
+and the belief is not the whole story.
+
+What it would cost. The top two cards' tally, over our defenders' 7,881
+decisions: tied 56%, within 1-3 worlds 25%, 4-8 6%, 9 or more 3%, all
+at zero 10%; the declarer's 4,069: tied 51%, 1-3 8%, 9+ 3%, all at zero
+37%. Two consequences. Stopping early when the leader cannot be caught
+-- the exact, free version -- would almost never fire: ties dominate,
+and a tie sends the tiebreak to the full tally. And adding worlds only
+where the top is below every world and the next card within three
+covers 60% of the defenders' decisions (68% of their card solves) and 96
+of the 106 gifts -- so a close-call-only 64 costs about two thirds of a
+flat 64. Whether any of it is worth the phone's time is the pairing's
+question: `belief-64-shipped` against the shipped player, fixed
+contracts, seeds 11-13, with the games-per-second line as the price.
+
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
 that is a discard finding for Phase D's list, not for this lever. And
