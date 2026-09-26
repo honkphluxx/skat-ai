@@ -70,6 +70,47 @@ public final class DoubleDummySolver implements AutoCloseable {
     private boolean useTranspositions = true;
 
     /**
+     * A measurement's view into the Java search, or null -- which it is in play.
+     *
+     * <p>{@code EndgameProbeMain} (docs/training-plan.md 2.10, T2) asks where a
+     * search's nodes lie by tricks left, and how often a position at the start
+     * of a trick near the end recurs across worlds, decisions and games -- the
+     * question a global endgame cache lives or dies by. The native engine is
+     * not instrumented, so a probe can only be installed with the Java search
+     * forced ({@code -Dskatklar.solver=java}). With none installed a node costs
+     * one static read more than it did.
+     */
+    public interface SearchProbe {
+        /** Every node, by the tricks left including the one in progress. */
+        void node(int tricksLeft);
+
+        /**
+         * A position at the start of a trick with {@code tricksLeft} tricks to
+         * go, after its subtree was searched: which solver searched it (a
+         * serial number, one per solver object, so one search and its
+         * transposition table), the position key (see {@link #position()}),
+         * who leads, the contract's ordinal, the declarer's seat, and the
+         * nodes the subtree cost, itself included.
+         */
+        void trickStart(int solver, long position, int leader, int contract, int declarer,
+                        int tricksLeft, long subtreeNodes);
+    }
+
+    private static SearchProbe searchProbe;
+    private static final java.util.concurrent.atomic.AtomicInteger SERIALS =
+            new java.util.concurrent.atomic.AtomicInteger();
+    /** This solver's number for a probe; drawn only while one is installed. */
+    private int serial = -1;
+
+    /** Installs a probe, or removes it with null. Refuses while the native engine answers. */
+    public static void setSearchProbe(SearchProbe probe) {
+        if (probe != null && nativeEnabled) {
+            throw new IllegalStateException("the native engine is not instrumented: run with -Dskatklar.solver=java");
+        }
+        searchProbe = probe;
+    }
+
+    /**
      * The native solver this one delegates to, or zero.
      *
      * <p>Only {@link #reusableFor} ever sets it. Every other entry point here is
@@ -650,6 +691,24 @@ public final class DoubleDummySolver implements AutoCloseable {
      */
     private int search(int toPlay, int leader, int trickCards, int trickSize,
                        int alpha, int beta) {
+        SearchProbe probe = searchProbe;
+        if (probe == null) return searchNode(toPlay, leader, trickCards, trickSize, alpha, beta);
+        int tricksLeft = Integer.bitCount(hands[toPlay]);
+        probe.node(tricksLeft);
+        if (trickSize != 0 || tricksLeft == 0) {
+            return searchNode(toPlay, leader, trickCards, trickSize, alpha, beta);
+        }
+        long before = visitedNodes;
+        long position = position();
+        int value = searchNode(toPlay, leader, trickCards, trickSize, alpha, beta);
+        if (serial < 0) serial = SERIALS.incrementAndGet();
+        probe.trickStart(serial, position, leader, contractOrdinal, declarerSeat, tricksLeft,
+                visitedNodes - before);
+        return value;
+    }
+
+    private int searchNode(int toPlay, int leader, int trickCards, int trickSize,
+                           int alpha, int beta) {
         visitedNodes++;
         // Subtraction rather than a comparison: nanoTime has no defined origin
         // and is documented to wrap, and the difference stays correct across a

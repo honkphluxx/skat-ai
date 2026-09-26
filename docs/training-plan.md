@@ -200,6 +200,33 @@ spent where those recurrences are. A last-trick endgame is a few hundred
 nodes, so caching only those saves little per hit; the payoff, if there
 is one, is in the middle of the tree.
 
+*Measured first (2026-09-26, T2's opening question).* `tools/endgame-probe.sh`
+(`EndgameProbeMain`; a probe hook in the Java search, `DoubleDummySolver.setSearchProbe`,
+null in play; the native engine is not instrumented, so this runs the Java
+search). The shipped player in all seats, four games in the container --
+a first look, to be confirmed on 60 boards on the host:
+
+- **Where the work is -- Philipp's intuition holds.** 63% of all solver
+  nodes lie below a cut of three tricks to go, 87% below four; the last
+  three tricks alone hold 63% (34%, 23%, 5% at three, two and one).
+- **A global endgame table would save almost nothing.** Of the positions
+  at the three-trick cut, 1.8% had been reached before by another search
+  of the same decision, 0.2% by an earlier decision of the game, none by
+  another game. A cache that outlives one search -- for the decision, the
+  game or for good -- saves 3.7%, 4.1% and 4.1% of all nodes (4.9-5.1% at
+  a four-trick cut). Worlds differ in the hidden cards, so their endgames
+  differ too; and different deals almost never meet.
+- **The repeats are inside each search.** 90% of three-trick positions had
+  been reached before *in the same search*, and searching them again cost
+  21% of all nodes (25% at four tricks). The solver's own table holds only
+  bounds from null windows shifted by the points already taken, and evicts
+  the entries with the fewest cards first -- exactly these. An endgame
+  store that keeps exact values for positions with three or fewer tricks
+  to go, and is never the first thing evicted, is the speed-up this
+  points at: about a fifth of the nodes, within every search, on the phone
+  as well as the host. To be built and measured against the native engine
+  in T2; the global table is not built.
+
 ## 2.9 Where the SkatZero gap is, 2026-09-25: the games our declarer gives up on
 
 `tools/skatzero-gap.sh`, two instruments on the player that ships.

@@ -149,6 +149,24 @@ tasks.register<JavaExec>("declaringAudit") {
 }
 
 /**
+ * Where the solver's nodes lie by tricks left, and how often a position near the
+ * end recurs across worlds, decisions and games -- the numbers a global endgame
+ * cache would pay on. Runs the Java search: the native engine is not
+ * instrumented. See EndgameProbeMain and tools/endgame-probe.sh.
+ *
+ * ./gradlew :arena:endgameProbe --args="--seed=14 --boards=60 --threads=16"
+ */
+tasks.register<JavaExec>("endgameProbe") {
+    group = "verification"
+    description = "Measures where the solver's work lies and how much of it an endgame cache would save"
+    mainClass.set("dev.skatklar.training.arena.EndgameProbeMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+    systemProperty("skatklar.solver", "java")
+}
+
+/**
  * The same declarer against two defences: our defenders, and another's, on the
  * same boards, every card solved. See DefendingAuditMain and tools/defending-audit.sh.
  *
