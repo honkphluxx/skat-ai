@@ -206,16 +206,25 @@ public final class EndgameProbeMain {
         private final long[][] keys = new long[64][];
         private final int[][] games = new int[64][];
         private final int[] sizes = new int[64];
+        /**
+         * One lock a stripe, never replaced. The first version locked the
+         * stripe's key array, which grow() replaces: a second thread then
+         * locked the new array while the first still wrote the old one, and
+         * the 16-thread run on the host died on an index out of bounds.
+         */
+        private final Object[] locks = new Object[64];
 
         FirstGame() {
-            for (int i = 0; i < 64; i++) { keys[i] = new long[1 << 10]; games[i] = new int[1 << 10]; }
+            for (int i = 0; i < 64; i++) {
+                keys[i] = new long[1 << 10]; games[i] = new int[1 << 10]; locks[i] = new Object();
+            }
         }
 
         /** The game already stored for the key, or -1 after storing {@code game}. */
         int putIfAbsent(long key, int game) {
             if (key == 0) key = 1;
             int stripe = (int) (key >>> 58);
-            synchronized (keys[stripe]) {
+            synchronized (locks[stripe]) {
                 long[] k = keys[stripe];
                 if (sizes[stripe] * 2 >= k.length) grow(stripe);
                 k = keys[stripe];
