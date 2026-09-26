@@ -327,7 +327,10 @@ the selection bias out, not the noise). What this audit cannot say is how
 much the vote loses against a better use of the same worlds; the next
 instrument asks that with the information held equal -- rollouts inside
 the player's own sampled worlds, a card chosen by their mean, scored on
-the true-deal rollouts recorded here.
+the true-deal rollouts recorded here. Built the same day as
+`tools/world-rollout.sh` (`WorldRolloutMain`; `WorldRolloutTest` holds
+the rebuilt world board to the recorded game when the world is the true
+deal, and to the history in every sampled world); not yet run.
 
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;

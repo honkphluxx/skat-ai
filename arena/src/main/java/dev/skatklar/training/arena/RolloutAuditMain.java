@@ -8,6 +8,7 @@ import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.ai.SkatAiSession;
 import dev.skatklar.demo.search.SearchAiProvider;
+import dev.skatklar.demo.search.WorldSampler;
 import dev.skatklar.demo.solve.DoubleDummySolver;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -74,9 +75,13 @@ public final class RolloutAuditMain {
         Band(String label) { this.label = label; }
     }
 
-    /** One declarer decision of the recorded game. */
+    /**
+     * One declarer decision of the recorded game, with the worlds the player
+     * sampled for it ({@code sampled}; the first {@code worlds} of them were
+     * tallied into {@code votes}).
+     */
     record Recorded(int index, int trick, Map<Card, Integer> votes, int worlds, Card played,
-                    Map<Card, Boolean> truth) {}
+                    Map<Card, Boolean> truth, List<WorldSampler.World> sampled) {}
 
     /** One board's recorded game: the cards in order, the skat, the decisions, the result. */
     record Replay(Board board, ContractSource.FixedContract fixed, List<Card> sequence,
@@ -191,6 +196,7 @@ public final class RolloutAuditMain {
         SkatAi.Seat declarer = fixed.declarer();
         Map<Card, Integer>[] lastVotes = new Map[1];
         int[] lastWorlds = new int[1];
+        List<WorldSampler.World>[] lastSampled = new List[1];
         Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
         for (SkatAi.Seat seat : SkatAi.Seat.values()) {
             SkatAiProvider provider = player.newProvider(Seeds.mix(seed, board.index(), declarer.ordinal(), seat.ordinal()));
@@ -201,6 +207,11 @@ public final class RolloutAuditMain {
                                                 Map<Card, Integer> cushion, int worlds, boolean asked, Card chosen) {
                         lastVotes[0] = votes;
                         lastWorlds[0] = worlds;
+                    }
+                    @Override public void sampled(SkatAi.DecisionContext context,
+                                                  dev.skatklar.demo.belief.BeliefEncoding.Evidence evidence,
+                                                  List<WorldSampler.World> worlds) {
+                        lastSampled[0] = List.copyOf(worlds);
                     }
                 });
             }
@@ -228,10 +239,11 @@ public final class RolloutAuditMain {
                 Map<Card, Boolean> truth = mover == declarer && !before.contract.isNull()
                         ? truth(before, declarer, mover) : null;
                 lastVotes[0] = null;
+                lastSampled[0] = null;
                 Card played = engine.playAiCard();
                 if (mover == declarer && lastVotes[0] != null && truth != null) {
                     decisions.add(new Recorded(sequence.size(), before.completedTricks + 1,
-                            lastVotes[0], lastWorlds[0], played, truth));
+                            lastVotes[0], lastWorlds[0], played, truth, lastSampled[0]));
                 }
                 sequence.add(played);
             }
@@ -315,7 +327,18 @@ public final class RolloutAuditMain {
      */
     static Outcome rollout(Replay game, int index, Card forced, Contestant player, long seed, int r,
                            boolean askDuringScript) {
-        Board board = game.board();
+        return rollout(game, game.board(), game.skat(), index, forced, player, seed, r, 0x7011L, askDuringScript);
+    }
+
+    /**
+     * As above, on {@code board} -- the recorded board, or one whose hidden
+     * cards are dealt as a sampled world has them -- where the skat after the
+     * exchange must come out as {@code skat}.
+     *
+     * @param salt keeps the players' seeds of one kind of rollout apart from another's
+     */
+    static Outcome rollout(Replay game, Board board, List<Card> skat, int index, Card forced,
+                           Contestant player, long seed, int r, long salt, boolean askDuringScript) {
         ContractSource.FixedContract fixed = game.fixed();
         SkatAi.Seat declarer = fixed.declarer();
         List<Card> script = new ArrayList<>(game.sequence().subList(0, index));
@@ -325,7 +348,7 @@ public final class RolloutAuditMain {
         for (SkatAi.Seat seat : SkatAi.Seat.values()) {
             long providerSeed = r < 0
                     ? Seeds.mix(seed, board.index(), declarer.ordinal(), seat.ordinal())
-                    : Seeds.mix(seed, board.index(), index, r, seat.ordinal(), 0x7011L);
+                    : Seeds.mix(seed, board.index(), index, r, seat.ordinal(), salt);
             seating.put(seat, new Scripted(player.newProvider(providerSeed), script, askDuringScript, mismatches));
         }
         GameEngine engine = GameEngine.headless(new Random(engineSeed(seed, board, declarer)),
@@ -334,7 +357,7 @@ public final class RolloutAuditMain {
         try {
             engine.restartWithContract(board.deal(), board.round(), declarer, fixed.contract(),
                     fixed.bidValue(), Collections.emptySet(), fixed.auction());
-            if (!new ArrayList<>(engine.snapshot().skat).equals(game.skat())) return null;
+            if (!new java.util.HashSet<>(engine.snapshot().skat).equals(new java.util.HashSet<>(skat))) return null;
             List<Card> sequence = new ArrayList<>(30);
             for (int step = 0; step < 128; step++) {
                 GameEngine.Snapshot now = engine.snapshot();

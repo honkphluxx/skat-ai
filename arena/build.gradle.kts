@@ -164,6 +164,22 @@ tasks.register<JavaExec>("rolloutAudit") {
 }
 
 /**
+ * The rollout audit's decisions again, every legal card played out in the
+ * worlds the player sampled for it, so the vote and a rollout's pick are
+ * compared on the same information. See WorldRolloutMain and tools/world-rollout.sh.
+ *
+ * ./gradlew :arena:worldRollout --args="--seeds=14,15,16 --from=arena-logs/rollout --threads=16 --out=arena-logs/rollout/worlds"
+ */
+tasks.register<JavaExec>("worldRollout") {
+    group = "verification"
+    description = "Plays the audit's decisions out in the player's own sampled worlds and scores the pick against the vote's"
+    mainClass.set("dev.skatklar.training.arena.WorldRolloutMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
+/**
  * Phase B2 step 1: how often the worlds a player samples are the world on the
  * table, by trick. See BeliefShareMain and tools/belief-share.sh.
  *
