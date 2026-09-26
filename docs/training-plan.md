@@ -372,6 +372,43 @@ against our 78 of 118 on the same boards, and 16 against 6 wrong
 discards, mostly low cards. Both are defender judgements about the
 declarer's hand.
 
+*Measured (2026-09-26): our defence gives away what SkatZero's keeps.*
+`tools/defending-audit.sh` (`DefendingAuditMain`): the shipped player
+declares the 520 boards of seeds 14-16 at greedy's contracts, once
+against itself in both defender seats, once against SkatZero in both,
+every card solved face up; the same-games check matched the declaring
+audit on all three seeds. Against our defence the declarer wins 275,
+against SkatZero's 255; the boards only one defence loses split 42 to
+22 against us (sign test p about 0.02). The declarer's column reads
+-9.25 against -12.34 game points a game -- three points a game, on the
+defence alone. Of the 313 games the defence had at the first card, ours
+gave 76 away and SkatZero's 58, every one by a gift; the declarer's own
+throws are level (38 and 38).
+
+Where our defenders' extra gifts are, as rates over the chances (a
+defender decision with a choice while the declarer cannot yet win):
+
+| situation | ours | SkatZero |
+| --- | --- | --- |
+| following suit onto the partner's card, declarer still to play | 15 of 351 (4.3%) | 5 of 326 (1.5%) |
+| -- of which an ace or ten, or a king or queen under or over the partner | 11 | 4 |
+| following suit onto the partner's card, declarer already played | 7 of 295 | 4 of 312 |
+| leading an ace or ten of a side suit, tricks 2-4 | 18 of 164 (11.0%) | 10 of 159 (6.3%) |
+| leading a low side card, tricks 2-4 | 10 of 166 | 5 of 173 |
+| leading a jack, tricks 5-10 | 4 of 203 | 0 of 201 |
+| leading a king or queen of a side suit, tricks 2-4 | 4 of 140 | 11 of 170 |
+| all, trump games | 106 of 4,237 (2.5%) | 86 of 4,365 (2.0%) |
+
+Two patterns carry most of the difference: points put on the partner's
+card before the declarer has played -- feeding a trick the declarer can
+still take -- and an ace or ten led into the declarer in the early
+tricks. Both are about the declarer's hand (can it still beat or trump
+this suit?). Each cell is a handful of gifts; the pattern, not the
+cell, is the finding. Next: the defender's own vote at each of these
+gifts -- tied or flat (a tiebreak's choice, a rule can fix it) or
+confidently wrong (its worlds misplaced the declarer's cards, a belief
+question for defenders).
+
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
 that is a discard finding for Phase D's list, not for this lever. And
