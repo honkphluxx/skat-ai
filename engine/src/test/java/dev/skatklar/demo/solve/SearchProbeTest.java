@@ -46,16 +46,19 @@ public class SearchProbeTest {
         final List<long[]> starts = new ArrayList<>();
         @Override public void node(int tricksLeft) { nodes++; byTricks[tricksLeft]++; }
         final java.util.Set<Integer> solvers = new java.util.HashSet<>();
+        final long[] lookups = new long[4];
         @Override public void trickStart(int solver, long position, int leader, int contract, int declarer,
-                                         int tricksLeft, long subtreeNodes) {
-            starts.add(new long[] {tricksLeft, subtreeNodes, contract, declarer, leader, position});
+                                         int tricksLeft, long subtreeNodes, int lookup) {
+            starts.add(new long[] {tricksLeft, subtreeNodes, contract, declarer, leader, position, lookup});
             solvers.add(solver);
+            lookups[lookup]++;
         }
     }
 
     @Test public void theProbeCountsTheSearchAndChangesNothing() {
         Random random = new Random(20260926L);
         Contract[] contracts = {Contract.DIAMONDS, Contract.HEARTS, Contract.SPADES, Contract.CLUBS, Contract.GRAND};
+        long hits = 0, bounds = 0, decided = 0, absent = 0;
         for (int deal = 0; deal < 40; deal++) {
             Contract contract = contracts[deal % contracts.length];
             int size = 5 + deal % 2;
@@ -90,8 +93,27 @@ public class SearchProbeTest {
             }
             assertTrue("the subtrees one trick down fit inside the whole", oneDown < probed.visitedNodes());
             assertEquals("one solve, one solver", 1, recorder.solvers.size());
+            for (long[] start : recorder.starts) {
+                // What the table said decides what the node costs: settled by the
+                // points, or answered by the table, it is one node and no more.
+                if (start[6] == DoubleDummySolver.SearchProbe.LOOKUP_DECIDED
+                        || start[6] == DoubleDummySolver.SearchProbe.LOOKUP_HIT) {
+                    assertEquals("a settled or answered position costs one node", 1, start[1]);
+                } else {
+                    assertTrue("a position the table could not answer is searched below", start[1] > 1);
+                }
+            }
+            hits += recorder.lookups[DoubleDummySolver.SearchProbe.LOOKUP_HIT];
+            bounds += recorder.lookups[DoubleDummySolver.SearchProbe.LOOKUP_BOUND];
+            decided += recorder.lookups[DoubleDummySolver.SearchProbe.LOOKUP_DECIDED];
+            absent += recorder.lookups[DoubleDummySolver.SearchProbe.LOOKUP_ABSENT];
             assertEquals("nothing is counted above the deal's size", 0, recorder.byTricks[Math.min(10, size + 1)]);
         }
+        // Every kind of arrival happens on these deals, so none of the checks above is vacuous.
+        assertTrue("hits " + hits, hits > 0);
+        assertTrue("bounds " + bounds, bounds > 0);
+        assertTrue("decided " + decided, decided > 0);
+        assertTrue("absent " + absent, absent > 0);
     }
 
     @Test public void aProbeNeedsTheJavaSearch() {

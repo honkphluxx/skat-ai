@@ -61,16 +61,27 @@ public final class EndgameProbeMain {
     static final String[] SCOPES = {"same search", "other search, this decision",
             "earlier decision, this game", "another game"};
 
+    /**
+     * Why a position repeated inside one search cost nodes again: what the
+     * search's own table held when it came back.
+     */
+    static final String[] CAUSES = {"the table answered it", "the table held a bound the window could not use",
+            "evicted: stored at an earlier visit, gone now", "never stored: earlier visits settled by the points left",
+            "settled by the points left this time"};
+
     /** One thread's game, decision and search, and what it has seen in them. */
     static final class Context {
         int game;
         int search = -1;
         final List<LongSet> searchKeys = new ArrayList<>();
+        /** Keys this search has stored: reached at least once with the table asked. */
+        final List<LongSet> searchStored = new ArrayList<>();
         final List<LongSet> decisionKeys = new ArrayList<>();
         final List<LongSet> gameKeys = new ArrayList<>();
         Context() {
             for (int ignored : CUTS) {
-                searchKeys.add(new LongSet()); decisionKeys.add(new LongSet()); gameKeys.add(new LongSet());
+                searchKeys.add(new LongSet()); searchStored.add(new LongSet());
+                decisionKeys.add(new LongSet()); gameKeys.add(new LongSet());
             }
         }
     }
@@ -120,6 +131,9 @@ public final class EndgameProbeMain {
         final long[][] repeats = new long[CUTS.length][SCOPES.length];
         /** Nodes the repeat cost below its own: what a lookup would have skipped. */
         final long[][] saved = new long[CUTS.length][SCOPES.length];
+        /** Repeats inside one search, and the nodes they cost again, by what the table held. */
+        final long[][] causeRepeats = new long[CUTS.length][CAUSES.length];
+        final long[][] causeSaved = new long[CUTS.length][CAUSES.length];
         long decisions;
         long outside;
 
@@ -132,6 +146,10 @@ public final class EndgameProbeMain {
                 for (int k = 0; k < SCOPES.length; k++) {
                     repeats[c][k] += other.repeats[c][k];
                     saved[c][k] += other.saved[c][k];
+                }
+                for (int k = 0; k < CAUSES.length; k++) {
+                    causeRepeats[c][k] += other.causeRepeats[c][k];
+                    causeSaved[c][k] += other.causeSaved[c][k];
                 }
             }
             decisions += other.decisions;
@@ -164,7 +182,7 @@ public final class EndgameProbeMain {
         }
 
         @Override public void trickStart(int solver, long position, int leader, int contract, int declarer,
-                                         int tricksLeft, long subtreeNodes) {
+                                         int tricksLeft, long subtreeNodes, int lookup) {
             int c = -1;
             for (int i = 0; i < CUTS.length; i++) if (CUTS[i] == tricksLeft) c = i;
             if (c < 0) return;
@@ -180,9 +198,26 @@ public final class EndgameProbeMain {
                 // thread, so a new number is a new search with an empty table.
                 ctx.search = solver;
                 for (LongSet keys : ctx.searchKeys) keys.clear();
+                for (LongSet keys : ctx.searchStored) keys.clear();
             }
             t.sampledPositions[c]++;
             boolean inSearch = !ctx.searchKeys.get(c).add(key);
+            boolean storedBefore;
+            if (lookup != DoubleDummySolver.SearchProbe.LOOKUP_DECIDED) {
+                storedBefore = !ctx.searchStored.get(c).add(key);
+            } else {
+                storedBefore = false;
+            }
+            if (inSearch) {
+                int cause = switch (lookup) {
+                    case DoubleDummySolver.SearchProbe.LOOKUP_HIT -> 0;
+                    case DoubleDummySolver.SearchProbe.LOOKUP_BOUND -> 1;
+                    case DoubleDummySolver.SearchProbe.LOOKUP_ABSENT -> storedBefore ? 2 : 3;
+                    default -> 4;
+                };
+                t.causeRepeats[c][cause]++;
+                t.causeSaved[c][cause] += subtreeNodes - 1;
+            }
             boolean inDecision = !ctx.decisionKeys.get(c).add(key);
             boolean inGame = !ctx.gameKeys.get(c).add(key);
             int first = firstGame.putIfAbsent(key, ctx.game);
@@ -371,6 +406,22 @@ public final class EndgameProbeMain {
                                 "   cache kept that long saves %.1f%%", cumulative)));
             }
         }
+        out.append("\n3. THE REPEATS INSIDE ONE SEARCH   what the search's own table held when a position came back\n");
+        for (int c = 0; c < CUTS.length; c++) {
+            long n = 0;
+            for (long r : t.causeRepeats[c]) n += r;
+            out.append(String.format(Locale.ROOT, "   cut %d%n", CUTS[c]));
+            for (int k = 0; k < CAUSES.length; k++) {
+                out.append(String.format(Locale.ROOT, "      %-56s %5.1f%% of these repeats, %5.1f%% of all nodes again%n",
+                        CAUSES[k], 100.0 * t.causeRepeats[c][k] / Math.max(1, n),
+                        100.0 * sample * t.causeSaved[c][k] / total));
+            }
+        }
+        out.append("   Evicted: the table's replacement rule threw the entry out -- a replacement rule that keeps\n"
+                + "   the last tricks, or a store of their own, repairs it. A bound the window could not use: the\n"
+                + "   entry was there but held only \"at least\" or \"at most\" on the wrong side -- exact values for\n"
+                + "   the last tricks repair it. Never stored: every earlier visit was settled by the points left,\n"
+                + "   which stores nothing -- storing those outcomes, or exact values, repairs it.\n");
         out.append("   A repeat is a position already reached before in that scope (the narrowest one counts); what\n"
                 + "   it saves is the nodes below it the second time, since a lookup costs about one node. \"same\n"
                 + "   search\" repeats are the ones the solver's own table should have caught and did not (evicted,\n"

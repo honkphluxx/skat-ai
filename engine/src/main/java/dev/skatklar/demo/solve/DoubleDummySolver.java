@@ -89,11 +89,22 @@ public final class DoubleDummySolver implements AutoCloseable {
          * go, after its subtree was searched: which solver searched it (a
          * serial number, one per solver object, so one search and its
          * transposition table), the position key (see {@link #position()}),
-         * who leads, the contract's ordinal, the declarer's seat, and the
-         * nodes the subtree cost, itself included.
+         * who leads, the contract's ordinal, the declarer's seat, the nodes
+         * the subtree cost, itself included, and what the search's own table
+         * had for the position when it arrived ({@link #LOOKUP_DECIDED},
+         * {@link #LOOKUP_HIT}, {@link #LOOKUP_BOUND}, {@link #LOOKUP_ABSENT}).
          */
         void trickStart(int solver, long position, int leader, int contract, int declarer,
-                        int tricksLeft, long subtreeNodes);
+                        int tricksLeft, long subtreeNodes, int lookup);
+
+        /** The window was settled by the points left alone; the table is not asked. */
+        int LOOKUP_DECIDED = 0;
+        /** The table held an entry that answered the window. */
+        int LOOKUP_HIT = 1;
+        /** The table held an entry, a bound the window could not use. */
+        int LOOKUP_BOUND = 2;
+        /** The table held nothing for the position. */
+        int LOOKUP_ABSENT = 3;
     }
 
     private static SearchProbe searchProbe;
@@ -700,11 +711,31 @@ public final class DoubleDummySolver implements AutoCloseable {
         }
         long before = visitedNodes;
         long position = position();
+        int lookup = lookup(position, leader, alpha, beta);
         int value = searchNode(toPlay, leader, trickCards, trickSize, alpha, beta);
         if (serial < 0) serial = SERIALS.incrementAndGet();
         probe.trickStart(serial, position, leader, contractOrdinal, declarerSeat, tricksLeft,
-                visitedNodes - before);
+                visitedNodes - before, lookup);
         return value;
+    }
+
+    /**
+     * What {@link #searchNode} is about to find for this trick-start position,
+     * read without touching anything: the same tests in the same order, for
+     * the probe only.
+     */
+    private int lookup(long position, int leader, int alpha, int beta) {
+        int remaining = pointsInHands();
+        if (remaining <= alpha || beta <= 0) return SearchProbe.LOOKUP_DECIDED;
+        if (!useTranspositions || table == null) return SearchProbe.LOOKUP_ABSENT;
+        int at = probe(position, leader);
+        if (at < 0) return SearchProbe.LOOKUP_ABSENT;
+        long entry = table[at + 1];
+        int cached = valueOf(entry);
+        boolean usable = isExact(entry)
+                || (isLowerBound(entry) && cached >= beta)
+                || (!isLowerBound(entry) && cached <= alpha);
+        return usable ? SearchProbe.LOOKUP_HIT : SearchProbe.LOOKUP_BOUND;
     }
 
     private int searchNode(int toPlay, int leader, int trickCards, int trickSize,
