@@ -28,6 +28,9 @@
 #      discarding, and whose card held the trick -- as a rate over the chances
 #   4. the Nulls
 #   5. the declarer's own throws against each defence
+#   6. our defenders' own tally at each of their gifts -- a tie the tiebreak
+#      broke, or worlds that said the gift was the better card -- and how
+#      the share of worlds a card holds in compares with how often it gifts
 #
 # Roughly fifteen minutes a defence at 16 threads (SkatZero is a Python
 # helper, about two games a second).
@@ -50,7 +53,7 @@ for arg in "$@"; do
         --threads=*)   THREADS="${arg#*=}" ;;
         --defenders=*) DEFENDERS="${arg#*=}"; DEFENDERS="${DEFENDERS//,/ }" ;;
         --seeds=*)     SEEDS_ARG="${arg#*=}" ;;
-        -h|--help)     sed -n '2,36p' "$DEFENDING_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)     sed -n '2,39p' "$DEFENDING_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done

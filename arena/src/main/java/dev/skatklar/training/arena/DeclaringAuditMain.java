@@ -204,6 +204,17 @@ public final class DeclaringAuditMain {
      */
     static Game play(Board board, long seed, ContractSource.FixedContract fixed,
                              Contestant declaring, Contestant defending, boolean watchTheVote) {
+        return play(board, seed, fixed, declaring, defending, watchTheVote, false);
+    }
+
+    /**
+     * As above, and with {@code watchDefenders} the defenders' tallies are
+     * kept too, on their decisions ({@link DefendingAuditMain}). Watching does
+     * not move a card: the observer is told after the choice is made.
+     */
+    static Game play(Board board, long seed, ContractSource.FixedContract fixed,
+                     Contestant declaring, Contestant defending, boolean watchTheVote,
+                     boolean watchDefenders) {
         SkatAi.Seat declarer = fixed.declarer();
         Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
         Vote[] lastVote = new Vote[1];
@@ -211,7 +222,8 @@ public final class DeclaringAuditMain {
             Contestant contestant = seat == declarer ? declaring : defending;
             SkatAiProvider provider = contestant.newProvider(Seeds.mix(
                     seed, board.index(), declarer.ordinal(), seat.ordinal()));
-            if (watchTheVote && seat == declarer && provider instanceof SearchAiProvider search) {
+            boolean watch = seat == declarer ? watchTheVote : watchDefenders;
+            if (watch && provider instanceof SearchAiProvider search) {
                 provider = search.withCardPlayObserver(new SearchAiProvider.CardPlayObserver() {
                     @Override public void decided(SearchAiProvider.CardPlayReport report) {}
                     @Override public void voted(SkatAi.DecisionContext context,
@@ -265,7 +277,7 @@ public final class DeclaringAuditMain {
                     throw new IllegalStateException("board " + board.index() + ": " + played
                             + " was played and the solver did not consider it legal");
                 }
-                Vote vote = byDeclarer ? lastVote[0] : null;
+                Vote vote = byDeclarer || watchDefenders ? lastVote[0] : null;
                 if (vote != null && !played.equals(vote.chosen())) vote = null;
                 decisions.add(new Decision(before.completedTricks + 1, before.trick.size(),
                         byDeclarer, before.hands.get(mover.ordinal()).size(), truth.size(), winning,

@@ -84,7 +84,7 @@ public final class DefendingAuditMain {
                     ContractSource.FixedContract fixed = contracts.contractFor(board);
                     if (fixed == null) return null;
                     return new DeclaringAuditMain.BoardAudit(board.index(), fixed,
-                            DeclaringAuditMain.play(board, seed, fixed, player, player, false),
+                            DeclaringAuditMain.play(board, seed, fixed, player, player, false, true),
                             DeclaringAuditMain.play(board, seed, fixed, player, defenders, false));
                 });
             }
@@ -121,7 +121,35 @@ public final class DefendingAuditMain {
     // ------------------------------------------------------------------ reading a game
 
     /** One defender card, with what it was doing and whether it was a gift. */
-    record DefenderCard(Kind kind, Holder holder, boolean chance, boolean gift, int cardPoints) {}
+    record DefenderCard(Kind kind, Holder holder, boolean chance, boolean gift, int cardPoints,
+                        boolean trump, DeclaringAuditMain.Decision decision) {
+        /** Onto the partner's card with the declarer still to play: the partner led, this is second. */
+        boolean beforeTheDeclarer() { return holder == Holder.PARTNER && decision.positionInTrick() == 1; }
+    }
+
+    /**
+     * How the defender's own tally stood at a card, in the declaring audit's
+     * classes read from the defence's side: the cards that keep the declarer
+     * from winning (the legal cards not among the solver's winning cards)
+     * against the card played. At a gift: every card at zero (it thought the
+     * game lost, the tiebreak chose), a safe card tied with it (the tiebreak
+     * chose), every safe card outvoted by at most a tenth of the worlds
+     * (narrow), or by more (its worlds were confidently wrong).
+     */
+    static DeclaringAuditMain.VoteClass classify(DeclaringAuditMain.Decision d) {
+        if (d.votes() == null || d.worldsSearched() == 0) return DeclaringAuditMain.VoteClass.NO_VOTE;
+        int max = 0;
+        for (int v : d.votes().values()) max = Math.max(max, v);
+        if (max == 0) return DeclaringAuditMain.VoteClass.FLAT_ZERO;
+        int chosen = d.votes().getOrDefault(d.played(), 0);
+        int bestSafe = -1;
+        for (Map.Entry<Card, Integer> vote : d.votes().entrySet()) {
+            if (!d.winningCards().contains(vote.getKey())) bestSafe = Math.max(bestSafe, vote.getValue());
+        }
+        if (bestSafe >= chosen) return DeclaringAuditMain.VoteClass.TIED;
+        return (chosen - bestSafe) * 10 <= d.worldsSearched()
+                ? DeclaringAuditMain.VoteClass.NARROW : DeclaringAuditMain.VoteClass.WIDE;
+    }
 
     /** The defenders' cards of a game, each placed in its trick. Null games are not classified. */
     static List<DefenderCard> defenderCards(Contract contract, DeclaringAuditMain.Game game) {
@@ -152,7 +180,8 @@ public final class DefendingAuditMain {
                     else kind = Kind.DISCARD;
                 }
                 boolean chance = !d.wonBefore() && d.legal() > 1;
-                cards.add(new DefenderCard(kind, holder, chance, d.gift(), SkatRules.cardPoints(d.played())));
+                cards.add(new DefenderCard(kind, holder, chance, d.gift(), SkatRules.cardPoints(d.played()),
+                        SkatRules.publicFollowClass(contract, d.played()).equals(SkatAi.FollowClass.trump()), d));
             }
             trick.add(d.played());
             byDeclarer.add(d.byDeclarer());
@@ -285,6 +314,64 @@ public final class DefendingAuditMain {
             }
             out.append(String.format(Locale.ROOT, "   %-30s throws %d in %d games; cold at the first card %d, "
                     + "of those lost %d%n", names[side], throwsN, games, cold, coldLost));
+        }
+        out.append(voteSection(audits, us));
+        return out.toString();
+    }
+
+    /** Our defenders' own tallies at their gifts, and their calibration over every chance. */
+    static String voteSection(List<DeclaringAuditMain.BoardAudit> audits, String us) {
+        StringBuilder out = new StringBuilder();
+        String[] groups = {"points onto the partner's card, declarer to play", "ace or ten led, tricks 2-4",
+                "every other gift", "all gifts"};
+        DeclaringAuditMain.VoteClass[] classes = DeclaringAuditMain.VoteClass.values();
+        int[][] counts = new int[groups.length][classes.length];
+        // Calibration: the vote share of the card played, against how often it was a gift.
+        String[] bins = {"0", "1-25%", "26-50%", "51-75%", "76-99%", "100%"};
+        int[] binChances = new int[bins.length], binGifts = new int[bins.length];
+        double[] binClaim = new double[bins.length];
+        for (DeclaringAuditMain.BoardAudit a : audits) {
+            if (a.fixed().contract().isNull()) continue;
+            for (DefenderCard c : defenderCards(a.fixed().contract(), a.ours())) {
+                if (!c.chance()) continue;
+                DeclaringAuditMain.Decision d = c.decision();
+                if (d.votes() != null && d.worldsSearched() > 0) {
+                    double share = d.votes().getOrDefault(d.played(), 0) / (double) d.worldsSearched();
+                    int b = share == 0 ? 0 : share >= 1 ? 5 : share <= 0.25 ? 1 : share <= 0.5 ? 2 : share <= 0.75 ? 3 : 4;
+                    binChances[b]++;
+                    binClaim[b] += share;
+                    if (c.gift()) binGifts[b]++;
+                }
+                if (!c.gift()) continue;
+                int group;
+                if (c.beforeTheDeclarer() && c.cardPoints() >= 3) group = 0;
+                else if (c.kind() == Kind.LEAD && !c.trump() && c.cardPoints() >= 10
+                        && d.trick() >= 2 && d.trick() <= 4) group = 1;
+                else group = 2;
+                int k = classify(d).ordinal();
+                counts[group][k]++;
+                counts[3][k]++;
+            }
+        }
+        out.append(String.format(Locale.ROOT, "%n6. OUR DEFENDERS' OWN TALLY AT THEIR GIFTS (%s, trump games)%n", us));
+        out.append(String.format(Locale.ROOT, "   %-50s", ""));
+        for (DeclaringAuditMain.VoteClass vc : classes) out.append(String.format(Locale.ROOT, " %9s", vc.name()));
+        out.append('\n');
+        for (int g = 0; g < groups.length; g++) {
+            out.append(String.format(Locale.ROOT, "   %-50s", groups[g]));
+            for (int k = 0; k < classes.length; k++) out.append(String.format(Locale.ROOT, " %9d", counts[g][k]));
+            out.append('\n');
+        }
+        out.append("   FLAT_ZERO: every card at zero, it thought the game lost and the tiebreak chose; TIED: a safe\n"
+                + "   card had as many worlds, the tiebreak chose; NARROW / WIDE: every safe card outvoted by at most /\n"
+                + "   more than a tenth of the worlds -- its worlds said the gift was the better card.\n");
+        out.append("   Calibration over every chance: the share of its worlds in which the card played holds the\n"
+                + "   declarer, against how often it was in fact a gift\n");
+        out.append(String.format(Locale.ROOT, "   %-10s %9s %12s %9s%n", "share", "chances", "mean claim", "gifts"));
+        for (int b = 0; b < bins.length; b++) {
+            out.append(String.format(Locale.ROOT, "   %-10s %9d %11.1f%% %4d = %4.1f%%%n", bins[b], binChances[b],
+                    binChances[b] == 0 ? 0 : 100 * binClaim[b] / binChances[b], binGifts[b],
+                    pct(binGifts[b], binChances[b])));
         }
         return out.toString();
     }
