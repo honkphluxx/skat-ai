@@ -240,6 +240,14 @@ public final class BeliefPlayers {
         // id the ladder run's logs carry, and belief-32-shipped-flat is the
         // player before it, for anyone re-reading that pairing.
         registry.register(ladderVariant("belief-32-shipped", loader));
+        // 2026-09-26, docs/training-plan.md 2.9: our defenders' gifts are close
+        // calls -- 93 of 106 within three worlds of 32 of a safe card. The
+        // shipped player with twice the worlds, everything else the same,
+        // says whether that is sampling noise (fewer gifts) or the belief
+        // (the same gifts). An instrument, not a candidate: it doubles the
+        // card play's solver work.
+        registry.register(renamed(ladderVariant("belief-64-shipped", 64, loader),
+                "The shipped player with 64 worlds a card"));
         // B2, 2026-09-24: the shipped player with the sampler dealing the
         // cards the belief is surest about first. The net's held-out margin
         // as declarer is +11 points and the sampled worlds carry under one of
@@ -366,7 +374,12 @@ public final class BeliefPlayers {
 
     /** The shipped player, with {@link SearchAiProvider#withLadder()} on. */
     private static Contestant ladderVariant(String id, Loader loader) {
-        Contestant shipped = nullVariant(id, 32, NullOrder.LOW_RANK, 128, loader);
+        return ladderVariant(id, 32, loader);
+    }
+
+    /** As above, sampling {@code worlds} worlds for a trump game's card instead of 32. */
+    private static Contestant ladderVariant(String id, int worlds, Loader loader) {
+        Contestant shipped = nullVariant(id, worlds, NullOrder.LOW_RANK, 128, loader);
         return new Contestant() {
             @Override public String id() { return id; }
             @Override public String displayName() { return shipped.displayName(); }

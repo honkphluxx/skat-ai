@@ -74,6 +74,20 @@ public class BeliefPlayersTwinTest {
         assertTrue(ladder(registry.resolve("belief-32-shipped-trap2-safe").newProvider(1)));
         assertEquals("TRAP_FIRST_BOTH", trap(registry.resolve("belief-32-shipped-trap2").newProvider(1)));
         assertEquals("SAFETY_FIRST_BOTH", trap(registry.resolve("belief-32-shipped-trap2-safe").newProvider(1)));
+
+        // The 64-world instrument is the shipped player with the worlds doubled and nothing else.
+        SkatAiProvider wide = registry.resolve("belief-64-shipped").newProvider(1);
+        assertTrue("belief-64-shipped keeps the ladder", ladder(wide));
+        assertEquals("OFF", trap(wide));
+        assertEquals(32, worlds(registry.resolve("belief-32-shipped").newProvider(1)));
+        assertEquals(64, worlds(wide));
+    }
+
+    private static int worlds(SkatAiProvider provider) throws Exception {
+        Field personality = SearchAiProvider.class.getDeclaredField("personality");
+        personality.setAccessible(true);
+        Object p = personality.get(provider);
+        return (Integer) p.getClass().getMethod("worlds").invoke(p);
     }
 
     private static String trap(SkatAiProvider provider) throws Exception {
