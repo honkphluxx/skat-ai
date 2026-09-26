@@ -146,6 +146,23 @@ this order; nothing below is started.
   that reaches it -- see the caching note below). Target about one game
   a second for the teacher.
 
+*T1, first three seeds (2026-09-26).* `belief-64-shipped` against the
+shipped player, fixed contracts, exact pairing: seed 11 +1.42 [-0.35,
++3.19], seed 12 **+4.30 [+1.36, +7.24]**, seed 13 +1.85 [-0.96, +4.67];
+pooled **+2.53 [-1.33, +6.38]** -- every seed positive, one resolved
+alone, the pooled interval wide on three seeds (t with two degrees of
+freedom). The "from declaring" column moves most (-2.69 against -5.43,
+-3.31 against -10.15, -7.14 against -9.92), but in a pairing that column
+is our declarer against their defence and theirs against ours, so it
+does not split declaring from defending; the defending audit already
+showed the defence's share. Price: the three matches took 1,610, 1,739
+and 1,328 s against about 1,150 s for a match of two 32-world players,
+so the 64-world player costs about 1.7 times as much a game, not two --
+Null decisions and everything outside the tally stay the same. Next:
+seeds 14-16 (`tools/trap.sh --pair-only --players=belief-64-shipped
+--seeds="14 15 16"`), which the pooled line then reads with the first
+three.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
