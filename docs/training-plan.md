@@ -240,6 +240,36 @@ entry was evicted or because it held a bound the new window could not
 use -- the two call for different repairs (the replacement rule, or
 exact values for the last tricks).
 
+*Read (0e233a1, same 60 boards).* Of the 21.9% of nodes repeated inside
+one search at the three-trick cut: 13.2% a bound the new window could
+not use, 7.2% evicted, 1.5% never stored (every earlier visit settled by
+the points left); at four tricks 19.8 / 5.0 / 1.9%.
+
+*Why this is parked, not built.* Every figure above is nodes a second
+visit cost, not time saved net of what the repair costs:
+
+- The bound share is not free to recover. Exact values for the last
+  tricks mean the first visit searches with a full window instead of a
+  null one -- the very thing that makes our questions an order of
+  magnitude cheaper -- so the first visits get dearer by an unknown
+  amount. A table entry keeping both an upper and a lower bound is the
+  cheap version and recovers only part of it.
+- The eviction share trades against itself: keep the endgames and the
+  entries evicted instead are deeper ones, dearer to search again. A
+  bigger table costs memory misses on every node.
+- Nodes are not time, and this is the Java search; the native engine,
+  which the host and the phone run, would need the same change and its
+  own measurement.
+
+So the realistic gain is somewhere between 5% and 20% of solver time,
+for a change inside the solver both engines share. Against it: after
+Phase I the phone runs a network, not the search, and on the host a 20%
+faster teacher shortens a five-day data run by one day. Parked behind T1;
+reopened only if the teacher's data runs turn out to be the bottleneck,
+and then as a Java experiment first (both-bound entries, and a
+replacement rule that spares the last tricks) that has to show 15% wall
+time on fixed positions before anything is ported to C++.
+
 ## 2.9 Where the SkatZero gap is, 2026-09-25: the games our declarer gives up on
 
 `tools/skatzero-gap.sh`, two instruments on the player that ships.
