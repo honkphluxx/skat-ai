@@ -409,6 +409,38 @@ gifts -- tied or flat (a tiebreak's choice, a rule can fix it) or
 confidently wrong (its worlds misplaced the declarer's cards, a belief
 question for defenders).
 
+*Measured (2026-09-26): the gifts are close calls, and no simple rule
+separates them.* The same audit with our defenders' tallies kept
+(b2f8684; the games unchanged, same-games OK). Of our 106 gifts in
+trump games, 38 were tied with a safe card at the top and 55 outvoted
+every safe card by at most a tenth of the worlds; 13 by more. In worlds:
+the gift led the best safe card by 0 in 38, 1 in 21, 2 in 16, 3 in 18,
+4 or more in 13 -- 93 of 106 within three worlds of 32. The two patterns
+look the same (points onto the partner's card: 5 tied, 6 narrow, 2 wide;
+an ace or ten led in tricks 2-4: 7, 10, 1). The worlds did not tell the
+gift from the safe card; they were not confidently wrong.
+
+Rules tried offline on the 4,237 chances, each scored by the solver's
+verdict on the card it would have played instead (the game's result
+against perfect play from there, so points fed are inside it):
+"fewest card points among the cards within M worlds of the top" makes
+things worse at every M (106 gifts to 107, 131, 135, 140 for M = 0-3);
+"no ace or ten onto the partner's card before the declarer, nor led from
+a side suit in tricks 2-4" at best 106 to 100 (ties only), and to 102 at
+M = 3, changing 86 to 248 cards for it. Small margins carry signal: the
+vote share of the card played orders the gifts (11.1%, 6.1%, 4.7%, 2.2%,
+0.2% from the lowest share band to 100%). The levels in that table are
+not a calibration -- the chances are selected by the true deal being
+lost for the declarer, which makes every claim look pessimistic; the
+report's label overstates it.
+
+So the defence's gap is spread thin over close calls, not concentrated
+in a pattern a rule can name. Two readings remain: sampling noise (a
+margin of one to three worlds in 32 is inside it -- more worlds would
+move those cards) or a belief that cannot separate the cases (more
+worlds would not). A defender with 64 worlds in the same audit decides
+between them.
+
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
 that is a discard finding for Phase D's list, not for this lever. And
