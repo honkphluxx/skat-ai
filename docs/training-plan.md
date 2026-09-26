@@ -118,6 +118,88 @@ overall. **Phase A moves ahead of Phase D**, and the Null variants are the first
 thing in it — a Null that can only ever be bid to 23 is a contract we own on
 paper and never play.
 
+## 2.10 The next phase, planned 2026-09-26: a teacher on the host, a student on the phone
+
+Where 2.9 ends: the vote is not the lever, more worlds are (64 worlds
+close about half of the defence's gap to SkatZero), and the phone's
+thinking time is already at its limit on an S25 Ultra. Every lever that
+worked costs search time. So the strong player moves to the host and
+the phone gets a network that imitates it. Decided with Philipp, in
+this order; nothing below is started.
+
+**Phase T -- the teacher.**
+
+- **T1, pick it.** `belief-64-shipped` (705f2b3) against the shipped
+  player, fixed contracts, seeds 11-13 (`tools/trap.sh --pair-only
+  --players=belief-64-shipped` runs it); and a variant with 64 worlds
+  for the defenders only, since that is where the audit saw the gain.
+  The teacher is picked for strength alone -- phone time does not count
+  here. Gate: a resolved positive pairing.
+- **T2, make it cheaper to run on the host.** Games per second measured
+  first (the shipped player plays about one game a second at 16
+  threads, 1,068 games in about 1,000 s; the 64-world teacher about
+  half). Candidates, each proven exact by a test against the plain
+  solve: one solve for cards that are equivalent (touching, nothing
+  between them left in play); one transposition table shared by every
+  question a decision asks of a world; and a table shared across worlds
+  and decisions (a solved position is worth the same in every world
+  that reaches it -- see the caching note below). Target about one game
+  a second for the teacher.
+
+**Phase I -- imitation.**
+
+- **I1, the exporter.** Every card decision, every seat and contract:
+  the position (the belief net's encoding), the legal cards, the
+  teacher's vote share and cushion per card, and the card it chose; in
+  the belief data's shard format. Bidding and the discard stay out at
+  first.
+- **I2, the first corpus.** 50,000 games, one to two days on the host;
+  training on a quarter, a half and all of it shows whether more data
+  still pays.
+- **I3, the policy net.** Trained on the teacher's vote distribution,
+  not only its card. Whether it takes the belief net's output as an
+  input is measured, not assumed.
+- **I4, the student players.** The net alone, and the net naming a
+  short list for a small search. Gates in order: agreement with the
+  teacher on held-out games; the pairing against the shipped player and
+  against the teacher; time per card on the S25 Ultra.
+- **I5, scale** to 200,000-500,000 games if the curve is still rising.
+
+**Phase S -- ship the student.** Gated against the outside bots (XSkat,
+SkatZero), then size, load time and time per card in the app. Bidding
+keeps its own search; its phone time is a separate question.
+
+**Phase R -- self-improvement.** The student guides the teacher's
+search, the teacher produces new data, the student is retrained; the
+only way past the teacher. Long-term, priority open, may be left out.
+
+**Not taken: the GPU.** Solving worlds in a shader was considered. The
+solver is alpha-beta with a transposition table and tree sizes that
+differ a hundredfold between worlds of one decision -- divergent,
+memory-bound work that a GPU does badly -- and a decision's 32-64 worlds
+are far too small a batch; across thousands of games the batches would
+be big enough, but that work already splits perfectly over the CPU
+threads. After Phase I the search runs only on the host, where
+throughput is the question and a week of CPU is an acceptable answer.
+
+**Caching (Philipp's question, to be measured in T2).** A solved
+position -- the remaining hands, whose lead, the cards in the trick --
+has one value whatever world it was reached from, for a fixed contract
+and declarer. So a cache keyed on the position is valid across worlds,
+across the questions a decision asks, and across the decisions of one
+game. Today every `movesReaching` call builds a fresh solver and table,
+so none of that is reused. The proposal was a cache of the last three
+or four tricks only; the more useful form is probably the solver's own
+transposition table kept alive with a bounded size and a replacement
+rule (the "fading" the proposal asked for), because it already stores
+bounds valid for any target. Two unknowns decide it, and both are
+measurable before any build: how often a position solved in one world
+recurs in another world of the same decision (hidden cards differ, so
+recurrences come late in the tree), and how much of a solve's time is
+spent where those recurrences are. A last-trick endgame is a few hundred
+nodes, so caching only those saves little per hit; the payoff, if there
+is one, is in the middle of the tree.
+
 ## 2.9 Where the SkatZero gap is, 2026-09-25: the games our declarer gives up on
 
 `tools/skatzero-gap.sh`, two instruments on the player that ships.
@@ -469,6 +551,19 @@ of the 106 gifts -- so a close-call-only 64 costs about two thirds of a
 flat 64. Whether any of it is worth the phone's time is the pairing's
 question: `belief-64-shipped` against the shipped player, fixed
 contracts, seeds 11-13, with the games-per-second line as the price.
+
+*Measured (2026-09-26): card points on close calls change nothing.*
+`belief-32-shipped-bands` (4462a5a; `SearchAiProvider.withPointBands`:
+when another card is within three worlds of the top vote, every world is
+asked where the declarer's total lands in the bands 31/46/61/76/90, and
+the best mean band score replaces the vote's card only with a paired t
+of 2) in the defence: declarer won 278 against our 275, gifts 110
+against 106, the boards only one defence loses 6 to 3 -- level, at up
+to five extra questions a world on six decisions in ten. The reading
+matters more than the number: finer scoring of the same 32 worlds buys
+nothing, twice the worlds buys half the gap. The noise that costs our
+defenders is in which worlds are drawn, not in the yes-or-no answer each
+world gives. Closed; the registration stays as a control.
 
 Two smaller readings from the same run. SkatZero's discard leaves the
 game cold on 19 boards where ours does not, against 6 the other way;
