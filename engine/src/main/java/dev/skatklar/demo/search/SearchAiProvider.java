@@ -389,6 +389,8 @@ public final class SearchAiProvider implements SkatAiProvider {
         final CardPlayObserver observer;
         final boolean ladder;
         final TrapOrder trap;
+        /** See {@link #withPointBands()}. */
+        final boolean bands;
 
         CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder) {
             this(budgetNanos, observer, ladder, TrapOrder.OFF);
@@ -396,10 +398,16 @@ public final class SearchAiProvider implements SkatAiProvider {
 
         CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder,
                          TrapOrder trap) {
+            this(budgetNanos, observer, ladder, trap, false);
+        }
+
+        CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder,
+                         TrapOrder trap, boolean bands) {
             this.budgetNanos = Math.max(0L, budgetNanos);
             this.observer = observer;
             this.ladder = ladder;
             this.trap = trap == null ? TrapOrder.OFF : trap;
+            this.bands = bands;
         }
     }
 
@@ -454,7 +462,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, with a trap tally at flat zero. See {@link TrapOrder}. */
     public SearchAiProvider withTrap(TrapOrder order) {
         return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer,
-                cardPlay.ladder, order));
+                cardPlay.ladder, order, cardPlay.bands));
     }
 
     /** Card points the declarer must reach to stay out of Schneider. */
@@ -481,7 +489,115 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withLadder() {
         return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer, true,
-                cardPlay.trap));
+                cardPlay.trap, cardPlay.bands));
+    }
+
+    /**
+     * The same player, letting the card points decide close calls.
+     *
+     * <p>The vote is binary: in each world a card wins or it does not, and 32
+     * yes-or-no answers are a noisy count. The defending audit of 2026-09-26
+     * (docs/training-plan.md 2.9) found our defenders' gifts to be close
+     * calls -- 93 of 106 within three worlds of 32 of a safe card -- and twice
+     * the worlds closed about half of the gap to SkatZero's defence, so the
+     * noise is real. A card's score in card points carries more of what each
+     * world says. With this set, whenever some other card is within
+     * {@link #BAND_CLOSE_WORLDS} worlds of the top vote (a tie included), every
+     * world is asked where the declarer's total lands after each card, in the
+     * bands {@link #BAND_POINTS} -- the score sheet's 31, 61 and 90 and the
+     * steps half way between -- which is the card-point sum in steps of
+     * fifteen at the cost of a null-window question per step. The card with
+     * the best mean band score among the close ones is played instead of the
+     * one the vote and its tiebreaks chose only if it leads it significantly,
+     * world by world: a paired t of at least {@link #BAND_T}. Otherwise the
+     * card is the one it always was.
+     *
+     * <p>Trump contracts only; a Null has no card points to count.
+     */
+    public SearchAiProvider withPointBands() {
+        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer,
+                cardPlay.ladder, cardPlay.trap, true));
+    }
+
+    /** The declarer totals the bands are cut at: Schneider, the half-way steps, the game, Schneider for him. */
+    static final int[] BAND_POINTS = {31, 46, 61, 76, 90};
+    /** How close to the top vote, in worlds, a card must be for the bands to be asked. */
+    static final int BAND_CLOSE_WORLDS = 3;
+    /** The paired t a band leader needs over the vote's card to replace it. */
+    static final double BAND_T = 2.0;
+
+    /**
+     * For every card in {@code cards}, in one world with every hand face up:
+     * how many of {@link #BAND_POINTS} the declarer's final total reaches after
+     * it (for the declarer) or stays below (for a defender).
+     *
+     * @param banked          card points the declarer already has, the skat included
+     * @param remainingPoints card points still in the hands and in the current trick
+     */
+    static int[] bandScores(Contract contract, SkatAi.Seat declarer, SkatAi.Seat me,
+                            List<? extends Collection<Card>> hands, SkatAi.Seat leader,
+                            List<Card> trick, int banked, int remainingPoints, List<Card> cards) {
+        boolean iAmTheDeclarer = me == declarer;
+        int[] scores = new int[cards.size()];
+        for (int points : BAND_POINTS) {
+            int needed = points - banked;
+            if (needed <= 0 || needed > remainingPoints) {
+                // Settled in this world whatever is played: reached by every
+                // card, or by none. The same for every card, so no search.
+                boolean reached = needed <= 0;
+                if (reached == iAmTheDeclarer) for (int i = 0; i < scores.length; i++) scores[i]++;
+                continue;
+            }
+            Map<Card, Boolean> reaches = new LinkedHashMap<>();
+            for (DoubleDummySolver.Verdict verdict : DoubleDummySolver.movesReaching(contract, declarer,
+                    me, hands, leader, trick, needed)) {
+                reaches.put(verdict.card(), verdict.reachesTarget());
+            }
+            for (int i = 0; i < cards.size(); i++) {
+                Boolean reached = reaches.get(cards.get(i));
+                if (reached != null && reached == iAmTheDeclarer) scores[i]++;
+            }
+        }
+        return scores;
+    }
+
+    /**
+     * The band step's verdict, given every world's band scores.
+     *
+     * @param scores {@code [world][card]}, cards in the order of {@code cards}
+     * @return the card to play: {@code incumbent} unless a close card's mean
+     *         band score leads it with a paired t of at least {@code t}
+     */
+    static Card bandChoice(List<Card> cards, Map<Card, Integer> votes, Card incumbent,
+                           int[][] scores, int closeWorlds, double t) {
+        int max = Integer.MIN_VALUE;
+        for (Card card : cards) max = Math.max(max, votes.getOrDefault(card, 0));
+        int inc = cards.indexOf(incumbent);
+        if (inc < 0 || scores.length == 0) return incumbent;
+        int best = -1;
+        long bestSum = Long.MIN_VALUE;
+        for (int i = 0; i < cards.size(); i++) {
+            if (votes.getOrDefault(cards.get(i), 0) < max - closeWorlds) continue;
+            long sum = 0;
+            for (int[] world : scores) sum += world[i];
+            // Ties in the sum keep the incumbent, then the earlier card.
+            if (sum > bestSum || (sum == bestSum && i == inc)) { best = i; bestSum = sum; }
+        }
+        if (best < 0 || best == inc) return incumbent;
+        int n = scores.length;
+        double mean = 0;
+        for (int[] world : scores) mean += world[best] - world[inc];
+        mean /= n;
+        if (mean <= 0) return incumbent;
+        double ss = 0;
+        for (int[] world : scores) {
+            double d = world[best] - world[inc] - mean;
+            ss += d * d;
+        }
+        if (ss == 0) return cards.get(best);
+        if (n < 2) return incumbent;
+        double se = Math.sqrt(ss / (n - 1) / n);
+        return mean / se >= t ? cards.get(best) : incumbent;
     }
 
     /**
@@ -511,13 +627,13 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, with a ceiling on one card decision. See {@link #cardPlay}. */
     public SearchAiProvider withCardBudget(long nanos) {
         return withCardPlay(new CardPlaySettings(nanos, cardPlay.observer, cardPlay.ladder,
-                cardPlay.trap));
+                cardPlay.trap, cardPlay.bands));
     }
 
     /** The same player, telling {@code observer} what each card cost. */
     public SearchAiProvider withCardPlayObserver(CardPlayObserver observer) {
         return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, observer, cardPlay.ladder,
-                cardPlay.trap));
+                cardPlay.trap, cardPlay.bands));
     }
 
     private SearchAiProvider withCardPlay(CardPlaySettings settings) {
@@ -1413,7 +1529,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             Comparator<Card> byThird = Comparator.comparingInt(card -> thirdKey.getOrDefault(card, 0));
             Comparator<Card> byCost = Comparator.comparingInt(SkatRules::cardPoints);
             Comparator<Card> rest = ruleTies ? RuleTiebreak.order(context, nullTies) : byCost.reversed();
-            return tell(context, shown, cushion, searched, cushionAsked, legal.stream()
+            Card chosen = legal.stream()
                     // Among cards that win equally often, the one that wins by
                     // the wider margin where a margin was asked for, and then
                     // keep the points off the table. The last used to depend on
@@ -1426,7 +1542,45 @@ public final class SearchAiProvider implements SkatAiProvider {
                             .thenComparing(byThird)
                             .thenComparing(rest)
                             .thenComparing(Comparator.comparing(Card::toString).reversed()))
-                    .orElse(legal.get(0)));
+                    .orElse(legal.get(0));
+            if (cardPlay.bands && playsForCardPoints(context.game.contract)) {
+                chosen = bandStep(context, sampled.subList(0, Math.min(searched, sampled.size())),
+                        legal, votes, chosen, deadline);
+            }
+            return tell(context, shown, cushion, searched, cushionAsked, chosen);
+        }
+
+        /** See {@link #withPointBands()}: asked only when another card is close to the top vote. */
+        private Card bandStep(SkatAi.DecisionContext context, List<WorldSampler.World> worldsSearched,
+                              List<Card> legal, Map<Card, Integer> votes, Card incumbent,
+                              long deadlineNanos) {
+            int max = Integer.MIN_VALUE;
+            for (Card card : legal) max = Math.max(max, votes.getOrDefault(card, 0));
+            boolean close = false;
+            for (Card card : legal) {
+                if (!card.equals(incumbent) && votes.getOrDefault(card, 0) >= max - BAND_CLOSE_WORLDS) {
+                    close = true;
+                }
+            }
+            if (!close || worldsSearched.isEmpty()) return incumbent;
+            List<Card> played = new ArrayList<>(3);
+            int trickPoints = 0;
+            for (SkatAi.PlayedCard play : context.currentTrick.plays) {
+                played.add(play.card);
+                trickPoints += SkatRules.cardPoints(play.card);
+            }
+            List<int[]> rows = new ArrayList<>(worldsSearched.size());
+            for (WorldSampler.World sample : worldsSearched) {
+                if (deadlineNanos != 0 && !rows.isEmpty() && System.nanoTime() - deadlineNanos >= 0) break;
+                int banked = context.derived.cardPoints.getOrDefault(context.game.declarer, 0)
+                        + SkatRules.cardPoints(sample.skat());
+                int remaining = trickPoints;
+                for (List<Card> hand : sample.hands()) remaining += SkatRules.cardPoints(hand);
+                rows.add(bandScores(context.game.contract, context.game.declarer, context.mySeat,
+                        sample.hands(), context.currentTrick.leader, played, banked, remaining, legal));
+            }
+            return bandChoice(legal, votes, incumbent, rows.toArray(new int[0][]),
+                    BAND_CLOSE_WORLDS, BAND_T);
         }
 
         /** Shows the observer the tally behind {@code chosen}, and returns it unchanged. */

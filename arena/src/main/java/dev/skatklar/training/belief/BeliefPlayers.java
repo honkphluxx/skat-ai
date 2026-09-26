@@ -248,6 +248,11 @@ public final class BeliefPlayers {
         // card play's solver work.
         registry.register(renamed(ladderVariant("belief-64-shipped", 64, loader),
                 "The shipped player with 64 worlds a card"));
+        // Philipp's card-point measure, 2026-09-26: on a close call -- another
+        // card within three worlds of the top vote -- the card points in bands
+        // of fifteen decide, when their leader is significantly ahead. See
+        // SearchAiProvider#withPointBands. Gated in the defending audit first.
+        registry.register(bandsVariant("belief-32-shipped-bands", loader));
         // B2, 2026-09-24: the shipped player with the sampler dealing the
         // cards the belief is surest about first. The net's held-out margin
         // as declarer is +11 points and the sampled worlds carry under one of
@@ -367,6 +372,20 @@ public final class BeliefPlayers {
             @Override public SkatAiProvider newProvider(long seed) {
                 SkatAiProvider player = shipped.newProvider(seed);
                 return player instanceof SearchAiProvider search ? search.withTrap(order) : player;
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
+    /** The shipped player -- ladder and all -- with {@link SearchAiProvider#withPointBands()}. */
+    private static Contestant bandsVariant(String id, Loader loader) {
+        Contestant shipped = ladderVariant(id, loader);
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() { return "The shipped player, card-point bands on close calls"; }
+            @Override public SkatAiProvider newProvider(long seed) {
+                SkatAiProvider player = shipped.newProvider(seed);
+                return player instanceof SearchAiProvider search ? search.withPointBands() : player;
             }
             @Override public String toString() { return id; }
         };

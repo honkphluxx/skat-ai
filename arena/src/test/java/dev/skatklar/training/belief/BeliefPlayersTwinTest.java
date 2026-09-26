@@ -81,6 +81,22 @@ public class BeliefPlayersTwinTest {
         assertEquals("OFF", trap(wide));
         assertEquals(32, worlds(registry.resolve("belief-32-shipped").newProvider(1)));
         assertEquals(64, worlds(wide));
+
+        // The bands variant is the shipped player plus the bands.
+        SkatAiProvider banded = registry.resolve("belief-32-shipped-bands").newProvider(1);
+        assertTrue(ladder(banded));
+        assertEquals(32, worlds(banded));
+        assertTrue(bands(banded));
+        assertFalse("the shipped player has no bands", bands(registry.resolve("belief-32-shipped").newProvider(1)));
+    }
+
+    private static boolean bands(SkatAiProvider provider) throws Exception {
+        Method settings = SearchAiProvider.class.getDeclaredMethod("cardPlaySettings");
+        settings.setAccessible(true);
+        Object cardPlay = settings.invoke(provider);
+        Field bands = cardPlay.getClass().getDeclaredField("bands");
+        bands.setAccessible(true);
+        return bands.getBoolean(cardPlay);
     }
 
     private static int worlds(SkatAiProvider provider) throws Exception {

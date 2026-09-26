@@ -1,6 +1,7 @@
 package dev.skatklar.demo.search;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import dev.skatklar.demo.ai.GreedyAiProvider;
@@ -59,6 +60,21 @@ public class SettingsChainTest {
         assertEquals(SearchAiProvider.TrapOrder.TRAP_FIRST, player.cardPlaySettings().trap);
         assertEquals("off unless asked for", SearchAiProvider.TrapOrder.OFF,
                 base().withLadder().cardPlaySettings().trap);
+    }
+
+    @Test public void thePointBandsSurviveEveryBuilderAfterThem() {
+        SearchAiProvider player = base().withPointBands().withAdaptiveBidding().withMarginTiebreak(15)
+                .withRuleTiebreak().withLadder().withTrap(SearchAiProvider.TrapOrder.SAFETY_FIRST)
+                .withNullWorlds(24).withNullTiebreak(RuleTiebreak.NullOrder.LOW_RANK)
+                .withBiddingBudget(1_000L).withWorldThreads(2).withCardBudget(5L)
+                .withCardPlayObserver(report -> {}).withDiscardSearch(8, 5, 0L).withTemperature(0.1);
+        assertTrue(player.cardPlaySettings().bands);
+        assertTrue(player.cardPlaySettings().ladder);
+        assertEquals(SearchAiProvider.TrapOrder.SAFETY_FIRST, player.cardPlaySettings().trap);
+        assertTrue("and the bands keep what was set before them",
+                base().withLadder().withTrap(SearchAiProvider.TrapOrder.TRAP_FIRST).withPointBands()
+                        .cardPlaySettings().ladder);
+        assertFalse("off unless asked for", base().withLadder().cardPlaySettings().bands);
     }
 
     @Test public void theBiddingBudgetBuilderKeepsTheThreads() {
