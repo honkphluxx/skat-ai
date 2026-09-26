@@ -11,6 +11,8 @@
 #                                        the one-defender variants of the first
 #                                        run; the default is the two-defender pair
 #   ./tools/trap.sh --threads=8
+#   ./tools/trap.sh --pair-only --players=belief-128-shipped --against=belief-64-shipped
+#                                        pair against another player than the shipped one
 #
 # docs/training-plan.md section 2.9: SkatZero's whole declaring edge over the
 # shipped player sits in the games our declarer sees at flat zero -- every
@@ -56,7 +58,7 @@ fi
 cd "$(dirname "$TRAP_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
-QUICK=false; THREADS=16; AUDIT=true; PAIR=true
+QUICK=false; THREADS=16; AUDIT=true; PAIR=true; AGAINST=belief-32-shipped
 PLAYERS="belief-32-shipped-trap2 belief-32-shipped-trap2-safe"
 for arg in "$@"; do
     case "$arg" in
@@ -66,7 +68,8 @@ for arg in "$@"; do
         --players=*)   PLAYERS="${arg#*=}"; PLAYERS="${PLAYERS//,/ }" ;;
         --audit-only)  PAIR=false ;;
         --pair-only)   AUDIT=false ;;
-        -h|--help)     sed -n '2,40p' "$TRAP_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --against=*)   AGAINST="${arg#*=}" ;;
+        -h|--help)     sed -n '2,42p' "$TRAP_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -127,33 +130,33 @@ if $AUDIT; then
 fi
 
 if $PAIR; then
-    say "--- 2. each variant against belief-32-shipped, fixed contracts, seeds $PAIR_SEEDS ---"
+    say "--- 2. each variant against $AGAINST, fixed contracts, seeds $PAIR_SEEDS ---"
     for P in $PLAYERS; do
         for SEED in $PAIR_SEEDS; do
             [ -f STOP ] && break
-            tag="$P-vs-belief-32-shipped-cardplay-s$SEED"; $QUICK && tag="$tag-b$BOARDS"
+            tag="$P-vs-$AGAINST-cardplay-s$SEED"; $QUICK && tag="$tag-b$BOARDS"
             report="$LOG/$tag.txt"
             if [ ! -f "$report" ]; then
                 say "  [$(date '+%H:%M:%S')] $tag ($BOARDS boards)"
                 ./gradlew --console=plain -q --no-daemon :arena:arena \
-                    --args="--a=$P --b=belief-32-shipped --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
+                    --args="--a=$P --b=$AGAINST --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
                     > "$report" 2>&1 || { mv "$report" "$LOG/$tag.failed.txt"; say "      FAILED -- see $tag.failed.txt"; continue; }
             fi
             grep -E "^  from declaring|^  from defending|^wins as declarer| = .*game pts/game|^Resolved|^Not resolved|games/s" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
         done
         diffs=""
-        for report in "$LOG/$P"-vs-belief-32-shipped-cardplay-s*.txt; do
+        for report in "$LOG/$P-vs-$AGAINST"-cardplay-s*.txt; do
             [ -f "$report" ] || continue
             case "$report" in *-b[0-9]*.txt) $QUICK || continue ;; *) $QUICK && continue ;; esac
             d=$(grep -E " = .*game pts/game" "$report" | sed -E 's/.* = ([-+0-9.]+) game pts.*/\1/'); [ -n "$d" ] && diffs="$diffs $d"
         done
-        echo "$diffs" | awk -v label="$P" '{
+        echo "$diffs" | awk -v label="$P" -v against="$AGAINST" '{
             n = NF; if (n < 2) { print "  " label ": need two seeds to pool"; exit }
             for (i = 1; i <= n; i++) sum += $i; mean = sum / n
             for (i = 1; i <= n; i++) ss += ($i - mean) ^ 2
             se = sqrt(ss / (n - 1)) / sqrt(n)
             split("12.706 4.303 3.182 2.776 2.571 2.447 2.365 2.306 2.262", t, " "); q = (n - 1 <= 9) ? t[n - 1] : 1.96
-            printf "  %s - belief-32-shipped, pooled over %d seeds: %+.2f game pts/game, 95%% [%+.2f, %+.2f]\n", label, n, mean, mean - q * se, mean + q * se
+            printf "  %s - %s, pooled over %d seeds: %+.2f game pts/game, 95%% [%+.2f, %+.2f]\n", label, against, n, mean, mean - q * se, mean + q * se
         }' | tee -a "$SUMMARY"
     done
 fi

@@ -81,6 +81,10 @@ public class BeliefPlayersTwinTest {
         assertEquals("OFF", trap(wide));
         assertEquals(32, worlds(registry.resolve("belief-32-shipped").newProvider(1)));
         assertEquals(64, worlds(wide));
+        SkatAiProvider wider = registry.resolve("belief-128-shipped").newProvider(1);
+        assertTrue("belief-128-shipped keeps the ladder", ladder(wider));
+        assertEquals(128, worlds(wider));
+        assertFalse(bands(wider));
 
         // The bands variant is the shipped player plus the bands.
         SkatAiProvider banded = registry.resolve("belief-32-shipped-bands").newProvider(1);

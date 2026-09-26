@@ -248,6 +248,10 @@ public final class BeliefPlayers {
         // card play's solver work.
         registry.register(renamed(ladderVariant("belief-64-shipped", 64, loader),
                 "The shipped player with 64 worlds a card"));
+        // 2026-09-27, plan 2.10 T1: 64 worlds is the teacher (+1.67 over 32,
+        // six seeds). Whether 128 is better still, paired against 64. Host only.
+        registry.register(renamed(ladderVariant("belief-128-shipped", 128, loader),
+                "The shipped player with 128 worlds a card"));
         // Philipp's card-point measure, 2026-09-26: on a close call -- another
         // card within three worlds of the top vote -- the card points in bands
         // of fifteen decide, when their leader is significantly ahead. See
