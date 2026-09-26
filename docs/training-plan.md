@@ -227,6 +227,19 @@ a first look, to be confirmed on 60 boards on the host:
   as well as the host. To be built and measured against the native engine
   in T2; the global table is not built.
 
+*Confirmed on the host (2026-09-26, 3a7e44b; seed 14, 60 boards, 56
+games, 1,284 decisions, 27 billion nodes).* The same picture: the last
+three tricks hold 60% of the nodes (34%, 22%, 5%), the last four 85%. A
+cache that outlives one search saves 3.5% at the three-trick cut, 3.9%
+kept for the game, 3.9% kept for good (another game's repeats 0.0%); at
+four tricks 5.6/5.8/5.8%. Repeats inside one search cost 21.9% of all
+nodes at three tricks and 26.7% at four. The global endgame table is
+closed; the in-search endgame store is the T2 build, after one more
+reading: whether those in-search repeats miss the table because the
+entry was evicted or because it held a bound the new window could not
+use -- the two call for different repairs (the replacement rule, or
+exact values for the last tricks).
+
 ## 2.9 Where the SkatZero gap is, 2026-09-25: the games our declarer gives up on
 
 `tools/skatzero-gap.sh`, two instruments on the player that ships.
