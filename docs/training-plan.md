@@ -199,6 +199,30 @@ recording changes no game, the chosen card is legal, votes sit on legal
 cards only, and the world-by-world verdicts add up to the votes; three
 mutants each fail.
 
+*I1 format 2 (2026-09-27), before the corpus was run.* The teacher
+only against itself would teach the student the positions the teacher
+leads itself into and nothing else, and in the app it sits beside a
+human and against weaker AIs. So each board now draws one, two or three
+teacher seats (weights 25:50:25, `--mix`) and fills the rest from the
+belief corpus's population (`greedy, search-4, club, expert,
+jskat-new`, `--population`), seeded by the board so a shard written
+again is the same shard. Only the teacher's seats are recorded; each
+record gains four bytes (469): who sat at the deciding seat, its left
+and its right (indices into `players.json`, 0 the teacher) and how many
+seats the teacher held -- a diagnostic for slicing the student's
+accuracy by opponent, never an input. About 11 records a board, so
+I2's corpus is 90,000 boards for about a million records.
+`--population=` gives format 1's all-teacher games. `TeacherExportTest`
+adds a mixed-seating test (the draw is by seed alone, every seat count
+occurs, only the teacher is recorded, the seating bytes agree with the
+count); four more mutants each fail. One test run failed once on the
+older check that the world-by-world verdicts add up to the votes (two
+votes, one bit) and never again: 0 in 8,000 records of a 400-board
+stress run, 0 in 19 reruns, and the native solver's answers under eight
+threads agreed with its serial ones on 9,600 calls. Not found, so the
+exporter now checks every decision and leaves out, and counts, any whose
+verdicts do not add up; the count is printed with each shard.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
@@ -206,7 +230,8 @@ mutants each fail.
   teacher's vote share and cushion per card, and the card it chose; in
   the belief data's shard format. Bidding and the discard stay out at
   first.
-- **I2, the first corpus.** 50,000 games, one to two days on the host;
+- **I2, the first corpus.** 90,000 boards (about a million teacher
+  decisions at the mixed seating), one to two days on the host;
   training on a quarter, a half and all of it shows whether more data
   still pays.
 - **I3, the policy net.** Trained on the teacher's vote distribution,
