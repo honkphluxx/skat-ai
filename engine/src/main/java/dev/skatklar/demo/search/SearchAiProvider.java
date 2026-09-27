@@ -374,7 +374,28 @@ public final class SearchAiProvider implements SkatAiProvider {
          */
         default void sampled(SkatAi.DecisionContext context, BeliefEncoding.Evidence evidence,
                              List<WorldSampler.World> worlds) {}
+
+        /**
+         * Whether {@link #worldVerdicts} is wanted. Asked once a decision; the
+         * default no, so a player nobody asks tallies exactly as it always has.
+         */
+        default boolean wantsWorldVerdicts() { return false; }
+
+        /**
+         * The primary vote world by world, before the tiebreaks: bit {@code w}
+         * of {@code holds[i]} says {@code legal.get(i)} kept this seat's side
+         * winning in sampled world {@code w}, for the first
+         * {@link #VERDICT_WORLDS} worlds. The teacher exporter keeps these so a
+         * weaker player's vote -- the first 4, 8, 16 or 32 worlds -- can be read
+         * off the same games (docs/training-plan.md 2.10, I1). Called after the
+         * tally and before {@link #voted}, only when asked for.
+         */
+        default void worldVerdicts(SkatAi.DecisionContext context, List<Card> legal, long[] holds,
+                                   int worlds) {}
     }
+
+    /** How many worlds {@link CardPlayObserver#worldVerdicts} reports: one bit each in a long. */
+    public static final int VERDICT_WORLDS = 64;
 
     /**
      * The two things only an app asks for: a ceiling and a stopwatch.
@@ -1437,7 +1458,11 @@ public final class SearchAiProvider implements SkatAiProvider {
             if (votes == null) {
                 votes = new LinkedHashMap<>();
                 for (Card card : legal) { votes.put(card, 0); cushion.put(card, 0); }
-                searched = tallyOverWorlds(context, sampled, legal, votes, false, deadline);
+                if (cardPlay.observer != null && wantsVerdicts(cardPlay.observer)) {
+                    searched = tallyWithVerdicts(context, sampled, legal, votes, deadline);
+                } else {
+                    searched = tallyOverWorlds(context, sampled, legal, votes, false, deadline);
+                }
                 // The cushion is a tiebreak and only a tiebreak, so it is asked
                 // for only when there is a tie to break: the comparator below
                 // never reads it unless two cards share the top vote. Asking
@@ -1848,6 +1873,53 @@ public final class SearchAiProvider implements SkatAiProvider {
                 if (cause instanceof Error) throw (Error) cause;
                 throw new IllegalStateException("a world search failed", cause);
             }
+        }
+
+        private static boolean wantsVerdicts(CardPlayObserver observer) {
+            try {
+                return observer.wantsWorldVerdicts();
+            } catch (RuntimeException watchingIsNotPlaying) {
+                return false;
+            }
+        }
+
+        /**
+         * The primary tally, world by world, with each world's verdicts kept for
+         * the observer. The same casts into the same tally as
+         * {@link #tallyOverWorlds}, so the votes -- and the card -- are the ones
+         * the player would have had without being watched.
+         */
+        private int tallyWithVerdicts(SkatAi.DecisionContext context, List<WorldSampler.World> sampled,
+                                      List<Card> legal, Map<Card, Integer> votes, long deadlineNanos) {
+            java.util.IdentityHashMap<WorldSampler.World, Integer> at = new java.util.IdentityHashMap<>();
+            for (int w = 0; w < sampled.size(); w++) at.put(sampled.get(w), w);
+            java.util.concurrent.atomic.AtomicLongArray holds =
+                    new java.util.concurrent.atomic.AtomicLongArray(legal.size());
+            int searched = tallyOver(sampled, legal, votes, (sample, into) -> {
+                Map<Card, Integer> one = new LinkedHashMap<>();
+                for (Card card : legal) one.put(card, 0);
+                castVotes(context, sample, one);
+                int w = at.get(sample);
+                for (int i = 0; i < legal.size(); i++) {
+                    int held = one.get(legal.get(i));
+                    if (held > 0) {
+                        into.merge(legal.get(i), held, Integer::sum);
+                        if (w < VERDICT_WORLDS) {
+                            long bit = 1L << w;
+                            holds.accumulateAndGet(i, bit, (a, b) -> a | b);
+                        }
+                    }
+                }
+            }, deadlineNanos);
+            long[] bits = new long[legal.size()];
+            for (int i = 0; i < bits.length; i++) bits[i] = holds.get(i);
+            try {
+                cardPlay.observer.worldVerdicts(context, Collections.unmodifiableList(legal), bits,
+                        Math.min(searched, VERDICT_WORLDS));
+            } catch (RuntimeException watchingIsNotPlaying) {
+                // As in report(): a logger with a bug does not get to lose the game.
+            }
+            return searched;
         }
 
         private void castVotes(SkatAi.DecisionContext context, WorldSampler.World sample,

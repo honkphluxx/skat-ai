@@ -227,6 +227,22 @@ tasks.register<JavaExec>("beliefShare") {
     forwardProperties()
 }
 
+/**
+ * The teacher's decisions for the student to imitate (plan 2.10, I1). See
+ * TeacherExportMain and tools/teacher-export.sh.
+ *
+ * ./gradlew :arena:exportTeacher --args="--boards=50000 --seed=101 --threads=16 --out=teacher-data"
+ */
+tasks.register<JavaExec>("exportTeacher") {
+    group = "verification"
+    description = "Records the teacher's votes, world by world, at every card decision of self-played games"
+    mainClass.set("dev.skatklar.training.data.TeacherExportMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+    maxHeapSize = "2g"
+}
+
 /** ./gradlew :arena:export --args="--boards=50000 --threads=4" */
 tasks.register<JavaExec>("export") {
     group = "verification"

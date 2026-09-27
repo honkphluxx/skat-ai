@@ -178,6 +178,27 @@ games take about a day, so T2's speed-ups wait: I1 is next. Open and
 cheap to settle beside it: whether 128 worlds is better still (the
 exporter does not care which teacher it records).
 
+*T1, one step further (2026-09-27): 128 worlds is not better.*
+`belief-128-shipped` (939d954) against the 64-world teacher: seed 11
++1.00 [-0.65, +2.65], seed 12 -0.43 [-2.53, +1.67], seed 13 **-2.52
+[-4.64, -0.39]**; pooled -0.65 [-5.05, +3.75], at 2,473-2,755 s a match
+against about 1,450 for 64 against 32. Nothing to buy for another 1.7
+times the time; the teacher stays at 64 worlds.
+
+*I1 built (2026-09-27).* `tools/teacher-export.sh` (`TeacherExportMain`,
+Gradle `exportTeacher`): the teacher in all three seats, whole games,
+auction included, passed-in boards void; at every card decision with a
+choice, a 465-byte record -- the belief encoding of the seat's own
+evidence, the legal cards, the card played, the vote and cushion per
+card, and the vote world by world for the first 64 worlds (one bit a
+world a legal card, through a new observer hook,
+`CardPlayObserver.worldVerdicts`, asked for only by the exporter) so a
+4- to 32-world player's vote can be read off the same games for the
+weaker levels. Shards of 1,000 boards, resumable. `TeacherExportTest`:
+recording changes no game, the chosen card is legal, votes sit on legal
+cards only, and the world-by-world verdicts add up to the votes; three
+mutants each fail.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

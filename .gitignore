@@ -48,3 +48,4 @@ third_party/skatzero/
 # Native build output
 native/build/
 __pycache__/
+teacher-data*/
