@@ -253,6 +253,29 @@ corpus adds a small score block (points banked by each side, tricks
 won) to the teacher record; the Java player knows those numbers, so the
 student can be given them. Measured first, then decided.
 
+*I3, first results (2026-09-29).* Twenty epochs take about a minute on
+the host's GPU. Held out (119,968 decisions of 7,750 deals), regret in
+worlds of 64 against the teacher's card, random legal card 3.48:
+
+    training deals   teacher's card   top-voted   regret   best epoch
+    a quarter             66.5%          78.8%      1.41       14
+    a half                69.9%          80.9%      1.15       16
+    all                   73.0%          82.9%      0.94       20 of 20
+
+Every doubling of the data takes a fifth off the regret, and the full
+run was still improving at its last epoch: neither data nor training
+time is exhausted. By trick, against a random card's regret, the early
+tricks are the best learned (0.64 of 3.86) and the late ones the worst
+(1.04 of 2.57) -- what the missing points banked would predict, and
+also what a hard, exact endgame would; the table cannot tell the two
+apart. Agreement with the teacher's card is not the number to steer by
+either: a third of the decisions are ties any card wins. So before any
+game, a yardstick in the teacher's own units (`eval_policy.py`, run by
+`policy-train.sh`): of each held-out record's 64 worlds, 0-31 stand in
+for a smaller search (1, 2 ... 32 worlds, ties shared evenly) and 32-63
+are the referee none of the players has seen; the student and the
+searches are scored on the same positions by the same referee.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

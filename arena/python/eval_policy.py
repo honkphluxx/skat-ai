@@ -1,0 +1,139 @@
+"""
+How many worlds is the student worth? (plan 2.10, I3)
+
+    python3 eval_policy.py --data ../../teacher-data-v2 --model ../../policy-model [--model ...]
+
+A yardstick in the teacher's own units, before any game is played. Every
+held-out record carries the teacher's verdict world by world for 64 worlds.
+Split them: worlds 0-31 are what a smaller search would have seen, worlds
+32-63 are the referee. A k-world search is simulated by voting over the first
+k worlds alone (1, 2, 4 ... 32), its ties shared out evenly; the student plays
+its policy head's card. Both are then scored on worlds 32-63, which neither
+the smaller search nor the student has seen -- the student never saw any
+world of a held-out deal, and its training deals are other deals.
+
+What is printed, per player, on the referee's 32 worlds:
+
+  regret   worlds the card holds fewer than the referee's best card
+  best     the card is one of the referee's top-voted
+
+So "the student sits between the 8- and the 16-world search" is a statement
+about the same positions, the same worlds and the same question. What it is
+not is a game result: the search's tiebreaks (the cushion, the ladder) are
+left out here -- ties are shared evenly, which slightly flatters nobody and
+slightly undersells the search -- and the teacher's own card is shown only
+for orientation, since the teacher saw the referee's worlds.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import pathlib
+import sys
+
+import numpy as np
+import torch
+
+from teacher_data import TeacherCorpus, popcount64, split_by_board
+from train_policy import Batches, PolicyNet, predict
+
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", errors="replace")
+
+LOW = np.uint64(0xFFFFFFFF)
+
+
+def referee(records, rows):
+    """Each card's vote over worlds 32-63, and the legal mask, for the rows."""
+    bits = records.verdict_bits_by_card()[rows]
+    votes = popcount64(bits >> np.uint64(32))
+    legal = records.legal[rows]
+    top = np.where(legal, votes, -1).max(axis=1)
+    return bits, votes, legal, top
+
+
+def score_pick(votes, top, picks):
+    idx = np.arange(len(picks))
+    got = votes[idx, picks]
+    return (top - got).astype(np.float64), (got == top).astype(np.float64)
+
+
+def score_search(bits, votes, legal, top, k):
+    """Expected regret and best-rate of a k-world search, ties shared evenly."""
+    mask = np.uint64((1 << k) - 1)
+    small = popcount64(bits & mask)
+    small = np.where(legal, small, -1)
+    chosen = small == small.max(axis=1, keepdims=True)
+    share = chosen / chosen.sum(axis=1, keepdims=True)
+    regret = ((top[:, None] - votes) * share).sum(axis=1)
+    best = ((votes == top[:, None]) * share).sum(axis=1)
+    return regret, best
+
+
+def score_random(votes, legal, top):
+    share = legal / legal.sum(axis=1, keepdims=True)
+    return ((top[:, None] - votes) * share).sum(axis=1), ((votes == top[:, None]) * share).sum(axis=1)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--data", default="../../teacher-data-v2")
+    parser.add_argument("--model", action="append", default=[],
+                        help="a policy model directory; may be given more than once")
+    parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--limit", type=int, default=0)
+    args = parser.parse_args()
+
+    corpus = TeacherCorpus(args.data)
+    records = corpus.load(limit=args.limit or None)
+    splits = set()
+    players = []
+    for directory in args.model:
+        descriptor = json.loads((pathlib.Path(directory) / "model.json").read_text())
+        splits.add((descriptor["split_rule"], descriptor["split_seed"], descriptor["split_fraction"]))
+        players.append((pathlib.Path(directory).name, directory, descriptor))
+    if len(splits) > 1:
+        sys.exit(f"the models were held out by different splits: {splits}")
+    rule, seed, fraction = splits.pop() if splits else ("splitmix64-v1", 1, 0.1)
+    if (records.worlds < 64).any() or (records.verdict_worlds < 64).any():
+        sys.exit("this yardstick needs 64 verdict worlds on every record")
+    _, val = split_by_board(records.deal, fraction, seed=seed)
+    bits, votes, legal, top = referee(records, val)
+    print(f"{len(val):,} held-out decisions ({rule}, seed {seed}); scored on worlds 32-63")
+    print()
+
+    rows = []  # (name, regret, best)
+    device = torch.device(args.device)
+    batches = Batches(corpus, records, device)
+    for name, directory, d in players:
+        model = PolicyNet(d["inputs"], d["hidden"], d["layers"]).to(device)
+        model.load_state_dict(torch.load(pathlib.Path(directory) / "policy.pt", map_location=device))
+        by_policy, by_value, _, _ = predict(model, batches, val)
+        rows.append((f"student {name}", *score_pick(votes, top, by_policy)))
+        rows.append((f"  its value head", *score_pick(votes, top, by_value)))
+    for k in (1, 2, 4, 8, 16, 32):
+        rows.append((f"search, {k} world{'s' if k > 1 else ''}", *score_search(bits, votes, legal, top, k)))
+    rows.append(("a random legal card", *score_random(votes, legal, top)))
+    rows.append(("(the teacher's card)", *score_pick(votes, top, records.chosen[val])))
+
+    trick = records.trick[val]
+    declarer = records.declarer[val]
+    groups = [("all", np.ones(len(val), dtype=bool)), ("declarer", declarer), ("defender", ~declarer),
+              ("tricks 1-3", trick <= 3), ("tricks 4-6", (trick >= 4) & (trick <= 6)), ("tricks 7-9", trick >= 7)]
+    print("regret, in worlds of 32")
+    print(f"    {'':26s}" + "".join(f"{g:>12s}" for g, _ in groups))
+    for name, regret, _ in rows:
+        print(f"    {name:26s}" + "".join(f"{regret[m].mean():12.3f}" for _, m in groups))
+    print()
+    print("one of the referee's top-voted cards")
+    print(f"    {'':26s}" + "".join(f"{g:>12s}" for g, _ in groups))
+    for name, _, best in rows:
+        print(f"    {name:26s}" + "".join(f"{best[m].mean():12.1%}" for _, m in groups))
+    print()
+    print("The teacher's card saw the referee's worlds; it is there for orientation, not as a rung.")
+
+
+if __name__ == "__main__":
+    main()

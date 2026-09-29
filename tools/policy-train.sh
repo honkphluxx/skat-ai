@@ -6,7 +6,10 @@
 #                                        20 epochs each -- whether more data still pays
 #   ./tools/policy-train.sh --quick      the checks and one 3-epoch run on 5% of the deals,
 #                                        into policy-model-quick/: does every step run
-#   ./tools/policy-train.sh --data=teacher-data-v2 --epochs=30
+#   ./tools/policy-train.sh --epochs=40 --suffix=-e40
+#                                        the same three runs at 40 epochs, into
+#                                        policy-model-q25-e40 and so on; the yardstick
+#                                        then compares them all
 #   ./tools/policy-train.sh --python=/c/Python312/python.exe
 #
 # Each run is skipped when its policy.pt exists, so the same command resumes.
@@ -18,6 +21,10 @@
 #             different card among tied ones is a tiebreak, not a mistake
 #   regret    worlds of 64 the student's card holds fewer than the teacher's;
 #             0 is the teacher, and a card at random is printed beside it
+#
+# Then the yardstick (eval_policy.py): each student against searches of 1 to 32
+# worlds on the same held-out positions, scored on worlds 32-63, which none of
+# them saw -- how many worlds the student is worth, before a game is played.
 #
 # Nothing here plays a game. The student in the arena is I4.
 #
@@ -34,14 +41,16 @@ cd "$(dirname "$POLICY_ORIGINAL")/.." || exit 1
 QUICK=false
 DATA=teacher-data-v2
 EPOCHS=20
+SUFFIX=
 PYTHON=${SKATKLAR_PYTHON:-}
 for arg in "$@"; do
     case "$arg" in
         --quick)     QUICK=true ;;
         --data=*)    DATA="${arg#*=}" ;;
         --epochs=*)  EPOCHS="${arg#*=}" ;;
+        --suffix=*)  SUFFIX="${arg#*=}" ;;
         --python=*)  PYTHON="${arg#*=}" ;;
-        -h|--help)   sed -n '2,24p' "$POLICY_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)   sed -n '2,31p' "$POLICY_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)           echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -57,11 +66,11 @@ fi
 
 LOG=arena-logs
 SUMMARY=$LOG/summary-policy.txt
-RUNS="0.25:policy-model-q25 0.5:policy-model-q50 1.0:policy-model"
+RUNS="0.25:policy-model-q25$SUFFIX 0.5:policy-model-q50$SUFFIX 1.0:policy-model$SUFFIX"
 if $QUICK; then
     LOG=arena-logs/quick
     SUMMARY=$LOG/summary-policy.txt
-    RUNS="0.05:policy-model-quick"
+    RUNS="0.05:policy-model-quick$SUFFIX"
     EPOCHS=3
 fi
 mkdir -p "$LOG"
@@ -102,4 +111,22 @@ for run in $RUNS; do
         | grep -E "training records|best held-out|random: teacher|^    (all|vote decides|all tied|declarer|defender|tricks) " \
         | sed 's/^/      /' | tee -a "$SUMMARY"
 done
+# The yardstick: the students against searches of 1 to 32 worlds, all scored on
+# worlds 32-63 of the held-out deals, which none of them has seen (eval_policy.py).
+models=""
+for dir in policy-model*/; do
+    dir=${dir%/}
+    $QUICK || [ "$dir" = "${dir%-quick*}" ] || continue
+    [ -f "$dir/policy.pt" ] && models="$models --model $dir"
+done
+if [ -n "$models" ]; then
+    say "  [$(date '+%H:%M:%S')] yardstick:$models"
+    # shellcheck disable=SC2086 -- $models is deliberately word-split
+    if "$PYTHON" arena/python/eval_policy.py --data "$DATA" $models > "$LOG/policy-yardstick.txt" 2>&1; then
+        sed -n '/^regret/,$p' "$LOG/policy-yardstick.txt" | sed 's/^/      /' | tee -a "$SUMMARY"
+    else
+        tail -5 "$LOG/policy-yardstick.txt" | sed 's/^/      /' | tee -a "$SUMMARY"
+        say "  YARDSTICK FAILED -- see $LOG/policy-yardstick.txt"
+    fi
+fi
 say "policy training finished $(date '+%Y-%m-%d %H:%M:%S')"
