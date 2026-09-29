@@ -276,6 +276,36 @@ for a smaller search (1, 2 ... 32 worlds, ties shared evenly) and 32-63
 are the referee none of the players has seen; the student and the
 searches are scored on the same positions by the same referee.
 
+*The yardstick's answer (2026-09-29).* Regret on worlds 32-63, in
+worlds of 32 (lower is better):
+
+                         all   declarer defender  tricks 1-3  4-6    7-9
+    student (all data)  0.505   0.448    0.532      0.389    0.602  0.527
+    search,  8 worlds   0.504   0.350    0.575      0.804    0.566  0.143
+    search, 16 worlds   0.338   0.214    0.396      0.569    0.366  0.081
+    search, 32 worlds   0.228   0.137    0.270      0.397    0.241  0.046
+    random legal card   1.781   2.361    1.511      1.999    2.058  1.290
+
+Overall the student is worth an 8-world search -- but that average hides
+the finding. In the first three tricks it plays like the 32-world search
+(0.389 against 0.397); in the last three like a 1-world search (0.527
+against 0.544). The net is good exactly where search is expensive and
+bad exactly where search is nearly exact and cheap (97% of a search
+player's card-play time was the first two tricks when last measured).
+So the student to build first is not the net alone but a hand-over: the
+net for the opening tricks, the search from trick N on. With the
+32-world search after trick 3, the three groups average 0.225, the
+32-world search's own number, at a fraction of its time. A table by
+single trick (eval_policy.py, since this note) picks N.
+
+Forty epochs changed nothing (0.505 either way; the quarter and half
+runs slightly worse): training time is not the limit, data is -- each
+doubling still takes a sixth off the regret. The value head is better
+than the policy in the last tricks (0.401 against 0.527) and worse in
+the first; with the search taking the endgame that matters less. The
+missing points banked stay a suspect for the endgame, where the
+hand-over makes them moot.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

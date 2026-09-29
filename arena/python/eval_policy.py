@@ -132,6 +132,13 @@ def main():
     for name, _, best in rows:
         print(f"    {name:26s}" + "".join(f"{best[m].mean():12.1%}" for _, m in groups))
     print()
+    print("regret by trick, in worlds of 32 -- where a student could hand over to the search")
+    tricks = [(f"trick {t}", trick == t) for t in range(1, 10)]
+    print(f"    {'':26s}" + "".join(f"{g:>9s}" for g, _ in tricks))
+    for name, regret, _ in rows:
+        print(f"    {name:26s}" + "".join(f"{regret[m].mean():9.3f}" for _, m in tricks))
+    print(f"    {'(decisions)':26s}" + "".join(f"{int(m.sum()):9,d}" for _, m in tricks))
+    print()
     print("The teacher's card saw the referee's worlds; it is there for orientation, not as a rung.")
 
 
