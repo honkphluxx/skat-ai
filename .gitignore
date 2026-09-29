@@ -49,3 +49,5 @@ third_party/skatzero/
 native/build/
 __pycache__/
 teacher-data*/
+# The student models (tools/policy-train.sh), scratch until one ships.
+policy-model*/

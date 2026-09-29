@@ -223,6 +223,36 @@ threads agreed with its serial ones on 9,600 calls. Not found, so the
 exporter now checks every decision and leaves out, and counts, any whose
 verdicts do not add up; the count is printed with each shard.
 
+*I2 done (2026-09-28), I3 built (2026-09-29).* The corpus: 90,000 boards,
+1,197,380 teacher decisions in 123,149 s (34 h, 9.7 a second at 16
+threads; 13.3 a board, not the 11 guessed above), no decision left out.
+What it holds, from the checker (`arena/python/teacher_data.py`): the
+five suit and grand contracts, a third of the decisions the declarer's,
+and **no Null at all** -- nobody in the population announces one, the
+same gap the belief corpora had -- so the student hands Null back to the
+search. 4.6 legal cards on average; in 38% of the decisions every legal
+card is tied at the top of the vote and the tiebreaks decide, in 35%
+one card is best. `train_policy.py` (`tools/policy-train.sh`): the
+belief net's trunk (306 inputs, 3 x 512) with two heads, a policy head
+on the card the teacher played (the only target that carries the
+tiebreaks) and a value head on each legal card's vote share (the soft
+target, and what a weaker level is made of); split by deal with the
+belief corpus's rule. Held out it prints the student's agreement with
+the teacher's card, whether its card is one of the teacher's top-voted
+("best"), and its regret in worlds of 64 against the teacher's card --
+each beside what a random legal card scores -- by role, trick, contract
+and table strength. The script trains on a quarter, a half and all of
+the training deals: I2's question whether more data still pays.
+
+One gap in the inputs, known before the first run: the belief encoding
+says which cards each seat played but not who won which trick, so the
+student cannot see the card points already banked -- and the teacher's
+target is "61 minus what the declarer has". The value it cannot see it
+has to guess from the cards played. If the late tricks lag, the next
+corpus adds a small score block (points banked by each side, tricks
+won) to the teacher record; the Java player knows those numbers, so the
+student can be given them. Measured first, then decided.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

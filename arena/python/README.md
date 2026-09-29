@@ -73,3 +73,15 @@ something already handled.
 nothing here knows an offset by number. A version mismatch is a loud failure,
 which is the cheapest possible version of the most expensive bug in a project
 like this — the trainer and the app quietly disagreeing about what input 137 is.
+
+## The student (plan 2.10, I3)
+
+`teacher_data.py` reads the teacher corpus (`tools/teacher-export.sh`, format 2)
+and checks it; `train_policy.py` trains the student on it; `tools/policy-train.sh`
+runs both. The features are the belief encoding above, the same 306 bytes; the
+record layout is read from `teacher-format.json` and checked field by field.
+The split is the belief corpus's own function, on the deal id. The student has a
+policy head (the card the teacher played) and a value head (each legal card's
+vote share). What it is scored on held out -- the teacher's card, one of the
+teacher's top-voted cards, regret in worlds of 64 -- is printed beside what a
+random legal card scores, because a third of the decisions are ties any card wins.

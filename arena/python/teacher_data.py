@@ -1,0 +1,270 @@
+"""Reading the teacher corpus (tools/teacher-export.sh), and checking it.
+
+    python3 teacher_data.py ../../teacher-data-v2              the checks, seconds
+    python3 teacher_data.py ../../teacher-data-v2 --all        over every record
+
+One record is one card decision of the teacher with more than one legal card:
+the position as the deciding seat saw it (the belief encoding, the same 306
+bytes the belief net reads), the legal cards, the card it played, and its vote
+-- in how many of its worlds each card still reaches the target -- plus the
+cushion, and the vote world by world. The layout is read from
+``teacher-format.json`` and the features' from ``encoding-vN.json``, both
+written beside the shards by the exporter; nothing here hard-codes an offset
+that the files do not also state, and a disagreement is a loud failure.
+
+Pure numpy, like belief_data.py, and for the same reason: the part of the
+pipeline that can be silently wrong -- a field at the wrong offset, a split
+that leaks whole deals -- is all here and none of it needs a GPU to be checked.
+"""
+
+from __future__ import annotations
+
+import json
+import pathlib
+import sys
+
+import numpy as np
+
+from belief_data import SPLIT_RULE, Corpus
+
+CARDS = 32
+MAX_LEGAL = 10
+
+#: The record layout this reader was written against. Checked field by field
+#: against teacher-format.json, so an exporter that moves a field fails here
+#: rather than training a net on the wrong bytes.
+EXPECTED = {
+    "features": (0, 306), "legal_mask": (306, 4), "chosen": (310, 1), "worlds": (311, 1),
+    "verdict_worlds": (312, 1), "cushion_asked": (313, 1), "contract": (314, 1),
+    "declarer": (315, 1), "trick": (316, 1), "votes": (317, 32), "cushion": (349, 32),
+    "verdicts": (381, 80), "deal": (461, 4), "seating": (465, 3), "teacher_seats": (468, 1),
+}
+FORMAT = 2
+RECORD_BYTES = 469
+
+CONTRACTS = ("Diamonds", "Hearts", "Spades", "Clubs", "Grand", "Null", "Ramsch")
+
+
+def split_by_board(board, fraction=0.1, seed=0):
+    """The belief corpus's split rule, on the teacher's deal ids.
+
+    The same function, not a copy: ``Corpus.split_by_board`` reads nothing of
+    the corpus it is called on, and a second implementation is a second place
+    for the rule to drift. A deal held out here is held out by its id alone.
+    """
+    return Corpus.split_by_board(None, board, fraction, seed)
+
+
+class TeacherCorpus:
+    """One directory of teacher shards, plus the two files that describe them."""
+
+    def __init__(self, directory):
+        self.directory = pathlib.Path(directory)
+        layout_file = self.directory / "teacher-format.json"
+        if not layout_file.exists():
+            raise FileNotFoundError(f"no teacher-format.json in {self.directory}")
+        self.layout = json.loads(layout_file.read_text())
+        if self.layout["version"] != FORMAT:
+            raise ValueError(f"teacher format {self.layout['version']}, this reader reads {FORMAT}")
+        if self.layout["record_bytes"] != RECORD_BYTES:
+            raise ValueError(f"{self.layout['record_bytes']} bytes a record, this reader expects {RECORD_BYTES}")
+        for name, (offset, width) in EXPECTED.items():
+            got = tuple(self.layout["fields"][name][:2])
+            if got != (offset, width):
+                raise ValueError(f"field {name} at {got}, this reader expects {(offset, width)}")
+
+        specs = sorted(self.directory.glob("encoding-v*.json"))
+        if len(specs) != 1:
+            raise ValueError(f"expected one encoding-v*.json in {self.directory}, found {len(specs)}")
+        self.spec = json.loads(specs[0].read_text())
+        self.version = self.spec["version"]
+        self.size = self.spec["size"]
+        self.scale = self.spec["scale"]
+        self.fields = {f["name"]: (f["offset"], f["width"]) for f in self.spec["fields"]}
+        if self.version != self.layout["encoding_version"] or self.size != EXPECTED["features"][1]:
+            raise ValueError("the features in the teacher records are not the encoding beside them")
+
+        players = self.directory / "players.json"
+        self.players = json.loads(players.read_text()) if players.exists() else []
+        self.shards = sorted(self.directory.glob(f"teacher-v{FORMAT}-*.bin"))
+        if not self.shards:
+            raise FileNotFoundError(f"no teacher-v{FORMAT}-*.bin shards in {self.directory}")
+
+    def field(self, name):
+        return self.fields[name]
+
+    def slice(self, x, name):
+        offset, width = self.field(name)
+        return x[..., offset:offset + width]
+
+    def load(self, limit=None):
+        """Every shard, or the first ``limit`` records, as a :class:`Records`."""
+        blocks = []
+        loaded = 0
+        for shard in self.shards:
+            data = np.fromfile(shard, dtype=np.uint8)
+            if len(data) % RECORD_BYTES:
+                raise ValueError(f"{shard.name} is not a whole number of records")
+            blocks.append(data.reshape(-1, RECORD_BYTES))
+            loaded += len(blocks[-1])
+            if limit is not None and loaded >= limit:
+                break
+        raw = np.concatenate(blocks)
+        if limit is not None:
+            raw = raw[:limit]
+        return Records(raw)
+
+    def unpack(self, features):
+        """Packed feature bytes as the floats a net reads."""
+        return features.astype(np.float32) / self.scale
+
+
+class Records:
+    """The fields of a block of raw records, as arrays. Features stay packed."""
+
+    def __init__(self, raw):
+        self.raw = raw
+        n = len(raw)
+        self.features = np.ascontiguousarray(raw[:, 0:306])
+        mask = np.ascontiguousarray(raw[:, 306:310]).view("<u4")[:, 0]
+        self.legal = ((mask[:, None] >> np.arange(CARDS, dtype=np.uint32)) & 1).astype(bool)
+        self.chosen = raw[:, 310].astype(np.int64)
+        self.worlds = raw[:, 311].astype(np.int64)
+        self.verdict_worlds = raw[:, 312].astype(np.int64)
+        self.cushion_asked = raw[:, 313].astype(bool)
+        self.contract = raw[:, 314].astype(np.int64)
+        self.declarer = raw[:, 315].astype(bool)
+        self.trick = raw[:, 316].astype(np.int64)
+        self.votes = raw[:, 317:349].astype(np.int16)
+        self.cushion = raw[:, 349:381].astype(np.int16)
+        self.verdicts = np.ascontiguousarray(raw[:, 381:461]).view("<u8")
+        self.deal = np.ascontiguousarray(raw[:, 461:465]).view("<i4")[:, 0].astype(np.int64)
+        self.seating = raw[:, 465:468].astype(np.int64)
+        self.teacher_seats = raw[:, 468].astype(np.int64)
+        self.n = n
+
+    def __len__(self):
+        return self.n
+
+    def best(self):
+        """The cards with the top vote, per record: the teacher's own best set."""
+        top = np.where(self.legal, self.votes, -1).max(axis=1)
+        return self.legal & (self.votes == top[:, None])
+
+    def share(self):
+        """Each card's vote as a share of the worlds, the value target."""
+        return self.votes / np.maximum(self.worlds, 1)[:, None]
+
+    def verdict_bits_by_card(self):
+        """The verdict words laid out by card index (zero off the legal cards)."""
+        out = np.zeros((self.n, CARDS), dtype=np.uint64)
+        rank = np.cumsum(self.legal, axis=1) - 1
+        rows, cards = np.nonzero(self.legal)
+        k = rank[rows, cards]
+        keep = k < MAX_LEGAL
+        out[rows[keep], cards[keep]] = self.verdicts[rows[keep], k[keep]]
+        return out
+
+
+def popcount64(words):
+    """Bits set in each uint64, vectorised."""
+    w = np.ascontiguousarray(words, dtype=np.uint64)
+    if hasattr(np, "bitwise_count"):  # numpy 2
+        return np.bitwise_count(w).astype(np.int64)
+    as_bytes = w.view(np.uint8).reshape(w.shape + (8,))
+    return np.unpackbits(as_bytes, axis=-1).sum(axis=-1).astype(np.int64)
+
+
+def check(name, condition, detail=""):
+    status = "ok  " if condition else "FAIL"
+    print(f"  [{status}] {name}{'  -- ' + detail if detail and not condition else ''}")
+    return bool(condition)
+
+
+def run_checks(corpus, records, fraction=0.1, seed=1):
+    """The checks a night of training should not start without. True when all pass."""
+    r = records
+    good = True
+    rows = np.arange(len(r))
+    print("what is in it")
+    for c in range(len(CONTRACTS)):
+        count = int((r.contract == c).sum())
+        if count:
+            print(f"    {CONTRACTS[c]:9s} {count:>10,}  {count / len(r):6.1%}")
+    missing = [CONTRACTS[c] for c in range(5) if not (r.contract == c).any()]
+    print(f"    declarer's decisions {r.declarer.mean():.1%}; "
+          f"teacher seats 1/2/3: " + " / ".join(f"{(r.teacher_seats == s).mean():.1%}" for s in (1, 2, 3)))
+    if not (r.contract == 5).any():
+        print("    no Null decision at all: the student has nothing to learn Null from, and "
+              "must hand Null games back to the search")
+    if missing:
+        print(f"    missing suit or grand contracts: {missing}")
+    print()
+
+    print("records")
+    good &= check("every record has more than one legal card", (r.legal.sum(axis=1) > 1).all())
+    good &= check("the chosen card is legal", r.legal[rows, r.chosen].all())
+    good &= check("no vote on an illegal card", (r.votes[~r.legal] == 0).all())
+    good &= check("votes within the worlds", (r.votes <= r.worlds[:, None]).all())
+    good &= check("worlds recorded", (r.worlds > 0).all())
+    best = r.best()
+    good &= check("the chosen card is one of the top-voted", best[rows, r.chosen].all(),
+                  f"{(~best[rows, r.chosen]).sum()} records choose below the top vote")
+    within = r.worlds <= 64
+    bits = popcount64(r.verdict_bits_by_card())
+    good &= check("the world-by-world verdicts add up to the votes",
+                  (bits[within] == r.votes[within]).all(),
+                  f"{(bits[within] != r.votes[within]).any(axis=1).sum()} records disagree")
+    good &= check("trick 1..9", ((r.trick >= 1) & (r.trick <= 9)).all(),
+                  f"tricks seen {np.unique(r.trick)}")
+    good &= check("the deciding seat is the teacher", (r.seating[:, 0] == 0).all())
+    seats = 1 + (r.seating[:, 1] == 0) + (r.seating[:, 2] == 0)
+    good &= check("the seating agrees with the teacher's seat count", (seats == r.teacher_seats).all())
+    decl_feature = corpus.slice(r.features, "declarer")[:, 0] > corpus.scale / 2
+    good &= check("the declarer byte agrees with the encoding", (decl_feature == r.declarer).all())
+    contract_feature = corpus.slice(r.features, "contract").argmax(axis=1)
+    good &= check("the contract byte agrees with the encoding", (contract_feature == r.contract).all())
+    hand = corpus.slice(r.features, "my_hand") > corpus.scale / 2
+    good &= check("every legal card is in the hand", (hand | ~r.legal).all())
+    print()
+
+    print("the split")
+    train, val = split_by_board(r.deal, fraction, seed)
+    shared = np.intersect1d(np.unique(r.deal[train]), np.unique(r.deal[val]))
+    good &= check("no deal on both sides", len(shared) == 0, f"{len(shared)} deals on both sides")
+    good &= check(f"about {fraction:.0%} held out", abs(len(val) / len(r) - fraction) < 0.03,
+                  f"{len(val) / len(r):.1%}")
+    print(f"    {len(train):,} training, {len(val):,} held out ({SPLIT_RULE}, seed {seed})")
+    print()
+
+    ties = best.sum(axis=1)
+    legal = r.legal.sum(axis=1)
+    print("how hard the choice is")
+    print(f"    legal cards {legal.mean():.2f} on average; the teacher's best set holds "
+          f"{(ties / legal).mean():.0%} of them")
+    print(f"    every legal card tied at the top {(ties == legal).mean():.1%} "
+          f"(the vote says nothing; the tiebreaks decide) -- one best card {(ties == 1).mean():.1%}")
+    print(f"    a card at random: the teacher's card {(1 / legal).mean():.1%}, "
+          f"a best card {(ties / legal).mean():.1%}")
+    print()
+    print("all checks passed" if good else "SOME CHECKS FAILED")
+    return good
+
+
+def main(argv):
+    if not argv:
+        print(__doc__)
+        return 2
+    corpus = TeacherCorpus(argv[0])
+    limit = None if "--all" in argv else 300_000
+    records = corpus.load(limit=limit)
+    print(f"teacher format {FORMAT}, encoding v{corpus.version}, {len(corpus.shards)} shards, "
+          f"players {corpus.players}")
+    print(f"{len(records):,} records from {len(np.unique(records.deal)):,} deals"
+          + (f" (the first {limit:,})" if limit else ""))
+    print()
+    return 0 if run_checks(corpus, records) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
