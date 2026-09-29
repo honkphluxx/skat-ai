@@ -306,6 +306,45 @@ the first; with the search taking the endgame that matters less. The
 missing points banked stay a suspect for the endgame, where the
 hand-over makes them moot.
 
+*I4 built (2026-09-29): the student plays the opening.* After the
+per-trick table (student 0.314 / 0.380 / 0.472 worlds of 32 in tricks
+1-3 against the 32-world search's 0.427 / 0.404 / 0.361, and nothing
+like the search after that), Philipp's call: the hybrid for the phone
+first, then the question of GPU self-play (R), which the hybrid does
+not answer -- it is CPU, a player, not a data engine.
+
+`SearchAiProvider.withOpening(PolicyNet, tricks)`: for the first
+`tricks` tricks of a suit or grand game the student names the card in
+one forward pass and no world is sampled; a Null, a Ramsch or a
+contract the student never saw goes to the search, and from trick
+`tricks + 1` the player is exactly what it was. The student reads
+the evidence the teacher's records were made of (`evidence(context)`
+after `rememberWhatIsStillThere`, quantised as the corpus is).
+`PolicyNet` (engine, belief package) is the belief net's own loader
+and forward pass with a 64-wide head (policy, then value) under its own
+magic, parity-checked against the trainer's answers at load;
+`export_policy.py` writes `policy.bin` and `policy-parity.bin`. Java
+and torch pick the same card on 3,000 of 3,000 real records; a
+corrupted weight is refused. `StudentOpeningTest` plays whole games
+with a student of known scores (the card is the student's in the
+opening, no world sampled; the search's after; Null, an unseen contract
+and zero tricks never reach it; the setting survives every builder),
+five mutants each fail.
+
+Arena players (BeliefPlayers, when `policy-model/policy.bin` exists):
+`hybrid-64-t1/t2/t3` (the student for 1-3 tricks, then the teacher),
+`hybrid-32-t2` (then the shipped 32-world player) and `student-64`
+(the student wherever it can play). `CardTimeMain` (`:arena:cardTime`)
+times every card decision by trick for several players on the same
+boards. First look, three boards in the container (two cores), card
+play of all three seats per game: the shipped player 18.6 s, 96% of it
+in tricks 1-2; `hybrid-64-t2` 1.75 s -- the 64-world search after trick
+2 costs a tenth of what the 32-world one costs over a whole game;
+`hybrid-32-t2` 0.94 s; the student alone 0.03 s. `tools/hybrid.sh`
+runs the timing and the pairings: `hybrid-64-t2` against the teacher
+and against the shipped player (six seeds each), t1 and t3 against the
+teacher, the student alone against the shipped player.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

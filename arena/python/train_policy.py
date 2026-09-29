@@ -274,7 +274,10 @@ def main():
     summary = report(records, val, by_policy, "the policy head")
     print()
     report(records, val, by_value, "the value head (for comparison)")
-    write_descriptor(out, corpus, args, summary, best_epoch, len(train), len(val))
+    contracts_trained = 0
+    for c in np.unique(records.contract[train]):
+        contracts_trained |= 1 << int(c)
+    write_descriptor(out, corpus, args, summary, best_epoch, len(train), len(val), contracts_trained)
     x = corpus.unpack(records.features[val[:16]])
     with torch.no_grad():
         p, v = model(torch.from_numpy(x).to(device))
@@ -282,7 +285,7 @@ def main():
     print(f"\nweights, descriptor and fixtures in {out}")
 
 
-def write_descriptor(out, corpus, args, summary, best_epoch, train_rows, val_rows):
+def write_descriptor(out, corpus, args, summary, best_epoch, train_rows, val_rows, contracts_trained):
     agree, best, regret = summary
     (out / "model.json").write_text(json.dumps({
         "kind": "policy",
@@ -306,6 +309,7 @@ def write_descriptor(out, corpus, args, summary, best_epoch, train_rows, val_row
         "split_fraction": args.val_fraction,
         "init_seed": args.seed if args.init_seed is None else args.init_seed,
         "trained_on": pathlib.Path(args.data).resolve().name,
+        "contracts_trained": contracts_trained,
         "teacher": (pathlib.Path(args.data) / "teacher.txt").read_text().strip()
         if (pathlib.Path(args.data) / "teacher.txt").exists() else None,
     }, indent=2) + "\n")

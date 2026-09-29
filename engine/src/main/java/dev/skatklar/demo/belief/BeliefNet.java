@@ -84,6 +84,9 @@ public final class BeliefNet {
     /** The encoding the model was trained against; compare with {@link BeliefEncoding#VERSION}. */
     public int encodingVersion() { return encodingVersion; }
 
+    /** How many numbers {@link #logits} returns. */
+    public int outputs() { return head.out; }
+
     /** Which contracts the corpus held; {@link BeliefModel#LEGACY_CONTRACTS} for format 1. */
     public int trainedOnContracts() { return trainedOnContracts; }
 
@@ -96,8 +99,18 @@ public final class BeliefNet {
      * not closed here; the caller opened it and owns it.
      */
     public static BeliefNet load(InputStream source) throws IOException {
+        return load(source, MAGIC, "belief");
+    }
+
+    /**
+     * The same reader for another network of the same shape, told apart by its
+     * magic: {@link PolicyNet}'s weights are this trunk with a different head,
+     * and one forward pass for both is one fewer thing to keep in step with
+     * the trainer. The magic keeps either file from being loaded as the other.
+     */
+    static BeliefNet load(InputStream source, int magic, String kind) throws IOException {
         DataInputStream in = new DataInputStream(new BufferedInputStream(source));
-        if (in.readInt() != MAGIC) throw new IOException("not a belief weight file");
+        if (in.readInt() != magic) throw new IOException("not a " + kind + " weight file");
         int format = in.readInt();
         if (format < OLDEST_FORMAT || format > FORMAT) {
             throw new IOException("weight file format " + format + ", this build reads "

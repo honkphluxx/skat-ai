@@ -80,7 +80,8 @@ fun JavaExec.forwardProperties() {
         // skat.* is the arena's own namespace: skat.probe turns on the honesty
         // control for the outside engines (docs/external-bots.md).
         if (name.startsWith("jskat.") || name.startsWith("onnxruntime.")
-                || name.startsWith("belief.") || name.startsWith("skat.")) {
+                || name.startsWith("belief.") || name.startsWith("policy.")
+                || name.startsWith("skat.")) {
             systemProperty(name, value.toString())
         }
     }
@@ -91,6 +92,21 @@ tasks.register<JavaExec>("arena") {
     group = "verification"
     description = "Runs a duplicate-deal match between two AI implementations"
     mainClass.set("dev.skatklar.training.arena.ArenaMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
+/**
+ * What a card decision costs, trick by trick, for several players on the same boards
+ * (plan 2.10, I4). See CardTimeMain and tools/hybrid.sh.
+ *
+ * ./gradlew :arena:cardTime --args="--players=belief-32-shipped,hybrid-64-t2 --boards=30"
+ */
+tasks.register<JavaExec>("cardTime") {
+    group = "verification"
+    description = "Times card decisions by trick for several players on the same boards"
+    mainClass.set("dev.skatklar.training.arena.CardTimeMain")
     classpath = sourceSets["main"].runtimeClasspath
     workingDir = runRoot
     forwardProperties()

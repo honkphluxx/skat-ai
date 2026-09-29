@@ -2,6 +2,7 @@ package dev.skatklar.training.belief;
 
 import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.belief.BeliefModel;
+import dev.skatklar.demo.belief.PolicyNet;
 import dev.skatklar.demo.search.BeliefWorldSource;
 import dev.skatklar.demo.search.HandEvaluator.AuctionEvidence.PassRule;
 import dev.skatklar.demo.search.Personality;
@@ -12,6 +13,7 @@ import dev.skatklar.training.arena.PlayerRegistry;
 import dev.skatklar.demo.ai.GreedyAiProvider;
 import dev.skatklar.demo.ai.Opponents;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -51,6 +53,14 @@ public final class BeliefPlayers {
      * nothing is registered when no such directory holds a model.
      */
     public static final String CANDIDATE_PROPERTY = "belief.model.candidate.dir";
+
+    /**
+     * Where the student is looked for (plan 2.10, I4): a directory holding
+     * {@code policy.bin} and {@code policy-parity.bin}, as
+     * {@code arena/python/export_policy.py} writes them. Otherwise
+     * {@code policy-model/}; without one no hybrid is registered.
+     */
+    public static final String POLICY_PROPERTY = "policy.model.dir";
 
     private BeliefPlayers() {}
 
@@ -297,6 +307,27 @@ public final class BeliefPlayers {
         registry.register(renamed(ladderVariant("belief-32-shipped-ladder", loader),
                 "The shipped player, asking for the Schneider rung on a lost board"));
 
+        // Plan 2.10, I4: the student plays the opening, the search the rest.
+        // The student is a network trained on the teacher's (belief-64-shipped)
+        // own card decisions; on held-out deals it plays tricks 1-2 about as
+        // well as a 32-world search and the endgame about as badly as a
+        // one-world one. Each hybrid is the teacher after trick N; student-64
+        // is the student everywhere it can be (Null stays with the search), to
+        // price the hand-over itself; hybrid-32-t2 is the phone's size.
+        Path policy = locatePolicy();
+        if (policy != null) {
+            PolicyLoader student = new PolicyLoader(policy);
+            for (int tricks : new int[] {1, 2, 3}) {
+                registry.register(opening("hybrid-64-t" + tricks, 64, tricks, student, loader,
+                        "The student for " + tricks + " trick" + (tricks > 1 ? "s" : "")
+                                + ", then the 64-world search"));
+            }
+            registry.register(opening("hybrid-32-t2", 32, 2, student, loader,
+                    "The student for 2 tricks, then the 32-world search"));
+            registry.register(opening("student-64", 64, 10, student, loader,
+                    "The student for every trick of a suit or grand game"));
+        }
+
         Path candidate = locateCandidate();
         if (candidate != null) {
             Loader other = new Loader(candidate);
@@ -398,6 +429,22 @@ public final class BeliefPlayers {
     /** The shipped player, with {@link SearchAiProvider#withLadder()} on. */
     private static Contestant ladderVariant(String id, Loader loader) {
         return ladderVariant(id, 32, loader);
+    }
+
+    /** The shipped player at {@code worlds} worlds, with the student for the first {@code tricks} tricks. */
+    private static Contestant opening(String id, int worlds, int tricks, PolicyLoader student,
+                                      Loader loader, String displayName) {
+        Contestant shipped = ladderVariant(id, worlds, loader);
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() { return displayName; }
+            @Override public SkatAiProvider newProvider(long seed) {
+                SkatAiProvider player = shipped.newProvider(seed);
+                return player instanceof SearchAiProvider search
+                        ? search.withOpening(student.get(), tricks) : player;
+            }
+            @Override public String toString() { return id; }
+        };
     }
 
     /** As above, sampling {@code worlds} worlds for a trump game's card instead of 32. */
@@ -642,6 +689,20 @@ public final class BeliefPlayers {
         return null;
     }
 
+    /** Where the student lives: {@value #POLICY_PROPERTY}, or policy-model/ found as the belief is. */
+    private static Path locatePolicy() {
+        String override = System.getProperty(POLICY_PROPERTY);
+        if (override != null && !override.isBlank()) {
+            Path named = Path.of(override);
+            return Files.isRegularFile(named.resolve("policy.bin")) ? named : null;
+        }
+        for (Path candidate : List.of(Path.of("policy-model"), Path.of("..", "policy-model"),
+                Path.of("..", "..", "policy-model"))) {
+            if (Files.isRegularFile(candidate.resolve("policy.bin"))) return candidate;
+        }
+        return null;
+    }
+
     private static boolean holdsAModel(Path directory) {
         return Files.isRegularFile(directory.resolve("belief.bin"))
                 || Files.isRegularFile(directory.resolve("belief.onnx"));
@@ -704,6 +765,38 @@ public final class BeliefPlayers {
                 }
             }
             return model;
+        }
+    }
+
+    /**
+     * The student, loaded once on first use and checked against its trainer's
+     * own answers; a failure ends the match, as the belief's does, rather than
+     * quietly seating the search under the student's name.
+     */
+    private static final class PolicyLoader {
+        private final Path directory;
+        private PolicyNet net;
+        private IOException failure;
+
+        PolicyLoader(Path directory) { this.directory = directory; }
+
+        synchronized PolicyNet get() {
+            if (failure != null) throw new UncheckedIOException(failure);
+            if (net == null) {
+                Path parity = directory.resolve("policy-parity.bin");
+                try (InputStream weights = Files.newInputStream(directory.resolve("policy.bin"));
+                     InputStream cases = Files.isRegularFile(parity) ? Files.newInputStream(parity) : null) {
+                    if (cases == null) {
+                        throw new IOException("no policy-parity.bin beside " + directory.resolve("policy.bin")
+                                + "; run arena/python/export_policy.py");
+                    }
+                    net = PolicyNet.load(weights, cases);
+                } catch (IOException problem) {
+                    failure = problem;
+                    throw new UncheckedIOException(problem);
+                }
+            }
+            return net;
         }
     }
 }

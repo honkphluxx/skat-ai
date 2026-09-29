@@ -8,6 +8,7 @@ import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.ai.SkatAiSession;
 import dev.skatklar.demo.belief.BeliefEncoding;
+import dev.skatklar.demo.belief.PolicyNet;
 import dev.skatklar.demo.ramsch.RamschEvaluator;
 import dev.skatklar.demo.ramsch.RamschPolicy;
 import dev.skatklar.demo.solve.DoubleDummySolver;
@@ -412,6 +413,10 @@ public final class SearchAiProvider implements SkatAiProvider {
         final TrapOrder trap;
         /** See {@link #withPointBands()}. */
         final boolean bands;
+        /** See {@link #withOpening}: the student, or null. */
+        final PolicyNet opening;
+        /** How many tricks the student plays before the search takes over. */
+        final int openingTricks;
 
         CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder) {
             this(budgetNanos, observer, ladder, TrapOrder.OFF);
@@ -424,11 +429,18 @@ public final class SearchAiProvider implements SkatAiProvider {
 
         CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder,
                          TrapOrder trap, boolean bands) {
+            this(budgetNanos, observer, ladder, trap, bands, null, 0);
+        }
+
+        CardPlaySettings(long budgetNanos, CardPlayObserver observer, boolean ladder,
+                         TrapOrder trap, boolean bands, PolicyNet opening, int openingTricks) {
             this.budgetNanos = Math.max(0L, budgetNanos);
             this.observer = observer;
             this.ladder = ladder;
             this.trap = trap == null ? TrapOrder.OFF : trap;
             this.bands = bands;
+            this.opening = openingTricks > 0 ? opening : null;
+            this.openingTricks = this.opening == null ? 0 : openingTricks;
         }
     }
 
@@ -483,7 +495,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, with a trap tally at flat zero. See {@link TrapOrder}. */
     public SearchAiProvider withTrap(TrapOrder order) {
         return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer,
-                cardPlay.ladder, order, cardPlay.bands));
+                cardPlay.ladder, order, cardPlay.bands, cardPlay.opening, cardPlay.openingTricks));
     }
 
     /** Card points the declarer must reach to stay out of Schneider. */
@@ -510,7 +522,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withLadder() {
         return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer, true,
-                cardPlay.trap, cardPlay.bands));
+                cardPlay.trap, cardPlay.bands, cardPlay.opening, cardPlay.openingTricks));
     }
 
     /**
@@ -537,7 +549,32 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withPointBands() {
         return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer,
-                cardPlay.ladder, cardPlay.trap, true));
+                cardPlay.ladder, cardPlay.trap, true, cardPlay.opening, cardPlay.openingTricks));
+    }
+
+    /**
+     * The same player, with the student playing the opening.
+     *
+     * <p>docs/training-plan.md 2.10, I3-I4: the student -- a network trained on
+     * the 64-world player's own card decisions -- plays the first two tricks
+     * about as well as a 32-world search (0.31 and 0.38 worlds of 32 regret on
+     * held-out deals, against the 32-world search's 0.43 and 0.40) and the last
+     * three about as badly as a one-world one, while the first two tricks are
+     * where nearly all of a search's card-play time goes. So for the first
+     * {@code tricks} tricks of a suit or grand game the student names the card
+     * in one forward pass and no world is sampled; from then on this player is
+     * exactly what it was. A Null, a Ramsch, or a contract the student was
+     * never trained on always goes to the search.
+     *
+     * <p>The observer hears {@link CardPlayObserver#decided} for a student's
+     * card too, with zero worlds asked, so a stopwatch sees it; the vote
+     * callbacks are not called, because there was no vote.
+     *
+     * @param tricks how many tricks the student plays; 0 turns it off
+     */
+    public SearchAiProvider withOpening(PolicyNet student, int tricks) {
+        return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, cardPlay.observer,
+                cardPlay.ladder, cardPlay.trap, cardPlay.bands, student, tricks));
     }
 
     /** The declarer totals the bands are cut at: Schneider, the half-way steps, the game, Schneider for him. */
@@ -648,13 +685,13 @@ public final class SearchAiProvider implements SkatAiProvider {
     /** The same player, with a ceiling on one card decision. See {@link #cardPlay}. */
     public SearchAiProvider withCardBudget(long nanos) {
         return withCardPlay(new CardPlaySettings(nanos, cardPlay.observer, cardPlay.ladder,
-                cardPlay.trap, cardPlay.bands));
+                cardPlay.trap, cardPlay.bands, cardPlay.opening, cardPlay.openingTricks));
     }
 
     /** The same player, telling {@code observer} what each card cost. */
     public SearchAiProvider withCardPlayObserver(CardPlayObserver observer) {
         return withCardPlay(new CardPlaySettings(cardPlay.budgetNanos, observer, cardPlay.ladder,
-                cardPlay.trap, cardPlay.bands));
+                cardPlay.trap, cardPlay.bands, cardPlay.opening, cardPlay.openingTricks));
     }
 
     private SearchAiProvider withCardPlay(CardPlaySettings settings) {
@@ -1427,6 +1464,18 @@ public final class SearchAiProvider implements SkatAiProvider {
             rememberWhatIsStillThere(context);
 
             long startedAt = cardPlay.observer != null ? System.nanoTime() : 0L;
+            if (cardPlay.opening != null
+                    && context.history.completedTricks.size() < cardPlay.openingTricks
+                    && !context.game.contract.isNull()
+                    && cardPlay.opening.covers(context.game.contract)) {
+                // After rememberWhatIsStillThere, so the student reads the same
+                // evidence the teacher's records were made of.
+                Card studentCard = cardPlay.opening.choose(evidence(context), legal);
+                if (studentCard != null) {
+                    report(context, 0, 0, false, startedAt);
+                    return studentCard;
+                }
+            }
             long deadline = cardPlay.budgetNanos > 0
                     ? System.nanoTime() + cardPlay.budgetNanos : 0L;
             int asked = nullWorlds > 0 && context.game.contract.isNull()
