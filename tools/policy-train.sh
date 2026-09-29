@@ -73,7 +73,10 @@ cuda=$("$PYTHON" -c "import torch; print(torch.cuda.is_available())")
 say "  CUDA available: $cuda"
 
 say "  [$(date '+%H:%M:%S')] check $DATA"
-if ! (cd arena/python && "$PYTHON" teacher_data.py "../../$DATA") > "$LOG/policy-check.txt" 2>&1; then
+# Run from the repository root, as belief-v2.sh does: the interpreter path is
+# relative to it (../.venv/...), and a cd first would lose it. Python puts the
+# script's own directory on sys.path, so belief_data is found either way.
+if ! "$PYTHON" arena/python/teacher_data.py "$DATA" > "$LOG/policy-check.txt" 2>&1; then
     grep -E "FAIL|Error" "$LOG/policy-check.txt" | sed 's/^/      /' | tee -a "$SUMMARY"
     say "  CHECK FAILED -- see $LOG/policy-check.txt"; exit 1
 fi
@@ -89,8 +92,8 @@ for run in $RUNS; do
     fi
     [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
     say "  [$(date '+%H:%M:%S')] train $name: $fraction of the training deals, $EPOCHS epochs"
-    if ! (cd arena/python && "$PYTHON" train_policy.py --data "../../$DATA" --out "../../$model" \
-            --epochs "$EPOCHS" --fraction "$fraction") > "$LOG/policy-$name.txt" 2>&1; then
+    if ! "$PYTHON" arena/python/train_policy.py --data "$DATA" --out "$model" \
+            --epochs "$EPOCHS" --fraction "$fraction" > "$LOG/policy-$name.txt" 2>&1; then
         tail -5 "$LOG/policy-$name.txt" | sed 's/^/      /' | tee -a "$SUMMARY"
         say "  TRAINING FAILED -- see $LOG/policy-$name.txt"; exit 1
     fi
