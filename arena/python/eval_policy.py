@@ -105,6 +105,7 @@ def main():
     print()
 
     rows = []  # (name, regret, best)
+    picks = []  # (name, cards) for the cushion table
     device = torch.device(args.device)
     batches = Batches(corpus, records, device)
     for name, directory, d in players:
@@ -113,6 +114,15 @@ def main():
         by_policy, by_value, _, _ = predict(model, batches, val)
         rows.append((f"student {name}", *score_pick(votes, top, by_policy)))
         rows.append((f"  its value head", *score_pick(votes, top, by_value)))
+        # The hand-over's question (plan 2.10, I4): the student lost the
+        # teacher half a point, mostly as declarer, and the value head is the
+        # better of the two there on the whole game. Both heads come from the
+        # same forward pass, so this costs nothing at the table.
+        mixed = np.where(records.declarer[val], by_value, by_policy)
+        rows.append((f"  value as declarer", *score_pick(votes, top, mixed)))
+        picks.append((f"student {name}", by_policy))
+        picks.append(("  its value head", by_value))
+        picks.append(("  value as declarer", mixed))
     for k in (1, 2, 4, 8, 16, 32):
         rows.append((f"search, {k} world{'s' if k > 1 else ''}", *score_search(bits, votes, legal, top, k)))
     rows.append(("a random legal card", *score_random(votes, legal, top)))
@@ -131,6 +141,44 @@ def main():
     print(f"    {'':26s}" + "".join(f"{g:>12s}" for g, _ in groups))
     for name, _, best in rows:
         print(f"    {name:26s}" + "".join(f"{best[m].mean():12.1%}" for _, m in groups))
+    print()
+    opening = trick <= 2
+    roles = [("declarer 1-2", declarer & opening), ("defender 1-2", ~declarer & opening),
+             ("declarer 3-9", declarer & ~opening), ("defender 3-9", ~declarer & ~opening)]
+    print("by role, in the two tricks the hybrid gives the student and after them")
+    print(f"    regret, in worlds of 32{'':3s}" + "".join(f"{g:>14s}" for g, _ in roles))
+    for name, regret, _ in rows:
+        print(f"    {name:26s}" + "".join(f"{regret[m].mean():14.3f}" for _, m in roles))
+    print(f"    {'(decisions)':26s}" + "".join(f"{int(m.sum()):14,d}" for _, m in roles))
+    print(f"    one of the top-voted{'':6s}" + "".join(f"{g:>14s}" for g, _ in roles))
+    for name, _, best in rows:
+        print(f"    {name:26s}" + "".join(f"{best[m].mean():14.1%}" for _, m in roles))
+    print()
+    # The tiebreak the yardstick above cannot see. Where the teacher's vote
+    # tied at the top it asked a second question -- in how many worlds does
+    # the card hold with fifteen points to spare -- and that decides points
+    # (Schneider, the margin) rather than the game. Recorded over all 64
+    # worlds, so there is no referee half: this is the student against the
+    # teacher's own answer on deals the student never trained on, and the
+    # searches have no row.
+    asked = records.cushion_asked[val]
+    cushion = records.cushion[val].astype(np.int64)
+    in_top = (votes_all := records.votes[val].astype(np.int64)) == \
+        np.where(records.legal[val], votes_all, -1).max(axis=1, keepdims=True)
+    best_cushion = np.where(in_top & records.legal[val], cushion, -1).max(axis=1)
+    print("the tiebreak: where the teacher's vote tied at the top and it asked for the cushion")
+    print(f"    cushion short, worlds of 64 " + "".join(f"{g:>14s}" for g, _ in roles))
+    idx = np.arange(len(val))
+    for name, cards in picks + [("(the teacher's card)", records.chosen[val])]:
+        on_top = in_top[idx, cards]
+        short = np.where(asked & on_top, best_cushion - cushion[idx, cards], 0)
+        cells = []
+        for _, m in roles:
+            sel = m & asked & on_top
+            cells.append(f"{short[sel].mean():14.2f}" if sel.any() else f"{'-':>14s}")
+        print(f"    {name:28s}" + "".join(cells))
+    print(f"    {'(decisions asked)':28s}" + "".join(f"{int((m & asked).sum()):14,d}" for _, m in roles))
+    print("    Only where the card was one of the top-voted; a card below the top is regret above.")
     print()
     print("regret by trick, in worlds of 32 -- where a student could hand over to the search")
     tricks = [(f"trick {t}", trick == t) for t in range(1, 10)]
