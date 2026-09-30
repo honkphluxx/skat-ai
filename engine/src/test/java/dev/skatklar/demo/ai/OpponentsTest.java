@@ -111,4 +111,60 @@ public class OpponentsTest {
             engine.close();
         }
     }
+
+    /**
+     * With a student, the top level plays the first two tricks of a suit or
+     * grand game with it (no world sampled) and 64 worlds after; a Null keeps
+     * the level's own 128 worlds from the first card; a lower level ignores the
+     * student and keeps its own worlds. Seen through the observer the app
+     * installs, on whole games.
+     */
+    @Test public void theTopLevelPlaysItsOpeningWithTheStudent() throws java.io.IOException {
+        dev.skatklar.demo.belief.PolicyNet student = dev.skatklar.demo.belief.PolicyNet.load(
+                new java.io.ByteArrayInputStream(dev.skatklar.demo.belief.PolicyNetTest.constant(
+                        dev.skatklar.demo.belief.PolicyNetTest.rising(), 0x1F,
+                        dev.skatklar.demo.belief.PolicyNet.MAGIC, 64)), null);
+        java.util.List<int[]> analyst = play(Opponents.Level.ANALYST, student, Contract.HEARTS);
+        int opening = 0, later = 0;
+        for (int[] d : analyst) {
+            if (d[0] >= 9) { assertEquals("the student's card, cards in hand " + d[0], 0, d[1]); opening++; }
+            else { assertEquals("64 worlds after the opening", Opponents.STUDENT_WORLDS, d[1]); later++; }
+        }
+        assertTrue("opening " + opening + ", later " + later, opening >= 3 && later >= 10);
+        for (int[] d : play(Opponents.Level.ANALYST, student, Contract.NULL)) {
+            assertEquals("a Null is the search's, at the level's own Null worlds",
+                    Opponents.Level.ANALYST.personality().worlds() * Opponents.NULL_WORLD_MULTIPLE, d[1]);
+        }
+        for (int[] d : play(Opponents.Level.EXPERT, student, Contract.HEARTS)) {
+            assertEquals("a lower level ignores the student", Opponents.Level.EXPERT.personality().worlds(), d[1]);
+        }
+        for (int[] d : play(Opponents.Level.ANALYST, null, Contract.HEARTS)) {
+            assertEquals("no student, the level as it was", Opponents.Level.ANALYST.personality().worlds(), d[1]);
+        }
+    }
+
+    /** Every card decision with a choice: {cards in hand, worlds asked}. */
+    private static java.util.List<int[]> play(Opponents.Level level,
+                                              dev.skatklar.demo.belief.PolicyNet student, Contract contract) {
+        java.util.List<int[]> decisions = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        dev.skatklar.demo.search.SearchAiProvider.CardPlayObserver observer =
+                report -> decisions.add(new int[] {report.cardsInHand(), report.worldsAsked()});
+        Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
+        for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+            seating.put(seat, Opponents.seat(level, WorldSource.UNIFORM, 5L, Opponents.UNBOUNDED,
+                    true, 1, 0L, observer, student));
+        }
+        GameEngine engine = GameEngine.headless(new Random(11), SeatedAiProviders.of(seating));
+        engine.restartWithContract(SkatDeck.deal(new Random(11)),
+                SkatAi.RoundPosition.at(0), SkatAi.Seat.HUMAN, contract, 18, Set.of());
+        for (int step = 0; step < 128; step++) {
+            GameEngine.Snapshot snapshot = engine.snapshot();
+            if (snapshot.gameComplete()) break;
+            if (snapshot.trickComplete()) engine.finishCompletedTrick();
+            else engine.playAiCard();
+        }
+        assertTrue(level + " must finish the game", engine.snapshot().gameComplete());
+        engine.close();
+        return decisions;
+    }
 }

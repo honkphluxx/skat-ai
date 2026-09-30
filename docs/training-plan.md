@@ -428,6 +428,26 @@ history: the teacher forgets nothing, and a forgetful player will have to
 mask it as the trainer's forgetting masks the encoding. 520 bytes a
 record; `teacher-export.sh` writes `teacher-data-v3/`, 90,000 boards.
 
+*S, the app (2026-09-30).* Philipp's call on the twelve seeds: the hybrid
+goes into the app. `Opponents.seat` takes the student as a last
+argument; the top level (`Level.usesStudent`, ANALYST only) then plays
+the first `STUDENT_TRICKS` = 2 tricks of a suit or grand game with it
+and samples `STUDENT_WORLDS` = 64 worlds afterwards -- the arena's
+`hybrid-64-t2` -- while a Null keeps the level's own 128 worlds from the
+first card. Lower levels ignore it: they forget, and the student learnt
+from a player that does not; and they search fewer worlds, so the
+student would make them stronger and close the ladder's gaps. The app
+loads `policy.bin` and `policy-parity.bin` from its assets beside the
+belief, requires the parity replay, and falls back to the old top level
+(the same strength, twelve times the thinking) if either is missing or
+wrong. `OpponentsTest` plays whole games through the app's seam with the
+app's observer: the student's cards at 10 and 9 cards in hand with no
+world sampled, 64 worlds after, 128 on a Null, a lower level and no
+student unchanged; four mutants of the wiring each fail. On a phone the
+student's forward pass is a few hundred thousand multiplications a card;
+what is left to measure is the S25's time a card, in the SkatKlarPerf
+log the dev builds already write (worlds=0/0 marks the student's cards).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

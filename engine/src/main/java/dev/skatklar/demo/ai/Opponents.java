@@ -99,6 +99,18 @@ public final class Opponents {
          */
         public boolean playsAdaptively() { return true; }
 
+        /**
+         * Whether this level plays its opening with the student, when the app
+         * has one ({@link dev.skatklar.demo.belief.PolicyNet}).
+         *
+         * <p>The top level only. The student learnt from a player that forgets
+         * nothing, so a level that forgets would hand it inputs it never saw;
+         * and it plays the first two tricks about as well as a 32-world search,
+         * so giving it to a level with fewer worlds would make that level
+         * stronger and close the gap the ladder is made of.
+         */
+        public boolean usesStudent() { return this == ANALYST; }
+
         public Personality personality() {
             switch (this) {
                 case BEGINNER: return Personality.beginner();
@@ -222,6 +234,24 @@ public final class Opponents {
     }
 
     /**
+     * Tricks the student plays before the search takes over, and the worlds the
+     * search then samples for a suit or grand game.
+     *
+     * <p>docs/training-plan.md 2.10, I4: the arena's {@code hybrid-64-t2}. The
+     * student plays the first two tricks in one forward pass each -- they are
+     * where 96% of a search player's card-play time goes -- and a 64-world
+     * search plays the rest. Against the shipped 32-world player at fixed
+     * contracts, twelve seeds: +0.33 [-0.19, +0.84] game points a game, at a
+     * twelfth of its card-play time (0.72 s a game against 8.33 on the host);
+     * against the 64-world search throughout, -0.49 [-0.81, -0.17]. Handing
+     * over after one trick loses about as much and costs four times the time;
+     * the student alone loses six points, nearly all of them as declarer in
+     * the endgame, which is why the search keeps it.
+     */
+    public static final int STUDENT_TRICKS = 2;
+    public static final int STUDENT_WORLDS = 64;
+
+    /**
      * The same seat, with a ceiling on one card decision and somebody watching.
      *
      * <p>Both are the app's alone and both are off by default, for the reason
@@ -241,6 +271,30 @@ public final class Opponents {
                                       long biddingBudgetNanos, boolean adaptively,
                                       int worldThreads, long cardBudgetNanos,
                                       SearchAiProvider.CardPlayObserver observer) {
+        return seat(level, worlds, seed, biddingBudgetNanos, adaptively, worldThreads,
+                cardBudgetNanos, observer, null);
+    }
+
+    /**
+     * The same seat, with the student for the opening where the level takes one.
+     *
+     * @param student the trained student, or null. A level that
+     *                {@link Level#usesStudent uses it} plays the first
+     *                {@link #STUDENT_TRICKS} tricks of a suit or grand game
+     *                with it and samples {@link #STUDENT_WORLDS} worlds
+     *                afterwards; a Null keeps the level's own Null worlds and
+     *                is the search's from the first card. Other levels ignore it.
+     */
+    public static SkatAiProvider seat(Level level, WorldSource worlds, long seed,
+                                      long biddingBudgetNanos, boolean adaptively,
+                                      int worldThreads, long cardBudgetNanos,
+                                      SearchAiProvider.CardPlayObserver observer,
+                                      dev.skatklar.demo.belief.PolicyNet student) {
+        boolean opening = student != null && level.usesStudent();
+        Personality own = level.personality();
+        Personality personality = opening
+                ? new Personality(STUDENT_WORLDS, own.memory(), own.risk(), own.aggression())
+                : own;
         WorldSource believed = level.usesBelief() && worlds != null ? worlds : WorldSource.UNIFORM;
         // One search player per seat, not one for the table. The engine seats a
         // single provider at every AI seat, and a search player keeps evidence on
@@ -267,14 +321,18 @@ public final class Opponents {
         // declarer's lost boards. docs/training-plan.md, Phase D.
         return new PerSeatAiProvider(seat -> {
             SearchAiProvider player = new SearchAiProvider(new GreedyAiProvider(),
-                    level.personality(), seed * 31L + seat.ordinal(), believed);
+                    personality, seed * 31L + seat.ordinal(), believed);
             if (adaptively) {
                 player = player.withAdaptiveBidding().withMarginTiebreak(SHIPPED_CUSHION)
                         .withRuleTiebreak().withLadder();
             }
-            player = player.withNullWorlds(level.personality().worlds() * NULL_WORLD_MULTIPLE)
+            // The level's own Null worlds, from its own personality: the student
+            // never plays a Null, and 64 worlds times four would be a Null twice
+            // as slow as the one the arena measured.
+            player = player.withNullWorlds(own.worlds() * NULL_WORLD_MULTIPLE)
                     .withNullTiebreak(NullOrder.LOW_RANK)
                     .withBiddingBudget(biddingBudgetNanos).withWorldThreads(worldThreads);
+            if (opening) player = player.withOpening(student, STUDENT_TRICKS);
             if (cardBudgetNanos > 0) player = player.withCardBudget(cardBudgetNanos);
             return observer == null ? player : player.withCardPlayObserver(observer);
         });
