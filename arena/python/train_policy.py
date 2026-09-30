@@ -204,6 +204,14 @@ def main():
                         help="draw decisions in these tricks more often, e.g. 1-2:4 -- each such "
                              "record four times an epoch, the rest once; the best epoch is chosen "
                              "on these tricks")
+    parser.add_argument("--init-from", default="",
+                        help="a belief model directory (belief.pt): start the trunk from its weights "
+                             "instead of random ones -- the same 306 inputs and 3 x 512 shape; the "
+                             "heads start random. The student stays one network; nothing of the "
+                             "belief is needed to run it")
+    parser.add_argument("--freeze-epochs", type=int, default=0,
+                        help="with --init-from, keep the first block (its Linear and LayerNorm) as "
+                             "the belief left it for this many epochs, then train it too")
     parser.add_argument("--limit", type=int, default=0, help="read only this many records; a smoke run")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
@@ -245,6 +253,25 @@ def main():
     device = torch.device(args.device)
     batches = Batches(corpus, records, device)
     model = PolicyNet(corpus.size, args.hidden, args.layers).to(device)
+    if args.init_from:
+        source = pathlib.Path(args.init_from)
+        described = json.loads((source / "model.json").read_text())
+        if (described.get("inputs"), described.get("hidden"), described.get("layers")) != \
+                (corpus.size, args.hidden, args.layers):
+            raise SystemExit(f"{source} is {described.get('inputs')} x {described.get('hidden')} x "
+                             f"{described.get('layers')}, the student {corpus.size} x {args.hidden} x {args.layers}")
+        if described.get("encoding_version") != corpus.version:
+            raise SystemExit(f"{source} reads encoding v{described.get('encoding_version')}, "
+                             f"the corpus v{corpus.version}")
+        state = torch.load(source / "belief.pt", map_location=device)
+        trunk = {k: v for k, v in state.items() if k.startswith("trunk.")}
+        own = model.state_dict()
+        if set(trunk) != {k for k in own if k.startswith("trunk.")}:
+            raise SystemExit(f"{source}'s trunk has other layers than the student's")
+        model.load_state_dict(trunk, strict=False)
+        print(f"trunk from {source} ({len(trunk)} tensors, trained on {described.get('trained_on')}); "
+              f"heads random")
+    first_block = [p for name, p in model.named_parameters() if name.startswith(("trunk.0.", "trunk.1."))]
     parameters = sum(p.numel() for p in model.parameters())
     print(f"model: {parameters:,} parameters, {parameters * 4 / 1e6:.1f} MB as float32, on {device}")
     print()
@@ -260,6 +287,9 @@ def main():
     best_epoch = 0
 
     for epoch in range(1, args.epochs + 1):
+        frozen = args.init_from and epoch <= args.freeze_epochs
+        for p in first_block:
+            p.requires_grad_(not frozen)
         model.train()
         order = rng.permutation(train)
         started = time.time()
@@ -341,6 +371,9 @@ def write_descriptor(out, corpus, args, summary, best_epoch, train_rows, val_row
         "fraction": args.fraction,
         "tricks": args.tricks or "1-9",
         "weight_tricks": args.weight_tricks or None,
+        "init_from": str(pathlib.Path(args.init_from).resolve().name) if args.init_from else None,
+        "freeze_epochs": args.freeze_epochs if args.init_from else 0,
+        "lr": args.lr,
         "split_rule": SPLIT_RULE,
         "split_seed": args.seed,
         "split_fraction": args.val_fraction,

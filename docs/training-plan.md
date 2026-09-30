@@ -448,6 +448,21 @@ student's forward pass is a few hundred thousand multiplications a card;
 what is left to measure is the S25's time a card, in the SkatKlarPerf
 log the dev builds already write (worlds=0/0 marks the student's cards).
 
+*Warm start (2026-09-30).* Philipp's two more ideas, weighed before any
+code: preprocessed facts -- the trump count and the observed voids are in
+the encoding already (`trumps_out`, `trumps_mine`, `jacks_out`,
+`void_left`, `void_right`), and what the student could not see was the
+points and the trick order, which format 3 adds -- and the belief net's
+output as an input, which needs no export (it reads the same 306 bytes)
+but ties two networks together at play time: dropped, as more ways to
+fail. Instead his third: start the student from the belief net's
+weights. The two have the same trunk, 306 x 512 x 3, the same tensor
+names, so the whole trunk carries over and only the heads start random;
+the result is one ordinary student. `train_policy.py --init-from
+belief-model [--freeze-epochs N]`; `tools/policy-warm.sh` trains it plain,
+at a third of the learning rate, and with the first block held for five
+epochs, beside a second random seed as the noise floor.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
