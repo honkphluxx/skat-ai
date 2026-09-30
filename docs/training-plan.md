@@ -390,6 +390,25 @@ only, 1-2 drawn four times; and for a player that is networks all the
 way through -- kept beside the hybrid, Philipp's point -- tricks 4-9
 only at the same size and at 1024 x 4.
 
+*Twelve seeds, and the phase nets (2026-09-30).* Six more seeds (17-22):
+`hybrid-64-t2` - `belief-64-shipped` -0.49 [-0.81, -0.17] over all
+twelve; - `belief-32-shipped` +0.33 [-0.19, +0.84] over twelve, still
+not resolved. The hybrid is the shipped player's strength or a shade
+better, at a twelfth of its card-play time.
+
+`tools/policy-phases.sh`: every net trained on a phase is worse than the
+all-trick student, in its own phase too. Tricks 1-2, declarer /
+defender, regret in worlds of 32: all tricks 0.293 / 0.371; tricks 1-2
+only 0.399 / 0.448; 1-3 only 0.369 / 0.412; 1-2 drawn four times 0.358
+/ 0.401 (best epoch 8 of 30: the repeats are learnt by heart). Tricks
+4-9, trick by trick: all tricks 0.538 0.612 0.655 0.666 0.568 0.348;
+4-9 only 0.653 0.709 0.708 0.695 0.584 0.375; the same at 1024 x 4
+0.632 0.717 0.716 0.685 0.572 0.328. What the student learns in one
+phase serves it in the others, and a net four times the size gains
+nothing: neither the phase nor the capacity is the limit, the data
+(and what the input can see) is. One net for all tricks; a phase net
+only again if the corpus grows by a lot.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
