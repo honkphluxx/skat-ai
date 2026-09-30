@@ -345,6 +345,32 @@ runs the timing and the pairings: `hybrid-64-t2` against the teacher
 and against the shipped player (six seeds each), t1 and t3 against the
 teacher, the student alone against the shipped player.
 
+*I4 measured (2026-09-29/30, tools/hybrid.sh, host, 24 cores).* Card
+play of all three seats, seconds a game, 30 boards:
+
+    belief-32-shipped 8.33   belief-64-shipped 14.15   student-64 0.01
+    hybrid-64-t1 3.13        hybrid-64-t2 0.72         hybrid-64-t3 0.13
+    hybrid-32-t2 0.38        (96% of a search player's time is tricks 1-2)
+
+Fixed contracts, exact pairing, pooled over seeds:
+
+    hybrid-64-t2 - belief-64-shipped  -0.54 [-0.88, -0.20]  6 seeds, five negative
+    hybrid-64-t2 - belief-32-shipped  +0.50 [-0.70, +1.70]  6 seeds, not resolved
+    hybrid-64-t1 - belief-64-shipped  -0.43 [-1.58, +0.72]  3 seeds
+    hybrid-64-t3 - belief-64-shipped  -0.65 [-6.17, +4.87]  3 seeds
+    student-64   - belief-32-shipped  -6.23 [-10.17, -2.29] 3 seeds
+
+The student in the opening costs about half a game point against the
+teacher -- small, but resolved -- and the hybrid at two tricks plays
+the shipped player's strength or a little better at a twelfth of its
+time. The student alone loses six points, nearly all as declarer
+(from declaring -7.1/-11.0/-13.8 against +3.2/-1.9/+0.5): the search
+in the endgame is not optional. Against the teacher the hybrid's
+declaring column is the lower one in five seeds of six, by more than
+its defending column -- consistent with the yardstick, where the
+student as declarer is worth fewer worlds (0.448 against the 8-world
+search's 0.350) than as defender (0.532 against 0.575).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
