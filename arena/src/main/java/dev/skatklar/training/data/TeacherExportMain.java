@@ -4,6 +4,7 @@ import dev.skatklar.demo.Card;
 import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.belief.BeliefEncoding;
+import dev.skatklar.demo.belief.PlayHistory;
 import dev.skatklar.demo.search.SearchAiProvider;
 import dev.skatklar.demo.search.WorldSampler;
 import dev.skatklar.training.arena.Board;
@@ -89,9 +90,14 @@ public final class TeacherExportMain {
     static final int DEAL = VERDICTS + 8 * MAX_LEGAL;                 // int32, the deal's identity
     static final int SEATING = DEAL + 4;                              // players at me, left, right; 0 = teacher
     static final int TEACHER_SEATS = SEATING + 3;                     // how many seats the teacher had, 1..3
-    static final int RECORD_BYTES = TEACHER_SEATS + 1;
-    /** The record layout's version, in the shard names so an old shard is never resumed into a new corpus. */
-    static final int FORMAT = 2;
+    static final int PLAY_STATE = TEACHER_SEATS + 1;                  // PlayHistory.SIZE bytes (format 3)
+    static final int RECORD_BYTES = PLAY_STATE + PlayHistory.SIZE;
+    /**
+     * The record layout's version, in the shard names so an old shard is never resumed into a new corpus.
+     * Format 3 appends {@link PlayHistory}: points and tricks won per seat and the tricks in order --
+     * what the belief encoding cannot say. Every format-2 field keeps its offset.
+     */
+    static final int FORMAT = 3;
 
     static String layout() {
         return "{\n  \"version\": " + FORMAT + ",\n  \"record_bytes\": " + RECORD_BYTES
@@ -111,7 +117,10 @@ public final class TeacherExportMain {
                 + "    \"verdicts\": [" + VERDICTS + ", " + (8 * MAX_LEGAL) + ", \"uint64 LE per legal card in ascending card index; bit w = held in world w\"],\n"
                 + "    \"deal\": [" + DEAL + ", 4, \"int32 LE, the deal's identity (seed and board mixed), for the validation split\"],\n"
                 + "    \"seating\": [" + SEATING + ", 3, \"player index (players.json; 0 = the teacher) at the deciding seat, its left, its right -- a diagnostic, never an input\"],\n"
-                + "    \"teacher_seats\": [" + TEACHER_SEATS + ", 1, \"seats the teacher held at this board, 1..3\"]\n"
+                + "    \"teacher_seats\": [" + TEACHER_SEATS + ", 1, \"seats the teacher held at this board, 1..3\"],\n"
+                + "    \"play_state\": [" + PLAY_STATE + ", " + PlayHistory.SIZE + ", \"PlayHistory: points won by me, left, right (3); "
+                + "tricks won by me, left, right (3); nine tricks of leader, three cards in play order, winner "
+                + "(seats relative, cards by index, 255 = not played)\"]\n"
                 + "  }\n}\n";
     }
 
@@ -255,6 +264,7 @@ public final class TeacherExportMain {
         out.putInt(DEAL, deal);
         out.put(SEATING, seating[0]).put(SEATING + 1, seating[1]).put(SEATING + 2, seating[2]);
         out.put(TEACHER_SEATS, seating[3]);
+        out.put(PLAY_STATE, PlayHistory.encode(context));
         return out;
     }
 

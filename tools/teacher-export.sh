@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The teacher's decisions, for the student to imitate (docs/training-plan.md 2.10, I1).
 #
-#   ./tools/teacher-export.sh                  90,000 boards, seed 101, into teacher-data-v2/
-#   ./tools/teacher-export.sh --quick          200 boards into teacher-data-v2-quick/, to time it
+#   ./tools/teacher-export.sh                  90,000 boards, seed 101, into teacher-data-v3/
+#   ./tools/teacher-export.sh --quick          200 boards into teacher-data-v3-quick/, to time it
 #   ./tools/teacher-export.sh --boards=10000 --first=90000
 #                                              more boards after the first 90,000
 #   ./tools/teacher-export.sh --population=greedy,expert --mix=0,1,0
@@ -23,7 +23,9 @@
 # cushion, the vote world by world for the first 64 worlds -- from which a 4-,
 # 8-, 16- or 32-world player's vote can be read off later, for the weaker
 # levels -- and who sat where (players.json; never an input to the student).
-# Format 2: teacher-format.json, written beside the shards.
+# Format 3 adds the play so far (engine PlayHistory: points and tricks won per
+# seat, every trick in order) -- what the belief encoding cannot say and
+# SkatZero reads. teacher-format.json, written beside the shards, says where.
 #
 # About 11 records a board at the default mix, so the default is about a
 # million. Written a shard (1,000 boards) at a time, as .partial until complete,
@@ -41,11 +43,11 @@ fi
 cd "$(dirname "$TEACHER_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
-THREADS=16; BOARDS=90000; FIRST=0; SEED=101; TEACHER=belief-64-shipped; OUT=teacher-data-v2; SHARD=1000
+THREADS=16; BOARDS=90000; FIRST=0; SEED=101; TEACHER=belief-64-shipped; OUT=teacher-data-v3; SHARD=1000
 POPULATION=greedy,search-4,club,expert,jskat-new; MIX=25,50,25
 for arg in "$@"; do
     case "$arg" in
-        --quick)       BOARDS=200; SHARD=100; OUT=teacher-data-v2-quick ;;
+        --quick)       BOARDS=200; SHARD=100; OUT=teacher-data-v3-quick ;;
         --threads=*)   THREADS="${arg#*=}" ;;
         --boards=*)    BOARDS="${arg#*=}" ;;
         --first=*)     FIRST="${arg#*=}" ;;

@@ -4,6 +4,7 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
+import dev.skatklar.demo.Card;
 import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.training.arena.Board;
@@ -101,6 +102,79 @@ public class TeacherExportTest {
         assertTrue("verdicts recorded: " + withVerdicts, withVerdicts > 100);
         assertEquals("decisions left out for verdicts that did not add up",
                 leftOutBefore, TeacherExportMain.INCONSISTENT.get());
+    }
+
+    /**
+     * Format 3's play state against the encoding written beside it, which was
+     * made by other code from the same position: every card in the history was
+     * played by the seat the encoding says (the teacher forgets nothing), no
+     * played card is missing, each trick's winner leads the next, and the
+     * points and tricks won are what the history adds up to.
+     */
+    @Test public void thePlayStateAgreesWithTheEncoding() {
+        Contestant teacher = PlayerRegistry.withDefaults().resolve("search-4");
+        Collecting sink = new Collecting();
+        long seed = 3;
+        for (int i = 0; i < 6; i++) {
+            TeacherExportMain.playBoard(teacher, List.of(), new int[] {25, 50, 25}, Board.of(seed, i), seed, sink, true);
+        }
+        int checked = 0, withHistory = 0;
+        int[] block = {dev.skatklar.demo.belief.BeliefEncoding.PLAYED_BY_ME.offset(),
+                dev.skatklar.demo.belief.BeliefEncoding.PLAYED_BY_LEFT.offset(),
+                dev.skatklar.demo.belief.BeliefEncoding.PLAYED_BY_RIGHT.offset()};
+        java.util.Map<Integer, Card> byIndex = new java.util.HashMap<>();
+        for (Card card : dev.skatklar.demo.SkatDeck.ordered()) {
+            byIndex.put(dev.skatklar.demo.belief.BeliefEncoding.index(card), card);
+        }
+        for (byte[] bytes : sink.records) {
+            int state = TeacherExportMain.PLAY_STATE;
+            int trick = bytes[TeacherExportMain.TRICK] & 0xFF;
+            int[] points = new int[3], won = new int[3];
+            boolean[] seen = new boolean[32];
+            int completed = 0;
+            for (int t = 0; t < dev.skatklar.demo.belief.PlayHistory.MAX_TRICKS; t++) {
+                int at = state + dev.skatklar.demo.belief.PlayHistory.TRICKS + 5 * t;
+                int leader = bytes[at] & 0xFF;
+                if (leader == dev.skatklar.demo.belief.PlayHistory.NONE) {
+                    for (int k = 0; k < 5; k++) assertEquals("an unplayed trick is empty", 255, bytes[at + k] & 0xFF);
+                    continue;
+                }
+                assertEquals("the tricks are in order", t, completed);
+                completed++;
+                int trickPoints = 0;
+                for (int k = 0; k < 3; k++) {
+                    int card = bytes[at + 1 + k] & 0xFF;
+                    int seat = (leader + k) % 3;
+                    assertTrue("card " + card + " is marked played by seat " + seat,
+                            (bytes[block[seat] + card] & 0xFF) > 127);
+                    seen[card] = true;
+                    trickPoints += dev.skatklar.demo.SkatRules.cardPoints(byIndex.get(card));
+                }
+                int winner = bytes[at + 4] & 0xFF;
+                points[winner] += trickPoints;
+                won[winner]++;
+                int next = state + dev.skatklar.demo.belief.PlayHistory.TRICKS + 5 * (t + 1);
+                if (t + 1 < dev.skatklar.demo.belief.PlayHistory.MAX_TRICKS && (bytes[next] & 0xFF) != 255) {
+                    assertEquals("the winner leads the next trick", winner, bytes[next] & 0xFF);
+                }
+            }
+            assertEquals("one completed trick for every trick before this one", trick - 1, completed);
+            for (int seat = 0; seat < 3; seat++) {
+                for (int card = 0; card < 32; card++) {
+                    if ((bytes[block[seat] + card] & 0xFF) > 127) {
+                        assertTrue("played card " + card + " is in the history", seen[card]);
+                    }
+                }
+                assertEquals("points won by seat " + seat, points[seat],
+                        bytes[state + dev.skatklar.demo.belief.PlayHistory.POINTS + seat] & 0xFF);
+                assertEquals("tricks won by seat " + seat, won[seat],
+                        bytes[state + dev.skatklar.demo.belief.PlayHistory.TRICKS_WON + seat] & 0xFF);
+            }
+            checked++;
+            if (completed >= 3) withHistory++;
+        }
+        assertTrue("records " + checked, checked > 50);
+        assertTrue("records deep in the game " + withHistory, withHistory > 20);
     }
 
     @Test public void aDecisionWhoseVerdictsDoNotAddUpIsCaught() {

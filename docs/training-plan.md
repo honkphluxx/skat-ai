@@ -409,6 +409,25 @@ nothing: neither the phase nor the capacity is the limit, the data
 (and what the input can see) is. One net for all tricks; a phase net
 only again if the corpus grows by a lot.
 
+*Format 3 (2026-09-30): the play so far in the teacher record.* Philipp's
+call: the hybrid into the app, and the next corpus in format 3 at once.
+`PlayHistory` (engine, belief package) writes 51 bytes from the decision
+context: card points and tricks won by me, left and right, then nine
+completed tricks of leader, three cards in the order they fell, winner
+(seats relative, cards by index, 255 for a trick not yet played). Raw on
+purpose: how a net reads it -- a vector per card, a small sequence
+encoder -- is the trainer's choice on the same bytes, and the player that
+feeds a format-3 student will call the same encoder. Appended after
+`teacher_seats`, so every format-2 offset stands and `teacher_data.py`
+reads both. The exporter's test holds the block to the encoding beside it
+(every history card played by the seat the encoding names, every played
+card in the history, each winner leads the next, points and tricks add
+up); five mutants of the encoder each fail it, and the corpus checker
+does the same checks in numpy (four mutants caught). It is the whole
+history: the teacher forgets nothing, and a forgetful player will have to
+mask it as the trainer's forgetting masks the encoding. 520 bytes a
+record; `teacher-export.sh` writes `teacher-data-v3/`, 90,000 boards.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

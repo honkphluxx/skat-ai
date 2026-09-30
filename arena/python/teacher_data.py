@@ -39,8 +39,13 @@ EXPECTED = {
     "declarer": (315, 1), "trick": (316, 1), "votes": (317, 32), "cushion": (349, 32),
     "verdicts": (381, 80), "deal": (461, 4), "seating": (465, 3), "teacher_seats": (468, 1),
 }
-FORMAT = 2
-RECORD_BYTES = 469
+#: Format 3 appends the play so far (engine PlayHistory): points and tricks
+#: won per relative seat, then nine tricks of leader, three cards, winner.
+#: Every format-2 field keeps its offset, so one reader serves both.
+PLAY_STATE = (469, 51)
+RECORD_BYTES_BY_FORMAT = {2: 469, 3: 520}
+FORMAT = 3
+RECORD_BYTES = RECORD_BYTES_BY_FORMAT[FORMAT]
 
 CONTRACTS = ("Diamonds", "Hearts", "Spades", "Clubs", "Grand", "Null", "Ramsch")
 
@@ -64,11 +69,17 @@ class TeacherCorpus:
         if not layout_file.exists():
             raise FileNotFoundError(f"no teacher-format.json in {self.directory}")
         self.layout = json.loads(layout_file.read_text())
-        if self.layout["version"] != FORMAT:
-            raise ValueError(f"teacher format {self.layout['version']}, this reader reads {FORMAT}")
-        if self.layout["record_bytes"] != RECORD_BYTES:
-            raise ValueError(f"{self.layout['record_bytes']} bytes a record, this reader expects {RECORD_BYTES}")
-        for name, (offset, width) in EXPECTED.items():
+        self.format = self.layout["version"]
+        if self.format not in RECORD_BYTES_BY_FORMAT:
+            raise ValueError(f"teacher format {self.format}, this reader reads {sorted(RECORD_BYTES_BY_FORMAT)}")
+        self.record_bytes = RECORD_BYTES_BY_FORMAT[self.format]
+        if self.layout["record_bytes"] != self.record_bytes:
+            raise ValueError(f"{self.layout['record_bytes']} bytes a record, format {self.format} is "
+                             f"{self.record_bytes}")
+        expected = dict(EXPECTED)
+        if self.format >= 3:
+            expected["play_state"] = PLAY_STATE
+        for name, (offset, width) in expected.items():
             got = tuple(self.layout["fields"][name][:2])
             if got != (offset, width):
                 raise ValueError(f"field {name} at {got}, this reader expects {(offset, width)}")
@@ -86,9 +97,9 @@ class TeacherCorpus:
 
         players = self.directory / "players.json"
         self.players = json.loads(players.read_text()) if players.exists() else []
-        self.shards = sorted(self.directory.glob(f"teacher-v{FORMAT}-*.bin"))
+        self.shards = sorted(self.directory.glob(f"teacher-v{self.format}-*.bin"))
         if not self.shards:
-            raise FileNotFoundError(f"no teacher-v{FORMAT}-*.bin shards in {self.directory}")
+            raise FileNotFoundError(f"no teacher-v{self.format}-*.bin shards in {self.directory}")
 
     def field(self, name):
         return self.fields[name]
@@ -103,9 +114,9 @@ class TeacherCorpus:
         loaded = 0
         for shard in self.shards:
             data = np.fromfile(shard, dtype=np.uint8)
-            if len(data) % RECORD_BYTES:
+            if len(data) % self.record_bytes:
                 raise ValueError(f"{shard.name} is not a whole number of records")
-            blocks.append(data.reshape(-1, RECORD_BYTES))
+            blocks.append(data.reshape(-1, self.record_bytes))
             loaded += len(blocks[-1])
             if limit is not None and loaded >= limit:
                 break
@@ -141,6 +152,10 @@ class Records:
         self.deal = np.ascontiguousarray(raw[:, 461:465]).view("<i4")[:, 0].astype(np.int64)
         self.seating = raw[:, 465:468].astype(np.int64)
         self.teacher_seats = raw[:, 468].astype(np.int64)
+        # Format 3 only: the play so far, raw (see PLAY_STATE); None before it.
+        offset, width = PLAY_STATE
+        self.play_state = np.ascontiguousarray(raw[:, offset:offset + width]) \
+            if raw.shape[1] >= offset + width else None
         self.n = n
 
     def __len__(self):
@@ -179,6 +194,44 @@ def check(name, condition, detail=""):
     status = "ok  " if condition else "FAIL"
     print(f"  [{status}] {name}{'  -- ' + detail if detail and not condition else ''}")
     return bool(condition)
+
+
+def check_play_state(corpus, r):
+    """Format 3: the play so far against the encoding written beside it."""
+    state = r.play_state.astype(np.int64)
+    tricks = state[:, 6:51].reshape(-1, 9, 5)
+    played = tricks[:, :, 0] != 255
+    good = True
+    good &= check("one completed trick for every trick before this one", (played.sum(axis=1) == r.trick - 1).all())
+    good &= check("the completed tricks come first", (np.diff(played.astype(int), axis=1) <= 0).all())
+    good &= check("tricks won add up to the tricks played", (state[:, 3:6].sum(axis=1) == r.trick - 1).all())
+    good &= check("points won are at most 120", (state[:, 0:3].sum(axis=1) <= 120).all())
+    no_tricks = state[:, 3:6] == 0
+    good &= check("no points without a trick", (state[:, 0:3][no_tricks] == 0).all())
+    # Every card in the history was played by the seat the encoding says, and
+    # every card the encoding marks as played is in the history.
+    blocks = [corpus.slice(r.features, name) > corpus.scale / 2
+              for name in ("played_by_me", "played_by_left", "played_by_right")]
+    agree = True
+    covered = np.zeros((len(r), CARDS), dtype=bool)
+    rows = np.arange(len(r))
+    for t in range(9):
+        on = played[:, t]
+        for k in range(3):
+            card = np.where(on, tricks[:, t, 1 + k], 0)
+            seat = (tricks[:, t, 0] + k) % 3
+            for s in range(3):
+                m = on & (seat == s)
+                agree &= bool(blocks[s][rows[m], card[m]].all())
+            covered[rows[on], card[on]] = True
+    marked = blocks[0] | blocks[1] | blocks[2]
+    good &= check("the history's cards were played by the seats the encoding names", agree)
+    good &= check("every card the encoding marks as played is in the history", (covered == marked).all())
+    winners = tricks[:, :8, 4]
+    leaders = tricks[:, 1:, 0]
+    both = played[:, 1:]
+    good &= check("each trick's winner leads the next", (winners[both] == leaders[both]).all())
+    return good
 
 
 def run_checks(corpus, records, fraction=0.1, seed=1):
@@ -226,14 +279,21 @@ def run_checks(corpus, records, fraction=0.1, seed=1):
     good &= check("the contract byte agrees with the encoding", (contract_feature == r.contract).all())
     hand = corpus.slice(r.features, "my_hand") > corpus.scale / 2
     good &= check("every legal card is in the hand", (hand | ~r.legal).all())
+    if r.play_state is not None:
+        good &= check_play_state(corpus, r)
     print()
 
     print("the split")
     train, val = split_by_board(r.deal, fraction, seed)
     shared = np.intersect1d(np.unique(r.deal[train]), np.unique(r.deal[val]))
     good &= check("no deal on both sides", len(shared) == 0, f"{len(shared)} deals on both sides")
-    good &= check(f"about {fraction:.0%} held out", abs(len(val) / len(r) - fraction) < 0.03,
-                  f"{len(val) / len(r):.1%}")
+    # By deal, so a small corpus lands further from the fraction: four
+    # binomial standard errors over the deals, and never tighter than 3 points.
+    deals = len(np.unique(r.deal))
+    slack = max(0.03, 4 * np.sqrt(fraction * (1 - fraction) / max(deals, 1)))
+    held = len(np.unique(r.deal[val])) / max(deals, 1)
+    good &= check(f"about {fraction:.0%} of the deals held out", abs(held - fraction) < slack,
+                  f"{held:.1%} of {deals:,} deals")
     print(f"    {len(train):,} training, {len(val):,} held out ({SPLIT_RULE}, seed {seed})")
     print()
 
@@ -258,7 +318,7 @@ def main(argv):
     corpus = TeacherCorpus(argv[0])
     limit = None if "--all" in argv else 300_000
     records = corpus.load(limit=limit)
-    print(f"teacher format {FORMAT}, encoding v{corpus.version}, {len(corpus.shards)} shards, "
+    print(f"teacher format {corpus.format}, encoding v{corpus.version}, {len(corpus.shards)} shards, "
           f"players {corpus.players}")
     print(f"{len(records):,} records from {len(np.unique(records.deal)):,} deals"
           + (f" (the first {limit:,})" if limit else ""))
