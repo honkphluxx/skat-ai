@@ -196,6 +196,14 @@ def main():
     parser.add_argument("--fraction", type=float, default=1.0,
                         help="train on this share of the training deals (whole deals, the held-out "
                              "set unchanged): 0.25 and 0.5 beside 1 say whether more data still pays")
+    parser.add_argument("--tricks", default="",
+                        help="train only on decisions in these tricks, e.g. 1-3: a net for the phase "
+                             "it will play (the hybrid's opening, or 4-9 for an endgame net). The "
+                             "held-out set stays whole; the best epoch is chosen on these tricks")
+    parser.add_argument("--weight-tricks", default="",
+                        help="draw decisions in these tricks more often, e.g. 1-2:4 -- each such "
+                             "record four times an epoch, the rest once; the best epoch is chosen "
+                             "on these tricks")
     parser.add_argument("--limit", type=int, default=0, help="read only this many records; a smoke run")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
@@ -216,6 +224,21 @@ def main():
         keep, _ = split_by_board(records.deal[train], 1.0 - args.fraction, seed=args.seed + 1000)
         train = train[keep]
         print(f"training on {args.fraction:.0%} of the training deals: {len(train):,} records")
+    select = np.ones(len(val), dtype=bool)
+    if args.tricks:
+        low, high = trick_range(args.tricks)
+        train = train[(records.trick[train] >= low) & (records.trick[train] <= high)]
+        select = (records.trick[val] >= low) & (records.trick[val] <= high)
+        print(f"training on tricks {low}-{high} only: {len(train):,} records")
+    if args.weight_tricks:
+        span, _, times = args.weight_tricks.partition(":")
+        low, high = trick_range(span)
+        times = int(times or 1)
+        inside = train[(records.trick[train] >= low) & (records.trick[train] <= high)]
+        train = np.concatenate([train] + [inside] * (times - 1))
+        if not args.tricks:
+            select = (records.trick[val] >= low) & (records.trick[val] <= high)
+        print(f"tricks {low}-{high} drawn {times} times: {len(train):,} records an epoch")
     print(f"{len(train):,} training records, {len(val):,} held out "
           f"({len(np.unique(records.deal[val])):,} whole deals)")
 
@@ -257,19 +280,22 @@ def main():
         by_policy, by_value, val_p, val_v = predict(model, batches, val)
         agree, best, regret = scores(records, val, by_policy)
         _, best_v, regret_v = scores(records, val, by_value)
+        chosen_on = regret[select].mean()
         print(f"epoch {epoch:3d}  train {running_p / steps_per_epoch:.4f} / {running_v / steps_per_epoch:.4f}"
               f"   val {val_p:.4f} / {val_v:.4f}   teacher's card {agree.mean():.1%}  best {best.mean():.1%}"
               f"  regret {regret.mean():.2f}   (value head: best {best_v.mean():.1%} regret {regret_v.mean():.2f})"
-              f"   {time.time() - started:.0f}s")
-        if regret.mean() < best_regret:
-            best_regret = regret.mean()
+              + (f"   selected tricks {chosen_on:.2f}" if not select.all() else "")
+              + f"   {time.time() - started:.0f}s")
+        if chosen_on < best_regret:
+            best_regret = chosen_on
             best_epoch = epoch
             torch.save(model.state_dict(), out / "policy.pt")
 
     model.load_state_dict(torch.load(out / "policy.pt"))
     by_policy, by_value, _, _ = predict(model, batches, val)
     print()
-    print(f"best held-out regret at epoch {best_epoch} of {args.epochs}")
+    print(f"best held-out regret at epoch {best_epoch} of {args.epochs}"
+          + (" (on the selected tricks)" if not select.all() else ""))
     print()
     summary = report(records, val, by_policy, "the policy head")
     print()
@@ -283,6 +309,15 @@ def main():
         p, v = model(torch.from_numpy(x).to(device))
     np.savez(out / "fixtures.npz", features=x, policy=p.cpu().numpy(), value=v.cpu().numpy())
     print(f"\nweights, descriptor and fixtures in {out}")
+
+
+def trick_range(text):
+    """'1-3' as (1, 3); '2' as (2, 2)."""
+    low, _, high = text.partition("-")
+    low, high = int(low), int(high or low)
+    if not 1 <= low <= high <= 10:
+        raise SystemExit(f"a trick range is 1-10, not {text}")
+    return low, high
 
 
 def write_descriptor(out, corpus, args, summary, best_epoch, train_rows, val_rows, contracts_trained):
@@ -304,6 +339,8 @@ def write_descriptor(out, corpus, args, summary, best_epoch, train_rows, val_row
         "train_records": train_rows,
         "val_records": val_rows,
         "fraction": args.fraction,
+        "tricks": args.tricks or "1-9",
+        "weight_tricks": args.weight_tricks or None,
         "split_rule": SPLIT_RULE,
         "split_seed": args.seed,
         "split_fraction": args.val_fraction,

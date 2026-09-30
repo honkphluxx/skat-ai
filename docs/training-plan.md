@@ -371,6 +371,25 @@ its defending column -- consistent with the yardstick, where the
 student as declarer is worth fewer worlds (0.448 against the 8-world
 search's 0.350) than as defender (0.532 against 0.575).
 
+*The student by role, held out (2026-09-30).* Tricks 1-2, regret in
+worlds of 32: as declarer the student 0.293, the 32-world search 0.318;
+as defender 0.371 against 0.456 -- better than the search it replaces
+in both roles. Against the teacher, which cannot be put on its own
+referee, extrapolated from 16 to 32 worlds (about 0.68 and 0.72 per
+doubling): about 0.22 and 0.33, so a third more regret as declarer and
+an eighth more as defender; in the cushion the teacher asked for on
+tied votes the student's card is 0.33 worlds of 64 short as declarer,
+0.19 as defender. Many small losses, a little more as declarer: enough
+for the -0.54, no declaring audit needed. The value head is worse in
+tricks 1-2 in both roles (0.373, 0.440): as declarer only from trick 3,
+where the hybrid searches -- dropped.
+
+Next, cheapest first: nets for a phase (`train_policy.py --tricks`,
+`--weight-tricks`; `tools/policy-phases.sh`): tricks 1-2 only, 1-3
+only, 1-2 drawn four times; and for a player that is networks all the
+way through -- kept beside the hybrid, Philipp's point -- tricks 4-9
+only at the same size and at 1024 x 4.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
