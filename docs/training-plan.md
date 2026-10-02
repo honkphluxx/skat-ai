@@ -505,6 +505,44 @@ more data than imitation can buy, which is R's question; the search
 keeps the endgame. Note: v3 is the same games as v2, so it is not more
 data; a corpus that adds data needs another seed.
 
+*The self-play throughput test (2026-10-02, `tools/selfplay-throughput.sh`,
+host: 24 logical CPUs, RTX 4090).* Network-only games, the student in all
+three seats at fixed suit and grand contracts through the shipped engine
+(a bare actor: evidence, encoding, one forward pass, nothing at the deal):
+
+    threads   games/s   decisions/s   forward pass alone, us
+       1        113        2,593          378
+       8        738       16,950          394
+      24      1,702       39,114          583
+
+99% of an actor's time is the Java forward pass, one input a call; the
+engine and the encoding are the last 1%. At 24 threads that is 147 million
+games a day, the v2 teacher corpus's 1.2 million decisions every 31 s and
+ten thousand times it in 3.5 days -- on the CPU alone, as the code stands.
+(The arena's student-64 manages 2.3 games/s on a thread: it prices every
+deal for the auction with the solver, 98% of its time. Self-play must not
+carry that.) The same net batched, decisions a second: torch on the CPU
+450 k at 4,096 a batch (eleven times the Java actors on all cores); the
+4090 11-14 M (9-12 M with the inputs' round trip from the host), fp32 as
+fast as bf16, the play state's 538 inputs costing nothing. Training on the
+4090: 4-5 M decisions a second, an epoch of v2 in 0.2 s.
+
+So volume is not what stands between us and a network-only player: the
+four orders of magnitude are days of CPU, and batching onto the GPU would
+buy another one or two once the actors' per-card overhead is all that is
+left (at about 15 us a decision against today's 380, the 24 threads would
+not keep the card busy). What decides R is the training signal. Teacher
+labels cost 14 s a game and do not scale; self-play games carry only their
+outcome. The candidate is Deep Monte-Carlo as in DouZero (a three-player
+card game with hidden hands, learnt from outcomes alone): a Q per card
+regressed on the game's result, actors exploring with the current net, the
+learner on the GPU. Two things in hand make a pilot cheap: the student's
+value head already estimates, per card, the share of worlds that hold --
+a Q to start from -- and the yardstick scores any net against the teacher's
+referee worlds on held-out deals, so whether self-play moves the endgame is
+measured, not argued. The pilot needs no GPU inference: generate a few
+million games with the Java actors, train, export, repeat.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
