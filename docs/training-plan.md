@@ -463,6 +463,24 @@ belief-model [--freeze-epochs N]`; `tools/policy-warm.sh` trains it plain,
 at a third of the learning rate, and with the first block held for five
 epochs, beside a second random seed as the noise floor.
 
+*Format 3 corpus done (2026-10-01).* `teacher-data-v3/`: 1,197,472
+decisions in 119,297 s, none left out, every check passed over all of
+them. The same 90,000 boards as v2 (seed 101) -- and about 94% of the
+records are byte for byte v2's, the rest from games that went another
+way: the teacher is not perfectly repeatable across two runs, which is
+worth knowing and harmless here. The split is by deal, so v2 students are
+scored on the same held-out deals. The student reads the play state as
+232 more inputs (`teacher_data.play_state_features`, `train_policy.py
+--play-state`): points and tricks won per seat, the declarer's side's and
+the defenders' points, and per card whether it has fallen, in which
+trick, in which place and who took that trick -- checked on records
+against the encoding beside them (cards played by the seat whose turn it
+was, winners and counts adding up; three mutants caught). A warm start
+fills the encoding's columns of the wider first layer from the belief net
+and starts the new ones at zero. `tools/policy-v3.sh` trains the control
+and the warm start on the encoding alone, and both again with the play
+state.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

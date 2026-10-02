@@ -181,6 +181,47 @@ class Records:
         return out
 
 
+#: Inputs the play state adds when a student reads it (format 3): points won
+#: by me, left, right (/120); tricks won by each (/10); the declarer's side's
+#: points and the defenders' (/120, both zero in a game without a declarer);
+#: and for every card, if it has been played in a completed trick: which
+#: trick ((t+1)/9), its place in that trick (one of three) and who won that
+#: trick (one of three, relative). The per-card block is the part the belief
+#: encoding cannot say -- it knows who played a card, not when or who took it.
+PLAY_STATE_FEATURES = 3 + 3 + 2 + CARDS * 7
+
+
+def play_state_features(corpus, state, features):
+    """The play state of a batch as inputs; ``features`` the same rows' packed encoding."""
+    n = len(state)
+    s = state.astype(np.int64)
+    out = np.zeros((n, PLAY_STATE_FEATURES), dtype=np.float32)
+    out[:, 0:3] = s[:, 0:3] / 120.0
+    out[:, 3:6] = s[:, 3:6] / 10.0
+    declarer = corpus.slice(features, "declarer") > corpus.scale / 2       # me, left, right, nobody
+    total = s[:, 0:3].sum(axis=1)
+    rows = np.arange(n)
+    has = declarer[:, :3].any(axis=1)
+    seat = declarer[:, :3].argmax(axis=1)
+    mine = np.where(has, s[rows, seat], 0)
+    out[:, 6] = mine / 120.0
+    out[:, 7] = np.where(has, total - mine, 0) / 120.0
+    cards = out[:, 8:].reshape(n, CARDS, 7)
+    tricks = s[:, 6:51].reshape(n, 9, 5)
+    for t in range(9):
+        on = tricks[:, t, 0] != 255
+        if not on.any():
+            continue
+        r = rows[on]
+        winner = tricks[on, t, 4]
+        for k in range(3):
+            card = tricks[on, t, 1 + k]
+            cards[r, card, 0] = (t + 1) / 9.0
+            cards[r, card, 1 + k] = 1.0
+            cards[r, card, 4 + winner] = 1.0
+    return out
+
+
 def popcount64(words):
     """Bits set in each uint64, vectorised."""
     w = np.ascontiguousarray(words, dtype=np.uint64)

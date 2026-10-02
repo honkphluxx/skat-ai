@@ -43,7 +43,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from teacher_data import CARDS, CONTRACTS, SPLIT_RULE, TeacherCorpus, run_checks, split_by_board
+from teacher_data import (CARDS, CONTRACTS, PLAY_STATE_FEATURES, SPLIT_RULE, TeacherCorpus, play_state_features,
+                          run_checks, split_by_board)
 
 for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
@@ -83,16 +84,27 @@ def losses(policy_logits, value_logits, legal, chosen, share):
 class Batches:
     """Tensors for a set of rows, a batch at a time."""
 
-    def __init__(self, corpus, records, device):
+    def __init__(self, corpus, records, device, play_state=False):
         self.corpus = corpus
         self.r = records
         self.device = device
         self.share = records.share().astype(np.float32)
+        if play_state and records.play_state is None:
+            raise SystemExit("the play state needs a format-3 corpus")
+        self.play_state = play_state
+
+    def inputs(self, rows):
+        """The input vectors for these rows, the play state appended when asked for."""
+        x = self.corpus.unpack(self.r.features[rows])
+        if self.play_state:
+            x = np.concatenate([x, play_state_features(self.corpus, self.r.play_state[rows],
+                                                       self.r.features[rows])], axis=1)
+        return x
 
     def get(self, rows):
         r = self.r
         d = self.device
-        return (torch.from_numpy(self.corpus.unpack(r.features[rows])).to(d),
+        return (torch.from_numpy(self.inputs(rows)).to(d),
                 torch.from_numpy(r.legal[rows]).to(d),
                 torch.from_numpy(r.chosen[rows]).to(d),
                 torch.from_numpy(self.share[rows]).to(d))
@@ -212,6 +224,9 @@ def main():
     parser.add_argument("--freeze-epochs", type=int, default=0,
                         help="with --init-from, keep the first block (its Linear and LayerNorm) as "
                              "the belief left it for this many epochs, then train it too")
+    parser.add_argument("--play-state", action="store_true",
+                        help="format 3: append the play so far -- points and tricks won, and for each "
+                             "card when it fell, where in its trick and who took it -- to the inputs")
     parser.add_argument("--limit", type=int, default=0, help="read only this many records; a smoke run")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
@@ -251,13 +266,14 @@ def main():
           f"({len(np.unique(records.deal[val])):,} whole deals)")
 
     device = torch.device(args.device)
-    batches = Batches(corpus, records, device)
-    model = PolicyNet(corpus.size, args.hidden, args.layers).to(device)
+    batches = Batches(corpus, records, device, args.play_state)
+    inputs = corpus.size + (PLAY_STATE_FEATURES if args.play_state else 0)
+    model = PolicyNet(inputs, args.hidden, args.layers).to(device)
     if args.init_from:
         source = pathlib.Path(args.init_from)
         described = json.loads((source / "model.json").read_text())
         if (described.get("inputs"), described.get("hidden"), described.get("layers")) != \
-                (corpus.size, args.hidden, args.layers):
+                (corpus.size, args.hidden, args.layers) or described.get("bid_structure"):
             raise SystemExit(f"{source} is {described.get('inputs')} x {described.get('hidden')} x "
                              f"{described.get('layers')}, the student {corpus.size} x {args.hidden} x {args.layers}")
         if described.get("encoding_version") != corpus.version:
@@ -268,6 +284,14 @@ def main():
         own = model.state_dict()
         if set(trunk) != {k for k in own if k.startswith("trunk.")}:
             raise SystemExit(f"{source}'s trunk has other layers than the student's")
+        if inputs > corpus.size:
+            # The belief reads the encoding only: its first layer fills the
+            # encoding's columns, and the play state's start at zero, so the
+            # warm student begins as the belief's trunk exactly and learns what
+            # the new inputs are worth from there.
+            first = torch.zeros_like(own["trunk.0.weight"])
+            first[:, :corpus.size] = trunk["trunk.0.weight"]
+            trunk["trunk.0.weight"] = first
         model.load_state_dict(trunk, strict=False)
         print(f"trunk from {source} ({len(trunk)} tensors, trained on {described.get('trained_on')}); "
               f"heads random")
@@ -334,7 +358,7 @@ def main():
     for c in np.unique(records.contract[train]):
         contracts_trained |= 1 << int(c)
     write_descriptor(out, corpus, args, summary, best_epoch, len(train), len(val), contracts_trained)
-    x = corpus.unpack(records.features[val[:16]])
+    x = batches.inputs(val[:16])
     with torch.no_grad():
         p, v = model(torch.from_numpy(x).to(device))
     np.savez(out / "fixtures.npz", features=x, policy=p.cpu().numpy(), value=v.cpu().numpy())
@@ -355,7 +379,8 @@ def write_descriptor(out, corpus, args, summary, best_epoch, train_rows, val_row
     (out / "model.json").write_text(json.dumps({
         "kind": "policy",
         "encoding_version": corpus.version,
-        "inputs": corpus.size,
+        "inputs": corpus.size + (PLAY_STATE_FEATURES if args.play_state else 0),
+        "play_state": bool(args.play_state),
         "cards": CARDS,
         "heads": ["policy", "value"],
         "hidden": args.hidden,

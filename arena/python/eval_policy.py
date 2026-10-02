@@ -107,8 +107,8 @@ def main():
     rows = []  # (name, regret, best)
     picks = []  # (name, cards) for the cushion table
     device = torch.device(args.device)
-    batches = Batches(corpus, records, device)
     for name, directory, d in players:
+        batches = Batches(corpus, records, device, d.get("play_state", False))
         model = PolicyNet(d["inputs"], d["hidden"], d["layers"]).to(device)
         model.load_state_dict(torch.load(pathlib.Path(directory) / "policy.pt", map_location=device))
         by_policy, by_value, _, _ = predict(model, batches, val)
