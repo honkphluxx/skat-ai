@@ -112,6 +112,22 @@ tasks.register<JavaExec>("cardTime") {
     forwardProperties()
 }
 
+/**
+ * How fast the CPU plays network-only games: the actor half of the self-play
+ * throughput test (plan 2.10, R). See SelfPlayThroughputMain and
+ * tools/selfplay-throughput.sh.
+ *
+ * ./gradlew :arena:selfPlayThroughput --args="--threads=1,8,16,24 --seconds=20"
+ */
+tasks.register<JavaExec>("selfPlayThroughput") {
+    group = "verification"
+    description = "Times the student's forward pass and network-only games at several thread counts"
+    mainClass.set("dev.skatklar.training.arena.SelfPlayThroughputMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:play --args="--level=club" */
 tasks.register<JavaExec>("play") {
     group = "application"
