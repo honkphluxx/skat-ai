@@ -17,6 +17,12 @@ What is printed, per player, on the referee's 32 worlds:
   regret   worlds the card holds fewer than the referee's best card
   best     the card is one of the referee's top-voted
 
+With --skatzero (a SkatZero checkout; a format-3 corpus), SkatZero is scored
+as one more player on the same decisions: skatzero_eval.py rebuilds its
+state from the record. Where the record leaves the current trick's order
+open and the order changes SkatZero's card, the decision is left out for
+every player, so the tables stay like with like.
+
 So "the student sits between the 8- and the 16-world search" is a statement
 about the same positions, the same worlds and the same question. What it is
 not is a game result: the search's tiebreaks (the cushion, the ladder) are
@@ -29,8 +35,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import sys
+import time
 
 import numpy as np
 import torch
@@ -84,6 +92,11 @@ def main():
                         help="a policy model directory; may be given more than once")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--limit", type=int, default=0)
+    parser.add_argument("--skatzero", default=None,
+                        help="a SkatZero checkout with its ONNX models: score SkatZero too (format-3 corpus)")
+    parser.add_argument("--skatzero-workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
+    parser.add_argument("--skatzero-every", type=int, default=1,
+                        help="score every k-th held-out decision only, for every player alike (SkatZero is slow)")
     args = parser.parse_args()
 
     corpus = TeacherCorpus(args.data)
@@ -100,6 +113,27 @@ def main():
     if (records.worlds < 64).any() or (records.verdict_worlds < 64).any():
         sys.exit("this yardstick needs 64 verdict worlds on every record")
     _, val = split_by_board(records.deal, fraction, seed=seed)
+    by_skatzero = None
+    if args.skatzero:
+        # SkatZero cannot be scored where the record leaves the current
+        # trick's order open and the order changes its card (see
+        # skatzero_eval.py); those rows go for every player, so every row of
+        # every table is the same decisions for all of them.
+        from skatzero_eval import AMBIGUOUS, MISMATCH, skatzero_picks
+        val = val[::args.skatzero_every]
+        started = time.time()
+        picks = skatzero_picks(corpus, records, val, args.skatzero, workers=args.skatzero_workers)
+        ambiguous = int((picks == AMBIGUOUS).sum())
+        mismatched = int((picks == MISMATCH).sum())
+        print(f"SkatZero: {len(val):,} decisions in {time.time() - started:.0f} s; left out for every player: "
+              f"{ambiguous:,} where the current trick's order is open and decides its card, "
+              f"{mismatched:,} where its legal cards are not the record's")
+        if mismatched > 0.005 * len(val):
+            sys.exit("more than 0.5% of the rebuilt positions disagree with the record's legal cards: "
+                     "the reconstruction is wrong somewhere")
+        keep = picks >= 0
+        val = val[keep]
+        by_skatzero = picks[keep]
     bits, votes, legal, top = referee(records, val)
     print(f"{len(val):,} held-out decisions ({rule}, seed {seed}); scored on worlds 32-63")
     print()
@@ -123,6 +157,9 @@ def main():
         picks.append((f"student {name}", by_policy))
         picks.append(("  its value head", by_value))
         picks.append(("  value as declarer", mixed))
+    if by_skatzero is not None:
+        rows.append(("SkatZero", *score_pick(votes, top, by_skatzero)))
+        picks.append(("SkatZero", by_skatzero))
     for k in (1, 2, 4, 8, 16, 32):
         rows.append((f"search, {k} world{'s' if k > 1 else ''}", *score_search(bits, votes, legal, top, k)))
     rows.append(("a random legal card", *score_random(votes, legal, top)))

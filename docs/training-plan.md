@@ -604,6 +604,24 @@ cancels between the alternatives, which is exactly the noise that drowned
 this run. Late in the game the play-out is a few cards long and the label
 close to exact whatever the net's strength. Not built.
 
+*SkatZero on the yardstick, built (2026-10-02, `tools/skatzero-yardstick.sh`).*
+SkatZero is itself Deep Monte-Carlo (its README: DouZero's method, the card
+as an input beside the state and an LSTM over the history, nine models,
+about 1.5 billion self-play games each for suit and grand, 500 hours on an
+RTX 4070 Ti and 16 cores) -- the method the pilot ran at 5 million games.
+So the question for R: does learning from outcomes at that scale learn the
+endgame? `skatzero_eval.py` rebuilds SkatZero's state from a format-3
+record (hand, contract, declarer, own discard, every completed trick in
+order, points) and plays its card as `tools/skatzero-bot.py` does, look-
+ahead included; `eval_policy.py --skatzero` scores it as one more row. The
+record holds the current trick as a set: with two cards of different
+classes the recorded voids settle the order, with two of one class both
+orders are tried, and where SkatZero's card depends on it the decision is
+left out for every player (8% of a 415-decision sample). Checked: its legal
+cards equal the record's on every rebuilt position; against the bot's own
+Driver fed the same game card by card, the same card on 338 of 338 and the
+same points. A future exporter should write the current trick in order.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
