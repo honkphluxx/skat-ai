@@ -481,6 +481,30 @@ and starts the new ones at zero. `tools/policy-v3.sh` trains the control
 and the warm start on the encoding alone, and both again with the play
 state.
 
+*What the play state is worth (2026-10-02, `tools/policy-v3.sh`).* Regret
+in worlds of 32 on the held-out deals, declarer / defender, tricks 1-2
+and 3-9 (the seed-to-seed spread of one recipe is about 0.004 on these):
+
+    v2, random start             0.293 0.371   0.482 0.579
+    v2, belief's trunk           0.293 0.364   0.465 0.567
+    v3, random start             0.308 0.372   0.473 0.577
+    v3, belief's trunk           0.289 0.370   0.473 0.571
+    v3 + play state, random      0.293 0.381   0.479 0.589
+    v3 + play state, belief's    0.293 0.366   0.475 0.547
+
+Tricks 7-9 for the last against the best of the others: 0.625 / 0.536 /
+0.310 against 0.647 / 0.558 / 0.340. The play state is worth something
+only from the belief's trunk, only late, mostly to the defender: about
+5-9% off the last three tricks, where the student still plays like a
+one-world search (0.536 at trick 8 against that search's 0.521). Nothing
+in tricks 1-2, so nothing for the hybrid. So the endgame is not short of
+information but of calculation -- the result the yardstick was set up to
+tell apart, and the one SkatZero's own declaring (more won positions
+thrown than ours) also points to. A network-only player would need far
+more data than imitation can buy, which is R's question; the search
+keeps the endgame. Note: v3 is the same games as v2, so it is not more
+data; a corpus that adds data needs another seed.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
