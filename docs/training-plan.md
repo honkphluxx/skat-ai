@@ -622,6 +622,40 @@ cards equal the record's on every rebuilt position; against the bot's own
 Driver fed the same game card by card, the same card on 338 of 338 and the
 same points. A future exporter should write the current trick in order.
 
+*SkatZero on the yardstick: the answer (2026-10-02, teacher-data-v3, 107,929
+held-out decisions; 11,980 left out for every player where the current
+trick's order was open and decided SkatZero's card).* Regret in worlds of 32:
+
+                       declarer 1-2  defender 1-2  declarer 3-9  defender 3-9
+    student (v2)           0.297         0.339         0.482         0.516
+    student, play state    0.300         0.336         0.476         0.489
+    SkatZero               0.433         0.552         0.236         0.492
+    search, 8 worlds       0.732         0.908         0.257         0.491
+    search, 32 worlds      0.326         0.506         0.091         0.219
+
+    by trick       1      2      3      4      5      6      7      8      9
+    student      0.301  0.349  0.431  0.486  0.541  0.587  0.612  0.554  0.324
+    SkatZero     0.513  0.513  0.549  0.555  0.531  0.502  0.375  0.251  0.112
+    search, 4    1.127  1.101  1.104  0.999  0.855  0.642  0.424  0.223  0.079
+
+Three readings. (1) Learning from outcomes at 1.5 billion games does learn
+the declarer's endgame: declarer 3-9 0.236, an 8-world search, against the
+student's 0.48; tricks 7-9 between a 2- and a 4-world search. Not the
+32-world search, which the hybrid keeps. (2) SkatZero's opening is worse
+than the student's (trick 1 0.51 against 0.30): "SkatZero's opening, our
+endgame" has nothing to take on this yardstick. (3) The decisive one: on
+defence the yardstick puts SkatZero level with the student and short of the
+32-world search, yet in games SkatZero's defence gives away about 3 g.p. a
+game less than our search's (the defending audit, 2026-09-26). The referee
+is double-dummy: it lets the declarer play every world with every card
+seen, so a defence that gives a real declarer chances to go wrong -- or
+denies him the information to get it right -- scores nothing. The teacher's
+labels share that blindness, so no amount of imitation fixes our defence;
+only a signal from games as played can see it (outcomes at scale, as
+SkatZero, or comparing the cards on the same deal with an honest declarer
+playing on). And the yardstick must not be the judge of defence: that
+needs games.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
