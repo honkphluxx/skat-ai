@@ -543,6 +543,35 @@ referee worlds on held-out deals, so whether self-play moves the endgame is
 measured, not argued. The pilot needs no GPU inference: generate a few
 million games with the Java actors, train, export, repeat.
 
+*The Deep Monte-Carlo pilot, built (2026-10-02, `tools/dmc-pilot.sh`).*
+`SelfPlayExportMain` (`:arena:selfPlayExport`) plays network-only games, one
+net in all three seats at fixed suit and grand contracts (greedy's auction,
+greedy's skat exchange, board seed 7000 + iteration, never the teacher's
+101), each card the legal one the value head rates highest, a share epsilon
+(0.02) at random. Each seat reads the teacher's own evidence -- a perfect
+memory, the bids heard, the declarer's discard; `SelfPlayExportTest` holds
+it byte for byte to the search player's at memory 1 -- and every decision
+is written (326 bytes: the encoding, legal cards, the card, explored and
+declarer flags, trick, contract, whether the decider's side won, its card
+points, the net's own estimate, the game id). `train_dmc.py` regresses the
+value head at the card played on whether the side won -- the head's own
+loss and meaning, the outcome of the game as played in place of 64 solved
+worlds -- over the last two iterations' games, one epoch, AdamW 3e-4; it
+prints the held-out loss and calibration by trick before and after, and
+writes a policy model that `export_policy.py` and the yardstick take
+unchanged. The loop: self-play 500,000 games, learn, export, yardstick
+(value-head rows against net-00 = the student, on the teacher's held-out
+deals and referee worlds). The policy head is left alone; the actors play
+by the value head, which was already the better of the two late (0.40
+against 0.53 in tricks 7-9).
+
+What it answers: whether the value head's regret in tricks 7-9 falls
+below the student's, towards the searches', iteration by iteration. What
+it cannot: the referee is double-dummy; a net that learns the game as
+actually played may part from it where the referee's perfect play is the
+wrong model, so a flat yardstick with a falling self-play loss would send
+us to a game match before any verdict.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

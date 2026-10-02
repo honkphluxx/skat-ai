@@ -128,6 +128,22 @@ tasks.register<JavaExec>("selfPlayThroughput") {
     forwardProperties()
 }
 
+/**
+ * Network-only self-play, every decision written with the game's outcome: the
+ * actors of the Deep Monte-Carlo pilot (plan 2.10, R). See SelfPlayExportMain
+ * and tools/dmc-pilot.sh.
+ *
+ * ./gradlew :arena:selfPlayExport --args="--model=dmc-pilot/net-00 --out=dmc-pilot/data-01 --games=500000 --iteration=1"
+ */
+tasks.register<JavaExec>("selfPlayExport") {
+    group = "application"
+    description = "Plays network-only games and writes every decision with its outcome"
+    mainClass.set("dev.skatklar.training.data.SelfPlayExportMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:play --args="--level=club" */
 tasks.register<JavaExec>("play") {
     group = "application"
