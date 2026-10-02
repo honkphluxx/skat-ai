@@ -23,6 +23,8 @@ import java.util.Set;
  */
 public final class PlayerRegistry {
     private static final String CLASS_PREFIX = "class:";
+    /** {@code roles:<declaring>/<defending>}: see {@link dev.skatklar.training.players.RoleSplitProvider}. */
+    private static final String ROLES_PREFIX = "roles:";
 
     private final Map<String, Contestant> byId = new LinkedHashMap<>();
 
@@ -183,12 +185,33 @@ public final class PlayerRegistry {
     public Set<String> ids() { return byId.keySet(); }
 
     /**
-     * @param spec a registered id, or {@code class:<fully.qualified.Name>} for a
-     *             provider with a no-argument constructor anywhere on the classpath
+     * @param spec a registered id, {@code class:<fully.qualified.Name>} for a
+     *             provider with a no-argument constructor anywhere on the classpath,
+     *             or {@code roles:<declaring>/<defending>} for one seat played by
+     *             two registered players, one per role
      */
     public Contestant resolve(String spec) {
         if (spec == null || spec.isBlank()) {
             throw new IllegalArgumentException("Empty player specification");
+        }
+        if (spec.startsWith(ROLES_PREFIX)) {
+            String[] parts = spec.substring(ROLES_PREFIX.length()).split("/", -1);
+            if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+                throw new IllegalArgumentException("A role split is roles:<declaring>/<defending>, not " + spec);
+            }
+            Contestant declaring = resolve(parts[0]);
+            Contestant defending = resolve(parts[1]);
+            return new Contestant() {
+                @Override public String id() { return spec; }
+                @Override public String displayName() {
+                    return declaring.displayName() + " declaring, " + defending.displayName() + " defending";
+                }
+                @Override public SkatAiProvider newProvider(long seed) {
+                    return new dev.skatklar.training.players.RoleSplitProvider(spec,
+                            declaring.newProvider(seed), defending.newProvider(seed ^ 0x5EED_DEF0L));
+                }
+                @Override public String toString() { return spec; }
+            };
         }
         if (spec.startsWith(CLASS_PREFIX)) {
             String className = spec.substring(CLASS_PREFIX.length());

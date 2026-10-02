@@ -656,6 +656,18 @@ SkatZero, or comparing the cards on the same deal with an honest declarer
 playing on). And the yardstick must not be the judge of defence: that
 needs games.
 
+*The defence split, built (2026-10-02, `tools/defence-split.sh`).* A role
+split is one seat played by two players, `roles:<declaring>/<defending>`
+(`RoleSplitProvider`; everything before the first card is the declaring
+player's, each card goes to the player the seat's role names, both hear
+every event; `RoleSplitProviderTest`, four mutants fail). Three pairings at
+fixed contracts: our teacher declaring with SkatZero defending against the
+teacher whole (six seeds), the same for the shipped 32-world player, and
+SkatZero declaring with the teacher defending. The first is the number
+that says what the defence gap the yardstick cannot see is worth to our
+best player. Container smoke, `roles:search-4/skatzero` vs `search-4`, 8
+boards: no delegated game, no divergence, honesty control 0 of 480.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
