@@ -572,6 +572,38 @@ actually played may part from it where the referee's perfect play is the
 wrong model, so a flat yardstick with a falling self-play loss would send
 us to a game match before any verdict.
 
+*What the pilot answered (2026-10-02, ten iterations, 5 million games).*
+Self-play itself worked as built: 1,700 games/s, the held-out self-play loss
+0.497 -> 0.328, flat from iteration 5, and calibrated to within a point at
+every trick (estimate minus outcome +-0.005). The yardstick went the other
+way. Value head, regret in worlds of 32:
+
+                     trick 1    3      5      7      8      9
+    net-00 (student)  0.389  0.528  0.630  0.574  0.419  0.213
+    net-01            0.458  0.618  0.709  0.626  0.406  0.234
+    net-05            0.659  0.792  0.919  0.799  0.546  0.281
+    net-10            0.700  0.849  0.947  0.806  0.523  0.259
+
+Worse everywhere from net-03 on, early tricks most; the policy head, left
+untrained, drifted with the trunk to twice the student's regret. Not the
+referee's double-dummy bias: at trick 9 almost nothing is hidden and the
+referee is close to the truth, and it got worse there too. The reading: the
+outcome of a game is decided far more by the deal than by any one card, so
+a net learning to predict it learns who holds the game (the loss falls,
+the calibration is excellent) and next to nothing about which card is
+better -- that difference is a sliver of the target's variance, seen only
+for the card played, and for the others only through 2% exploration while
+the trunk under their outputs moves. DouZero spent billions of games (with
+the action as an input, not an output per card); five million of ours did
+not separate the cards.
+
+What this points to: compare the cards on the same deal. Play every legal
+card in turn on the actual cards, the rest of the game played out honestly
+by the net, and label each card with its result -- the deal's variance
+cancels between the alternatives, which is exactly the noise that drowned
+this run. Late in the game the play-out is a few cards long and the label
+close to exact whatever the net's strength. Not built.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
