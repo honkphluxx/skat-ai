@@ -668,6 +668,39 @@ that says what the defence gap the yardstick cannot see is worth to our
 best player. Container smoke, `roles:search-4/skatzero` vs `search-4`, 8
 boards: no delegated game, no divergence, honesty control 0 of 480.
 
+*The defence split: the answer, and a correction (2026-10-02, 200 boards a
+seed, fixed contracts).*
+
+    roles:teacher-declares/SkatZero-defends - teacher   6 seeds  +0.05 [-1.10, +1.20]
+    roles:shipped-declares/SkatZero-defends - shipped   3 seeds  +1.26 [-0.62, +3.15]
+    roles:SkatZero-declares/teacher-defends - teacher   3 seeds  +1.42 [-1.42, +4.27]
+
+The "from declaring" line separates the roles here: in the first two
+pairings both sides declare with the same player, so A's minus B's is what
+SkatZero's defence costs that declarer; in the third both defend with the
+teacher, so it is SkatZero's declaring minus the teacher's. Per seed, in the
+arena's tournament points a game: SkatZero defending against our teacher
++0.1 -1.2 -1.7 -1.4 +2.8 +1.3 (nothing); against the shipped 32-world
+player +1.2 +3.1 +1.6; SkatZero declaring against the teacher's defence
++0.3 +3.3 +4.1.
+
+The correction: the note before this one called defence our biggest gap
+(about 3 g.p. a game). That was the shipped 32-world player's defence (the
+audit of 2026-09-26). The 64-world teacher defends as well as SkatZero in
+games; the gap the audit found is the 32 worlds', which T1's 64 already
+closed most of. What remains, and is not yet resolved, is the other side:
+SkatZero may declare better than our teacher in games -- the declaring
+audit's par run said the same (SkatZero won 319 of 529 boards to our 302,
+48 of 238 flat-zero boards to our 17) -- although on the yardstick it opens
+worse and plays the endgame below the 32-world search. Both are true if
+the difference sits where the yardstick is blind: a position the declarer
+has lost against perfect defence scores every card zero, so the referee
+cannot prefer the card that gives real defenders the most room to go
+wrong. That is where SkatZero, trained on games as they end, has something
+to teach, and where the teacher's labels have nothing. Next: three more
+seeds of the third pairing (`--only=sz-decl-teacher-def --seeds="14 15
+16"`) to resolve it.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

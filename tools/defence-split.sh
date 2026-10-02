@@ -4,6 +4,9 @@
 #   ./tools/defence-split.sh                 the three pairings below, 200 boards a seed
 #   ./tools/defence-split.sh --quick         one seed of 30 boards each (the plumbing)
 #   ./tools/defence-split.sh --threads=12 --boards=300
+#   ./tools/defence-split.sh --only=sz-decl-teacher-def --seeds="14 15 16"
+#                                            one pairing (by tag), other seeds; the
+#                                            pooled line reads every seed on disk
 #
 # A role split is one seat played by two players: roles:<declaring>/<defending>
 # (RoleSplitProvider). Fixed contracts (greedy's auction), duplicate scoring,
@@ -37,13 +40,15 @@ fi
 cd "$(dirname "$DS_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
-QUICK=false; THREADS=16; BOARDS=200
+QUICK=false; THREADS=16; BOARDS=200; ONLY=""; SEEDS_ARG=""
 for arg in "$@"; do
     case "$arg" in
         --quick)      QUICK=true ;;
         --threads=*)  THREADS="${arg#*=}" ;;
         --boards=*)   BOARDS="${arg#*=}" ;;
-        -h|--help)    sed -n '2,30p' "$DS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --only=*)     ONLY="${arg#*=}" ;;
+        --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
+        -h|--help)    sed -n '2,33p' "$DS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -71,8 +76,9 @@ PAIRS=(
 )
 for pair in "${PAIRS[@]}"; do
     IFS='|' read -r P AGAINST SEEDS TAG <<< "$pair"
+    [ -n "$ONLY" ] && [ "$ONLY" != "$TAG" ] && continue
+    [ -n "$SEEDS_ARG" ] && SEEDS="$SEEDS_ARG"
     say "--- $P against $AGAINST, fixed contracts, seeds $SEEDS ---"
-    diffs=""
     for SEED in $SEEDS; do
         [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
         tag="$TAG-s$SEED-b$BOARDS"
@@ -84,6 +90,10 @@ for pair in "${PAIRS[@]}"; do
                 > "$report" 2>&1 || { mv "$report" "$LOG/$tag.failed.txt"; say "      FAILED -- see $LOG/$tag.failed.txt"; continue; }
         fi
         grep -E "^  from declaring|^  from defending| = .*game pts/game|delegated|Honesty" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
+    done
+    diffs=""
+    for report in "$LOG/$TAG"-s*-b"$BOARDS".txt; do
+        [ -f "$report" ] || continue
         d=$(grep -E " = .*game pts/game" "$report" | sed -E 's/.* = ([-+0-9.]+) game pts.*/\1/')
         [ -n "$d" ] && diffs="$diffs $d"
     done
