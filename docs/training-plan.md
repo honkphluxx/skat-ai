@@ -725,6 +725,30 @@ decisions are flat. If `flat:belief-64-shipped/skatzero` takes most of the
 defenders' mistakes -- and that is the target for new labels; if not, it
 sits in positions the search still thinks winnable.
 
+*The flat handover: the answer (2026-10-03, six seeds).*
+`flat:belief-64-shipped/skatzero - belief-64-shipped` **+1.00 [+0.11,
++1.90]** game points a game; per seed -0.47 +1.60 +0.52 +1.17 +1.32 +1.88;
+29-36% of the declarer's decisions handed over (1,176-1,416 of about
+4,000 a seed), honesty control 0 of every handed decision. SkatZero
+declaring everything was +1.54 [+0.45, +2.64] on the same seeds: about
+two thirds of its edge comes from the positions our search calls lost --
+every legal card at zero votes, where the double-dummy question has no
+answer and the search falls back on tiebreaks and the ladder -- and the
+rest, within the noise, from everywhere else. The teacher with SkatZero
+in its lost declarer positions is the strongest player measured here.
+
+So the target is precise: a third of the declarer's decisions, in which
+the right question is not "which card wins against perfect defence"
+(none does) but "which card wins most often against the defenders at the
+table". The teacher's labels are silent there by construction. Three ways
+to an answer of our own: (a) distil SkatZero's choices in exactly these
+positions into our net (cheap; capped at SkatZero); (b) in a flat
+position, play every legal card out in the sampled worlds with realistic
+defenders -- the student for all seats -- instead of the solver's perfect
+ones, and keep the card that wins most often (a change to the search,
+no training; the play-out idea, aimed where it matters); (c) labels from
+(b) for a net, later.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
