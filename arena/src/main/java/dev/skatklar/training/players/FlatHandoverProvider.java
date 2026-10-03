@@ -50,12 +50,17 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
 
     private static final AtomicLong DECLARER_DECISIONS = new AtomicLong();
     private static final AtomicLong HANDED = new AtomicLong();
+    /** Handed decisions where the rescuer's card was not the search's own. */
+    private static final AtomicLong CHANGED = new AtomicLong();
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (DECLARER_DECISIONS.get() > 0) {
                 System.out.printf("Flat handover: %,d of %,d declarer decisions handed to the rescuer (%.1f%%)%n",
                         HANDED.get(), DECLARER_DECISIONS.get(),
                         100.0 * HANDED.get() / DECLARER_DECISIONS.get());
+                System.out.printf("  the rescuer's card differed from the search's in %,d of them (%.1f%%)%n",
+                        CHANGED.get(), 100.0 * CHANGED.get() / Math.max(1, HANDED.get()));
+                RolloutRescue.report();
             }
         }));
     }
@@ -194,6 +199,7 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                 Card rescued = rollout != null
                         ? (lastWorlds == null ? searched : rollout.choose(context, lastEvidence, lastWorlds, searched))
                         : other.chooseCard(context);
+                if (!searched.equals(rescued)) CHANGED.incrementAndGet();
                 return context.legalCards.contains(rescued) ? rescued : searched;
             }
             @Override public void cardPlayed(SkatAi.CardPlayedEvent event) {

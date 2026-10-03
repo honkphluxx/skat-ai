@@ -774,6 +774,22 @@ teacher, six seeds, beside the SkatZero handover's +1.00. The student is a
 weaker defender than the teacher the arena seats against it; cards that
 win only against its mistakes will gain less there.
 
+*Play-outs in the lost positions: the answer (2026-10-03, six seeds).*
+`flat:belief-64-shipped/rollout-64 - belief-64-shipped` **+0.09 [-0.30,
++0.48]**: nothing, on the same seeds where SkatZero in the same positions
+gave +1.00 [+0.11, +1.90]; 29-37% of declarer decisions handed over, as
+before. Not yet known: how often the play-outs' card was not the search's
+own, and how often any card won a play-out at all. Instrumented since
+(the arena's report prints both, and for any rescuer how often its card
+differed from the search's); a container smoke against a 4-world search
+shows the play-outs moving the card in 63-86% of handed decisions and the
+best card winning 30-38% of its worlds against the student's defence. If
+the teacher's run looks alike, the play-outs do choose differently and
+believe they win -- against the student -- and the cards they choose win
+nothing against the teacher's defence: the student is the wrong model of
+the defenders at the table, the risk named when the play-outs were built.
+One seed of each rescuer with the counters (seed 21) says which.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

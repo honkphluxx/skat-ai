@@ -55,7 +55,35 @@ public final class RolloutRescue {
      */
     Card choose(SkatAi.DecisionContext context, BeliefEncoding.Evidence seen,
                 List<WorldSampler.World> sampled, Card fallback) {
-        return pick(tally(context, seen, sampled), fallback);
+        List<Tally> tallies = tally(context, seen, sampled);
+        int most = 0;
+        int least = Integer.MAX_VALUE;
+        for (Tally t : tallies) {
+            most = Math.max(most, t.wins);
+            least = Math.min(least, t.wins);
+        }
+        DECIDED.incrementAndGet();
+        WORLDS.addAndGet(Math.min(worlds, sampled.size()));
+        if (most > 0) ANY_WIN.incrementAndGet();
+        if (most > least) SPREAD.incrementAndGet();
+        BEST_WINS.addAndGet(most);
+        return pick(tallies, fallback);
+    }
+
+    private static final java.util.concurrent.atomic.AtomicLong DECIDED = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong WORLDS = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong ANY_WIN = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong SPREAD = new java.util.concurrent.atomic.AtomicLong();
+    private static final java.util.concurrent.atomic.AtomicLong BEST_WINS = new java.util.concurrent.atomic.AtomicLong();
+
+    /** What the play-outs saw, for the arena's report; nothing when they never ran. */
+    static void report() {
+        long n = DECIDED.get();
+        if (n == 0) return;
+        System.out.printf("  play-outs: some card won in some world in %.1f%% of decisions; the cards' win counts "
+                        + "differed in %.1f%%; the best card won %.1f%% of its worlds on average%n",
+                100.0 * ANY_WIN.get() / n, 100.0 * SPREAD.get() / n,
+                100.0 * BEST_WINS.get() / Math.max(1, WORLDS.get()));
     }
 
     /** The most worlds won, then the most declarer points; the search's own card on a full tie. */
