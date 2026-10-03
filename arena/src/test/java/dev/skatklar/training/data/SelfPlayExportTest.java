@@ -186,7 +186,7 @@ public class SelfPlayExportTest {
     }
 
     /** A net that ignores its input: one hidden layer of zeros, the head's bias the answer. */
-    static PolicyNet constantNet(float[] bias) throws IOException {
+    public static PolicyNet constantNet(float[] bias) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bytes);
         int inputs = BeliefEncoding.SIZE;

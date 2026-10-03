@@ -749,6 +749,31 @@ ones, and keep the card that wins most often (a change to the search,
 no training; the play-out idea, aimed where it matters); (c) labels from
 (b) for a net, later.
 
+*A rule (Philipp, 2026-10-03).* SkatZero is a measuring stick and a source
+of concepts, never of data: no training in which SkatZero is the teacher,
+no labels taken from its choices, no cloning. Hybrids with SkatZero in
+them are for analysis only (the role split, the flat handover). Option (a)
+above is struck.
+
+*Play-outs in the lost positions, built (`RolloutRescue`, `Playout`;
+`flat:<search>/rollout-<worlds>`).* Where the search's vote is zero for
+every legal card, each legal card is played in each of the search's own
+sampled worlds and the game finished by the student at all three seats,
+every seat reading only its own evidence (perfect memory, the bids heard,
+the declarer's discard); the card that wins in the most worlds is played,
+ties to the most declarer points, then to the search's card. `Playout`
+uses the engine's own rules and builds each position as the engine does:
+`PlayoutTest` replays the engine's fixed-contract games from every decision
+on the true hands with the engine's policy, and the play-out must end on
+the engine's declarer points with every position it hands the policy
+encoding byte for byte as the engine's own (six games, over 500 positions;
+six mutants fail). Container smoke: `flat:search-4/rollout-16` played ten
+boards at the search's own speed. The pairing:
+`./tools/defence-split.sh --only=teacher-flat-rollout`, against the
+teacher, six seeds, beside the SkatZero handover's +1.00. The student is a
+weaker defender than the teacher the arena seats against it; cards that
+win only against its mistakes will gain less there.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

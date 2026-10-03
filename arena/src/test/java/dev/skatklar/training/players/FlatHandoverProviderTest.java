@@ -69,7 +69,7 @@ public class FlatHandoverProviderTest {
                 Rescuer rescuer = new Rescuer();
                 rescuers.put(seat, rescuer);
                 SkatAiProvider search = new SearchAiProvider(new GreedyAiProvider(), 4, seed * 31 + i * 3 + seat.ordinal());
-                seating.put(seat, new FlatHandoverProvider("flat:test", search, rescuer, (votes, hand) -> {
+                seating.put(seat, new FlatHandoverProvider("flat:test", search, rescuer, null, (votes, hand) -> {
                     boolean flat = votes != null && !votes.isEmpty()
                             && votes.values().stream().allMatch(v -> v == 0);
                     seen.add(new boolean[] {hand, flat});

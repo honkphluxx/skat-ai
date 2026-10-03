@@ -192,7 +192,8 @@ public final class PlayerRegistry {
      *             or {@code roles:<declaring>/<defending>} for one seat played by
      *             two registered players, one per role, or
      *             {@code flat:<search>/<rescuer>} for a search player whose lost
-     *             declarer positions another player plays
+     *             declarer positions another player plays ({@code rollout} or
+     *             {@code rollout-<worlds>}: played out against the student instead)
      */
     public Contestant resolve(String spec) {
         if (spec == null || spec.isBlank()) {
@@ -204,6 +205,26 @@ public final class PlayerRegistry {
                 throw new IllegalArgumentException("A flat handover is flat:<search>/<rescuer>, not " + spec);
             }
             Contestant search = resolve(parts[0]);
+            if (parts[1].equals("rollout") || parts[1].startsWith("rollout-")) {
+                int worlds;
+                try {
+                    worlds = parts[1].equals("rollout") ? 32 : Integer.parseInt(parts[1].substring("rollout-".length()));
+                } catch (NumberFormatException bad) {
+                    throw new IllegalArgumentException("play-outs are rollout or rollout-<worlds>, not " + parts[1]);
+                }
+                return new Contestant() {
+                    @Override public String id() { return spec; }
+                    @Override public String displayName() {
+                        return search.displayName() + ", lost declarer positions played out (" + worlds + " worlds)";
+                    }
+                    @Override public SkatAiProvider newProvider(long seed) {
+                        return new dev.skatklar.training.players.FlatHandoverProvider(spec, search.newProvider(seed),
+                                new dev.skatklar.training.players.RolloutRescue(
+                                        dev.skatklar.training.players.RolloutRescue.student(), worlds));
+                    }
+                    @Override public String toString() { return spec; }
+                };
+            }
             Contestant rescuer = resolve(parts[1]);
             return new Contestant() {
                 @Override public String id() { return spec; }

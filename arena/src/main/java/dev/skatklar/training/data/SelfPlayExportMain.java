@@ -351,7 +351,7 @@ public final class SelfPlayExportMain {
      * declarer its own discard -- what {@code SearchAiProvider} builds at
      * memory 1, checked against it by {@code SelfPlayExportTest}.
      */
-    static BeliefEncoding.Evidence perfectMemory(SkatAi.DecisionContext context,
+    public static BeliefEncoding.Evidence perfectMemory(SkatAi.DecisionContext context,
                                                  Map<SkatAi.Seat, Integer> highestBids, List<Card> buried) {
         Set<Card> seen = context.derived.playedCards;
         boolean declarer = context.game.hasDeclarer() && context.mySeat == context.game.declarer;

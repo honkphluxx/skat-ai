@@ -5,10 +5,13 @@ import dev.skatklar.demo.GameEngine;
 import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.ai.SkatAiSession;
+import dev.skatklar.demo.belief.BeliefEncoding;
 import dev.skatklar.demo.search.SearchAiProvider;
+import dev.skatklar.demo.search.WorldSampler;
 import dev.skatklar.training.arena.Board;
 import dev.skatklar.training.arena.ContractSource;
 import dev.skatklar.training.arena.TableObserver;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -37,6 +40,11 @@ import java.util.function.BiConsumer;
  * game of its own (an outside engine) is asked exactly for the cards it plays
  * and told of every other one. Both hear every event, as in
  * {@link RoleSplitProvider}.
+ *
+ * <p>The rescuer can also be our own: {@code flat:<search>/rollout} (or
+ * {@code rollout-<worlds>}) plays the lost position out in the search's own
+ * sampled worlds against realistic defenders ({@link RolloutRescue}) instead
+ * of asking another player.
  */
 public final class FlatHandoverProvider implements SkatAiProvider, TableObserver {
 
@@ -54,18 +62,31 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
 
     private final String id;
     private final SkatAiProvider search;
+    /** Another player as the rescuer, or null when the play-outs are. */
     private final SkatAiProvider rescuer;
+    private final RolloutRescue rollout;
     /** The search's last vote, delivered on the deciding thread inside its chooseCard. */
     private Map<Card, Integer> lastVotes;
+    /** The search's last evidence and worlds, delivered the same way. */
+    private BeliefEncoding.Evidence lastEvidence;
+    private List<WorldSampler.World> lastWorlds;
     private final BiConsumer<Map<Card, Integer>, Boolean> listener;
 
     public FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer) {
-        this(id, search, rescuer, null);
+        this(id, search, rescuer, null, null);
+    }
+
+    /** The lost positions played out in the search's own worlds instead of handed to another player. */
+    public FlatHandoverProvider(String id, SkatAiProvider search, RolloutRescue rollout) {
+        this(id, search, null, rollout, null);
     }
 
     /** @param listener told, at every declarer decision, the search's votes and whether it was handed over */
-    FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer,
+    FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer, RolloutRescue rollout,
                          BiConsumer<Map<Card, Integer>, Boolean> listener) {
+        if ((rescuer == null) == (rollout == null)) {
+            throw new IllegalArgumentException(id + ": a rescuer or the play-outs, exactly one");
+        }
         if (!(search instanceof SearchAiProvider searching)) {
             throw new IllegalArgumentException(id + ": the first player must be a search player, not "
                     + search.descriptor().id);
@@ -73,6 +94,11 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
         this.id = id;
         this.search = searching.withCardPlayObserver(new SearchAiProvider.CardPlayObserver() {
             @Override public void decided(SearchAiProvider.CardPlayReport report) {}
+            @Override public void sampled(SkatAi.DecisionContext context, BeliefEncoding.Evidence evidence,
+                                          List<WorldSampler.World> worlds) {
+                lastEvidence = evidence;
+                lastWorlds = worlds;
+            }
             @Override public void voted(SkatAi.DecisionContext context, Map<Card, Integer> votes,
                                         Map<Card, Integer> cushion, int worldsSearched,
                                         boolean cushionAsked, Card chosen) {
@@ -80,6 +106,7 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
             }
         });
         this.rescuer = rescuer;
+        this.rollout = rollout;
         this.listener = listener;
     }
 
@@ -92,6 +119,13 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
         if (search instanceof TableObserver o) o.observe(engine);
         if (rescuer instanceof TableObserver o) o.observe(engine);
     }
+
+    /** A rescuer that never plays and hears everything: the session's partner when the play-outs rescue. */
+    private static final SkatAiSession SILENT = new SkatAiSession() {
+        @Override public Card chooseCard(SkatAi.DecisionContext context) {
+            throw new IllegalStateException("the play-outs choose, not this session");
+        }
+    };
 
     @Override public void observeFixedContract(Board board, ContractSource.FixedContract fixed) {
         if (search instanceof TableObserver o) o.observeFixedContract(board, fixed);
@@ -109,7 +143,7 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
 
     @Override public SkatAiSession createSession() {
         SkatAiSession main = search.createSession();
-        SkatAiSession other = rescuer.createSession();
+        SkatAiSession other = rescuer != null ? rescuer.createSession() : SILENT;
         return new SkatAiSession() {
             @Override public void prepareDeal(SkatAi.DealContext context) {
                 main.prepareDeal(context);
@@ -146,6 +180,8 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
             }
             @Override public Card chooseCard(SkatAi.DecisionContext context) {
                 lastVotes = null;
+                lastEvidence = null;
+                lastWorlds = null;
                 Card searched = main.chooseCard(context);
                 boolean declares = context.game.hasDeclarer() && context.mySeat == context.game.declarer;
                 if (!declares || context.legalCards.size() < 2) return searched;
@@ -155,7 +191,9 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                 if (listener != null) listener.accept(votes, hand);
                 if (!hand) return searched;
                 HANDED.incrementAndGet();
-                Card rescued = other.chooseCard(context);
+                Card rescued = rollout != null
+                        ? (lastWorlds == null ? searched : rollout.choose(context, lastEvidence, lastWorlds, searched))
+                        : other.chooseCard(context);
                 return context.legalCards.contains(rescued) ? rescued : searched;
             }
             @Override public void cardPlayed(SkatAi.CardPlayedEvent event) {
