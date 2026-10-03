@@ -105,7 +105,7 @@ for pair in "${PAIRS[@]}"; do
                 --args="--a=$P --b=$AGAINST --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
                 > "$report" 2>&1 || { mv "$report" "$LOG/$tag.failed.txt"; say "      FAILED -- see $LOG/$tag.failed.txt"; continue; }
         fi
-        grep -E "^  from declaring|^  from defending| = .*game pts/game|delegated|Honesty|Flat handover" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
+        grep -E "^  from declaring|^  from defending| = .*game pts/game|delegated|Honesty|Flat handover|rescuer.s card|play-outs:" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
     done
     diffs=""
     for report in "$LOG/$TAG"-s*-b"$BOARDS".txt; do
