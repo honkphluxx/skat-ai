@@ -701,6 +701,30 @@ to teach, and where the teacher's labels have nothing. Next: three more
 seeds of the third pairing (`--only=sz-decl-teacher-def --seeds="14 15
 16"`) to resolve it.
 
+*SkatZero declares better than our teacher: resolved (2026-10-03).* Seeds
+14-16 added to the third pairing: +3.01, +0.94, +1.03; pooled over six
+seeds `roles:skatzero/belief-64-shipped - belief-64-shipped` **+1.54
+[+0.45, +2.64]** game points a game, the declaring line +0.3 +3.3 +4.1
++4.8 +1.5 +1.4. With our teacher defending on both sides, SkatZero's
+declaring is worth about a game point and a half a game over the
+teacher's -- the first thing measured in games that SkatZero does better
+than our best player, and the one place the teacher's labels and the
+yardstick cannot point at.
+
+*Where, built (`FlatHandoverProvider`, `flat:<search>/<rescuer>`).* Our
+teacher plays everything, except the declarer's decisions in which its own
+vote is zero for every legal card -- lost against perfect defence in every
+world it drew, where it has nothing to choose by but tiebreaks and the
+ladder; those go to SkatZero. The search is asked first and its vote read
+from its own session; the rescuer is asked only for the cards it plays and
+told of every other one. `FlatHandoverProviderTest`: handed over exactly
+when every legal card is at zero, only as declarer, the rescuer hearing
+every card (five mutants fail); 31% of a 4-world search's declarer
+decisions are flat. If `flat:belief-64-shipped/skatzero` takes most of the
++1.54, the edge sits in lost positions -- the declarer's play for real
+defenders' mistakes -- and that is the target for new labels; if not, it
+sits in positions the search still thinks winnable.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

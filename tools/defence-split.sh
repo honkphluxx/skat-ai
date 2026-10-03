@@ -22,6 +22,11 @@
 #       the other half: SkatZero declaring, our teacher defending -- whether
 #       its declaring is worth anything to us in games (the yardstick says
 #       it opens worse and plays the endgame below a 32-world search)
+#   flat:belief-64-shipped/skatzero   vs belief-64-shipped    seeds 11-16
+#       our teacher everywhere, except the declarer's lost positions (every
+#       legal card at zero votes), which SkatZero plays (FlatHandoverProvider):
+#       is that where SkatZero's declaring edge sits? Run it alone with
+#       --only=teacher-flat-sz
 #
 # Each report is skipped when it exists, so the same command resumes; touch
 # STOP to stop after the current one. Needs the SkatZero checkout
@@ -48,7 +53,7 @@ for arg in "$@"; do
         --boards=*)   BOARDS="${arg#*=}" ;;
         --only=*)     ONLY="${arg#*=}" ;;
         --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
-        -h|--help)    sed -n '2,33p' "$DS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,38p' "$DS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -73,6 +78,7 @@ PAIRS=(
     "roles:belief-64-shipped/skatzero|belief-64-shipped|$LONG|teacher-decl-sz-def"
     "roles:belief-32-shipped/skatzero|belief-32-shipped|$SHORT|shipped-decl-sz-def"
     "roles:skatzero/belief-64-shipped|belief-64-shipped|$SHORT|sz-decl-teacher-def"
+    "flat:belief-64-shipped/skatzero|belief-64-shipped|$LONG|teacher-flat-sz"
 )
 for pair in "${PAIRS[@]}"; do
     IFS='|' read -r P AGAINST SEEDS TAG <<< "$pair"
@@ -89,7 +95,7 @@ for pair in "${PAIRS[@]}"; do
                 --args="--a=$P --b=$AGAINST --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
                 > "$report" 2>&1 || { mv "$report" "$LOG/$tag.failed.txt"; say "      FAILED -- see $LOG/$tag.failed.txt"; continue; }
         fi
-        grep -E "^  from declaring|^  from defending| = .*game pts/game|delegated|Honesty" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
+        grep -E "^  from declaring|^  from defending| = .*game pts/game|delegated|Honesty|Flat handover" "$report" | sed 's/^/      /' | tee -a "$SUMMARY"
     done
     diffs=""
     for report in "$LOG/$TAG"-s*-b"$BOARDS".txt; do

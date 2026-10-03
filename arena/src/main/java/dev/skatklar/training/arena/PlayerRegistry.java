@@ -25,6 +25,8 @@ public final class PlayerRegistry {
     private static final String CLASS_PREFIX = "class:";
     /** {@code roles:<declaring>/<defending>}: see {@link dev.skatklar.training.players.RoleSplitProvider}. */
     private static final String ROLES_PREFIX = "roles:";
+    /** {@code flat:<search>/<rescuer>}: see {@link dev.skatklar.training.players.FlatHandoverProvider}. */
+    private static final String FLAT_PREFIX = "flat:";
 
     private final Map<String, Contestant> byId = new LinkedHashMap<>();
 
@@ -188,11 +190,32 @@ public final class PlayerRegistry {
      * @param spec a registered id, {@code class:<fully.qualified.Name>} for a
      *             provider with a no-argument constructor anywhere on the classpath,
      *             or {@code roles:<declaring>/<defending>} for one seat played by
-     *             two registered players, one per role
+     *             two registered players, one per role, or
+     *             {@code flat:<search>/<rescuer>} for a search player whose lost
+     *             declarer positions another player plays
      */
     public Contestant resolve(String spec) {
         if (spec == null || spec.isBlank()) {
             throw new IllegalArgumentException("Empty player specification");
+        }
+        if (spec.startsWith(FLAT_PREFIX)) {
+            String[] parts = spec.substring(FLAT_PREFIX.length()).split("/", -1);
+            if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
+                throw new IllegalArgumentException("A flat handover is flat:<search>/<rescuer>, not " + spec);
+            }
+            Contestant search = resolve(parts[0]);
+            Contestant rescuer = resolve(parts[1]);
+            return new Contestant() {
+                @Override public String id() { return spec; }
+                @Override public String displayName() {
+                    return search.displayName() + ", lost declarer positions by " + rescuer.displayName();
+                }
+                @Override public SkatAiProvider newProvider(long seed) {
+                    return new dev.skatklar.training.players.FlatHandoverProvider(spec,
+                            search.newProvider(seed), rescuer.newProvider(seed ^ 0xF1A7L));
+                }
+                @Override public String toString() { return spec; }
+            };
         }
         if (spec.startsWith(ROLES_PREFIX)) {
             String[] parts = spec.substring(ROLES_PREFIX.length()).split("/", -1);
