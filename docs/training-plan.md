@@ -829,6 +829,21 @@ changed in two thirds of the handed decisions, the best card winning a
 quarter of its play-outs (one in nine with the top card). The pairing:
 `./tools/defence-split.sh --only=teacher-flat-drawn`.
 
+*Drawn defences: the answer (2026-10-04, seeds 11-16 and 21).*
+`flat:belief-64-shipped/rollout-32x4 - belief-64-shipped` **+0.93 [+0.47,
++1.40]** game points a game, per seed +0.20 +1.22 +0.32 +0.94 +0.98 +1.47
++1.41; the SkatZero handover on the same seven seeds +1.00 [+0.28, +1.72],
+the first play-outs +0.22 [-0.23, +0.67]. Our own play-outs now take as
+much from the declarer's lost positions as SkatZero does -- no SkatZero
+in them, nothing learnt from it. Counters: 29-37% of the declarer's
+decisions handed over, the card changed in 47-53% of them, some card won
+some play-out in 53-62%, the best card 8-13% of its play-outs. Which of the
+two changes carried it -- the drawn defences or the ranking by game value
+-- is not separated; a value-ranked top-card run would say. Cost: about
+70 minutes a seed at 14 threads against the plain teacher's 22, all of it
+in the handed decisions. The teacher with drawn-defence play-outs in its
+lost declarer positions is the strongest player of our own measured here.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
