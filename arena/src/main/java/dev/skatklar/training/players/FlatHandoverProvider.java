@@ -45,8 +45,54 @@ import java.util.function.BiConsumer;
  * {@code rollout-<worlds>}) plays the lost position out in the search's own
  * sampled worlds against realistic defenders ({@link RolloutRescue}) instead
  * of asking another player.
+ *
+ * <p>With the play-outs the hand-over can reach further ({@link Scope}, spelled
+ * {@code po:<search>/<rollout>/<scope>}): the defenders' lost positions too
+ * (every card lets the declarer through against perfect play), and positions
+ * that are not lost but tied -- the cards whose vote is within {@code k}
+ * worlds of the best, when there are two or more of them. There the search's
+ * vote stays the safety net: the play-outs only choose among the cards it
+ * already rates (near) equally safe, by game value against realistic
+ * opponents -- a Schneider made or avoided, which the vote cannot see.
  */
 public final class FlatHandoverProvider implements SkatAiProvider, TableObserver {
+
+    /**
+     * Which decisions are handed to the play-outs: lost positions as declarer
+     * and as defender, and ties within {@code k} worlds of the top vote as
+     * declarer and as defender ({@code -1}: never).
+     */
+    public record Scope(boolean lostDeclarer, boolean lostDefender, int tieDeclarer, int tieDefender) {
+        /** The first form: the declarer's lost positions and nothing else. */
+        public static final Scope LOST_DECLARER = new Scope(true, false, -1, -1);
+
+        /** {@code lost-decl,lost-def,tie0-decl,tie2-def}: any of them, comma-separated. */
+        public static Scope parse(String text) {
+            boolean lostDecl = false;
+            boolean lostDef = false;
+            int tieDecl = -1;
+            int tieDef = -1;
+            for (String part : text.split(",")) {
+                String p = part.trim();
+                if (p.equals("lost-decl")) lostDecl = true;
+                else if (p.equals("lost-def")) lostDef = true;
+                else if (p.matches("tie\\d+-decl")) tieDecl = Integer.parseInt(p.substring(3, p.indexOf('-')));
+                else if (p.matches("tie\\d+-def")) tieDef = Integer.parseInt(p.substring(3, p.indexOf('-')));
+                else throw new IllegalArgumentException("a scope is lost-decl, lost-def, tie<k>-decl, tie<k>-def; not " + p);
+            }
+            return new Scope(lostDecl, lostDef, tieDecl, tieDef);
+        }
+
+        boolean covers(boolean declares) {
+            return declares ? lostDeclarer || tieDeclarer >= 0 : lostDefender || tieDefender >= 0;
+        }
+    }
+
+    /** Per kind of hand-over: decisions looked at, handed over, card changed. Kinds: lost/tie x declarer/defender. */
+    private static final String[] KINDS = {"lost, declarer", "lost, defender", "tied, declarer", "tied, defender"};
+    private static final AtomicLong[] SEEN = {new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong()};
+    private static final AtomicLong[] KIND_HANDED = {new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong()};
+    private static final AtomicLong[] KIND_CHANGED = {new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong()};
 
     private static final AtomicLong DECLARER_DECISIONS = new AtomicLong();
     private static final AtomicLong HANDED = new AtomicLong();
@@ -55,11 +101,19 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (DECLARER_DECISIONS.get() > 0) {
-                System.out.printf("Flat handover: %,d of %,d declarer decisions handed to the rescuer (%.1f%%)%n",
-                        HANDED.get(), DECLARER_DECISIONS.get(),
-                        100.0 * HANDED.get() / DECLARER_DECISIONS.get());
+                long decisions = SEEN[0].get() + SEEN[1].get();
+                System.out.printf("Flat handover: %,d of %,d %s decisions handed to the rescuer (%.1f%%)%n",
+                        HANDED.get(), decisions, SEEN[1].get() == 0 ? "declarer" : "declarer and defender",
+                        100.0 * HANDED.get() / Math.max(1, decisions));
                 System.out.printf("  the rescuer's card differed from the search's in %,d of them (%.1f%%)%n",
                         CHANGED.get(), 100.0 * CHANGED.get() / Math.max(1, HANDED.get()));
+                for (int k = 0; k < KINDS.length; k++) {
+                    if (KIND_HANDED[k].get() == 0) continue;
+                    System.out.printf("  %s: %,d of %,d decisions of that role handed over (%.1f%%), card changed in %,d (%.1f%%)%n",
+                            KINDS[k], KIND_HANDED[k].get(), SEEN[k].get(),
+                            100.0 * KIND_HANDED[k].get() / Math.max(1, SEEN[k].get()), KIND_CHANGED[k].get(),
+                            100.0 * KIND_CHANGED[k].get() / Math.max(1, KIND_HANDED[k].get()));
+                }
                 RolloutRescue.report();
             }
         }));
@@ -76,6 +130,7 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
     private BeliefEncoding.Evidence lastEvidence;
     private List<WorldSampler.World> lastWorlds;
     private final BiConsumer<Map<Card, Integer>, Boolean> listener;
+    private final Scope scope;
 
     public FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer) {
         this(id, search, rescuer, null, null);
@@ -86,12 +141,26 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
         this(id, search, null, rollout, null);
     }
 
-    /** @param listener told, at every declarer decision, the search's votes and whether it was handed over */
+    /** The play-outs, for the decisions {@code scope} names. */
+    public FlatHandoverProvider(String id, SkatAiProvider search, RolloutRescue rollout, Scope scope) {
+        this(id, search, null, rollout, null, scope);
+    }
+
     FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer, RolloutRescue rollout,
                          BiConsumer<Map<Card, Integer>, Boolean> listener) {
+        this(id, search, rescuer, rollout, listener, Scope.LOST_DECLARER);
+    }
+
+    /** @param listener told, at every declarer decision, the search's votes and whether it was handed over as lost */
+    FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer, RolloutRescue rollout,
+                         BiConsumer<Map<Card, Integer>, Boolean> listener, Scope scope) {
         if ((rescuer == null) == (rollout == null)) {
             throw new IllegalArgumentException(id + ": a rescuer or the play-outs, exactly one");
         }
+        if (rescuer != null && !scope.equals(Scope.LOST_DECLARER)) {
+            throw new IllegalArgumentException(id + ": another player rescues the declarer's lost positions only");
+        }
+        this.scope = scope;
         if (!(search instanceof SearchAiProvider searching)) {
             throw new IllegalArgumentException(id + ": the first player must be a search player, not "
                     + search.descriptor().id);
@@ -135,6 +204,34 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
     @Override public void observeFixedContract(Board board, ContractSource.FixedContract fixed) {
         if (search instanceof TableObserver o) o.observeFixedContract(board, fixed);
         if (rescuer instanceof TableObserver o) o.observeFixedContract(board, fixed);
+    }
+
+    /** The legal cards whose vote is within {@code margin} worlds of the best, in the legal cards' order. */
+    static List<Card> tied(Map<Card, Integer> votes, Set<Card> legal, int margin) {
+        if (votes == null || votes.isEmpty()) return List.of();
+        int top = 0;
+        for (Card card : legal) top = Math.max(top, votes.getOrDefault(card, 0));
+        List<Card> out = new java.util.ArrayList<>();
+        for (Card card : legal) if (votes.getOrDefault(card, 0) >= top - margin) out.add(card);
+        return out;
+    }
+
+    /**
+     * The cards the play-outs choose among, or none when the search keeps the
+     * decision: every legal card in a lost position the scope hands over for
+     * this role; otherwise, when the scope breaks this role's ties, the cards
+     * within its margin of the best vote, if there are two or more. A lost
+     * position is never a tie.
+     */
+    static List<Card> candidates(Map<Card, Integer> votes, Set<Card> legal, boolean declares, Scope scope) {
+        if (legal.size() < 2 || !scope.covers(declares)) return List.of();
+        if (flat(votes, legal)) {
+            return (declares ? scope.lostDeclarer() : scope.lostDefender()) ? new java.util.ArrayList<>(legal) : List.of();
+        }
+        int margin = declares ? scope.tieDeclarer() : scope.tieDefender();
+        if (margin < 0) return List.of();
+        List<Card> tied = tied(votes, legal, margin);
+        return tied.size() < 2 ? List.of() : tied;
     }
 
     /** True when the search drew worlds and no legal card held the game in any of them. */
@@ -188,18 +285,33 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                 lastEvidence = null;
                 lastWorlds = null;
                 Card searched = main.chooseCard(context);
-                boolean declares = context.game.hasDeclarer() && context.mySeat == context.game.declarer;
-                if (!declares || context.legalCards.size() < 2) return searched;
+                if (!context.game.hasDeclarer() || context.legalCards.size() < 2) return searched;
+                boolean declares = context.mySeat == context.game.declarer;
+                if (!scope.covers(declares)) return searched;
                 Map<Card, Integer> votes = lastVotes;
-                boolean hand = flat(votes, context.legalCards);
-                DECLARER_DECISIONS.incrementAndGet();
-                if (listener != null) listener.accept(votes, hand);
-                if (!hand) return searched;
+                boolean lost = flat(votes, context.legalCards);
+                boolean handLost = lost && (declares ? scope.lostDeclarer() : scope.lostDefender());
+                List<Card> candidates = candidates(votes, context.legalCards, declares, scope);
+                if (declares) DECLARER_DECISIONS.incrementAndGet();
+                int role = declares ? 0 : 1;
+                SEEN[role].incrementAndGet();
+                SEEN[role + 2].incrementAndGet();
+                if (listener != null && declares) listener.accept(votes, handLost);
+                if (candidates.isEmpty()) return searched;
+                int kind = handLost ? role : role + 2;
                 HANDED.incrementAndGet();
-                Card rescued = rollout != null
-                        ? (lastWorlds == null ? searched : rollout.choose(context, lastEvidence, lastWorlds, searched))
-                        : other.chooseCard(context);
-                if (!searched.equals(rescued)) CHANGED.incrementAndGet();
+                KIND_HANDED[kind].incrementAndGet();
+                Card rescued;
+                if (rollout != null) {
+                    rescued = lastWorlds == null ? searched : rollout.choose(context, lastEvidence, lastWorlds,
+                            candidates, searched);
+                } else {
+                    rescued = other.chooseCard(context);
+                }
+                if (!searched.equals(rescued)) {
+                    CHANGED.incrementAndGet();
+                    KIND_CHANGED[kind].incrementAndGet();
+                }
                 return context.legalCards.contains(rescued) ? rescued : searched;
             }
             @Override public void cardPlayed(SkatAi.CardPlayedEvent event) {

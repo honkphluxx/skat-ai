@@ -87,14 +87,47 @@ final class Playout {
 
     /** Plays {@code first} for the deciding seat, then the rest by {@code policy}. */
     Result run(Card first, Policy policy) {
+        start(first);
+        for (SkatAi.DecisionContext at = next(); at != null; at = next()) play(policy.choose(at));
+        return result();
+    }
+
+    /**
+     * The same play-out a step at a time, so many of them can wait on one
+     * batched forward pass: {@link #start} the deciding seat's card, then
+     * {@link #next} (which plays forced cards itself and returns the next
+     * position with a choice, or null at the end) and {@link #play} the answer,
+     * until {@link #result}.
+     */
+    void start(Card first) {
         play(toPlay, first);
+    }
+
+    /** The next position with more than one legal card, or null when the game is over. */
+    SkatAi.DecisionContext next() {
         while (history.size() < 10) {
             List<Card> hand = hands.get(toPlay.ordinal());
             Set<Card> legal = SkatRules.legalCards(game.contract, hand, trick);
-            Card card = legal.size() == 1 ? legal.iterator().next() : policy.choose(context(toPlay, legal));
-            if (!legal.contains(card)) throw new IllegalStateException("the policy played an illegal card: " + card);
-            play(toPlay, card);
+            if (legal.size() > 1) {
+                pending = legal;
+                return context(toPlay, legal);
+            }
+            play(toPlay, legal.iterator().next());
         }
+        return null;
+    }
+
+    /** Answers the position {@link #next} returned. */
+    void play(Card card) {
+        if (pending == null) throw new IllegalStateException("no position is waiting for a card");
+        if (!pending.contains(card)) throw new IllegalStateException("the policy played an illegal card: " + card);
+        pending = null;
+        play(toPlay, card);
+    }
+
+    /** The settled game; only once {@link #next} has returned null. */
+    Result result() {
+        if (history.size() < 10) throw new IllegalStateException("the play-out is not over");
         int declarer = points.get(game.declarer) + skatPoints;
         List<Card> declarerPlayed = new ArrayList<>(10);
         for (SkatAi.CompletedTrick done : history) {
@@ -104,6 +137,9 @@ final class Playout {
                 declarer, tricksWon);
         return new Result(declarer >= 61, declarer, score.gameValue());
     }
+
+    /** The legal cards of the position {@link #next} handed out, until it is answered. */
+    private Set<Card> pending;
 
     private SkatAi.DecisionContext context(SkatAi.Seat seat, Set<Card> legal) {
         return new SkatAi.DecisionContext(game, seat, new LinkedHashSet<>(hands.get(seat.ordinal())), legal,

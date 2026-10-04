@@ -844,6 +844,50 @@ two changes carried it -- the drawn defences or the ranking by game value
 in the handed decisions. The teacher with drawn-defence play-outs in its
 lost declarer positions is the strongest player of our own measured here.
 
+*Batched play-outs and the scopes, built (2026-10-04; `po:<search>/<rollout>/<scope>`).*
+The play-outs of a decision now run in lockstep: every candidate card in
+every world and draw is a `Playout` stepped one position at a time, and
+each step's waiting positions go through the student as one batch
+(`PolicyNet.logits(float[][])`, a blocked kernel that answers bit for bit
+what the single pass answers -- `PolicyNetBatchTest`, batches of 1 to 130
+on an odd width). Same random streams, same answers: the batched tally
+equals the one-at-a-time tally exactly (`RolloutRescueTest`, on real engine
+decisions, both roles, with and without draws), and on the real student
+in the container it is 3.1 times faster (3.0 s against 0.96 s a decision,
+one thread, 8 worlds by 4 draws). The play-outs now serve both roles and
+more than the lost positions: `po:` takes a scope, `lost-decl`,
+`lost-def`, `tie<k>-decl`, `tie<k>-def` in any comma list. A tie is a
+position that is not lost and has two or more cards within k votes of
+the search's best; the play-outs then choose among those cards only, so
+the search's vote stays the safety net (`FlatHandoverProvider.candidates`,
+its own test and mutants). Everything is counted from the deciding seat's
+side: a defender's win is the declarer's loss, its value the declarer's
+turned round. `po:X/rollout-32x4/lost-decl` is `flat:X/rollout-32x4` and
+must replay its games exactly. Container smoke, four boards, all four
+scopes against the teacher: the teacher's votes tie at the top in about
+three quarters of the declarer's decisions (the ladder's won positions:
+every winning card at full votes) and a third of the defenders', the card
+changed in 40-45% of those; about 1.3 s a handed decision on the
+container's two cores.
+
+*The play-out study, prepared (2026-10-04; `./tools/playout-study.sh`).*
+Every pairing against belief-64-shipped, fixed contracts, seeds 11-16 and
+21 (the seeds of teacher-flat-drawn), seeds outermost so any stop leaves
+every question with the same seeds: `decl-lost` (seed 11 only: the
+batched replay must give +0.200 and 1,242 of 4,221 handed, 622 changed,
+exactly, in less time); `decl-lost-v` (64 worlds, top card, value-ranked:
+which of the two changes made +0.93 out of +0.22); `def-lost`;
+`decl-tie` (tie0: among the cards that hold the game, the one with the
+best score -- Schneider, more points); `def-tie`; and `all` (the four
+scopes together; they do not overlap, so it should come near the sum of
+its parts). Each scope is also pooled paired with teacher-flat-drawn on
+the same seeds. A rough estimate from seed 11's counters: 30-40 minutes a
+seed for each single scope, 80-90 for `all`, about four hours a seed at 16
+threads, a day for all seven; the first seed's `took` lines will say. A
+difference of 0.3 game points between scopes is below what seven seeds
+resolve (a pairing's interval is about +-0.5); the study is for the
+large effects and for whether the parts add.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

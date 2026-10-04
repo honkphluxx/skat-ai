@@ -27,6 +27,42 @@ public final class PlayerRegistry {
     private static final String ROLES_PREFIX = "roles:";
     /** {@code flat:<search>/<rescuer>}: see {@link dev.skatklar.training.players.FlatHandoverProvider}. */
     private static final String FLAT_PREFIX = "flat:";
+    /** {@code po:<search>/<rollout>/<scope>}: the play-outs over a scope of decisions. */
+    private static final String PLAYOUT_PREFIX = "po:";
+
+    /**
+     * {@code rollout}, {@code rollout-<worlds>}, {@code rollout-<worlds>v} (top card, ranked by game value)
+     * or {@code rollout-<worlds>x<draws>} (opponents drawn, ranked by game value).
+     */
+    private record RolloutShape(int worlds, int draws, boolean valueRanked) {
+        static RolloutShape parse(String text) {
+            try {
+                if (text.equals("rollout")) return new RolloutShape(32, 0, false);
+                if (!text.startsWith("rollout-")) throw new NumberFormatException();
+                String shape = text.substring("rollout-".length());
+                boolean value = shape.endsWith("v");
+                if (value) shape = shape.substring(0, shape.length() - 1);
+                int x = shape.indexOf('x');
+                int worlds = Integer.parseInt(x < 0 ? shape : shape.substring(0, x));
+                int draws = x < 0 ? 0 : Integer.parseInt(shape.substring(x + 1));
+                if ((x >= 0 && draws < 1) || worlds < 1 || (value && x >= 0)) throw new NumberFormatException();
+                return new RolloutShape(worlds, draws, value || draws > 0);
+            } catch (NumberFormatException bad) {
+                throw new IllegalArgumentException("play-outs are rollout, rollout-<worlds>, rollout-<worlds>v or "
+                        + "rollout-<worlds>x<draws>, not " + text);
+            }
+        }
+
+        dev.skatklar.training.players.RolloutRescue rescue(long seed) {
+            return new dev.skatklar.training.players.RolloutRescue(
+                    dev.skatklar.training.players.RolloutRescue.student(), worlds, draws, valueRanked, seed);
+        }
+
+        @Override public String toString() {
+            return worlds + " worlds" + (draws > 0 ? ", " + draws + " drawn defences each" : "")
+                    + (valueRanked ? ", by game value" : "");
+        }
+    }
 
     private final Map<String, Contestant> byId = new LinkedHashMap<>();
 
@@ -199,6 +235,27 @@ public final class PlayerRegistry {
         if (spec == null || spec.isBlank()) {
             throw new IllegalArgumentException("Empty player specification");
         }
+        if (spec.startsWith(PLAYOUT_PREFIX)) {
+            String[] parts = spec.substring(PLAYOUT_PREFIX.length()).split("/", -1);
+            if (parts.length != 3 || parts[0].isBlank() || parts[1].isBlank() || parts[2].isBlank()) {
+                throw new IllegalArgumentException("play-outs are po:<search>/<rollout>/<scope>, not " + spec);
+            }
+            Contestant search = resolve(parts[0]);
+            RolloutShape shape = RolloutShape.parse(parts[1]);
+            dev.skatklar.training.players.FlatHandoverProvider.Scope scope =
+                    dev.skatklar.training.players.FlatHandoverProvider.Scope.parse(parts[2]);
+            return new Contestant() {
+                @Override public String id() { return spec; }
+                @Override public String displayName() {
+                    return search.displayName() + ", " + parts[2] + " played out (" + shape + ")";
+                }
+                @Override public SkatAiProvider newProvider(long seed) {
+                    return new dev.skatklar.training.players.FlatHandoverProvider(spec, search.newProvider(seed),
+                            shape.rescue(seed ^ 0x5011L), scope);
+                }
+                @Override public String toString() { return spec; }
+            };
+        }
         if (spec.startsWith(FLAT_PREFIX)) {
             String[] parts = spec.substring(FLAT_PREFIX.length()).split("/", -1);
             if (parts.length != 2 || parts[0].isBlank() || parts[1].isBlank()) {
@@ -206,29 +263,15 @@ public final class PlayerRegistry {
             }
             Contestant search = resolve(parts[0]);
             if (parts[1].equals("rollout") || parts[1].startsWith("rollout-")) {
-                int worlds;
-                int draws;
-                try {
-                    String shape = parts[1].equals("rollout") ? "32" : parts[1].substring("rollout-".length());
-                    int x = shape.indexOf('x');
-                    worlds = Integer.parseInt(x < 0 ? shape : shape.substring(0, x));
-                    draws = x < 0 ? 0 : Integer.parseInt(shape.substring(x + 1));
-                    if (x >= 0 && draws < 1) throw new NumberFormatException();
-                } catch (NumberFormatException bad) {
-                    throw new IllegalArgumentException(
-                            "play-outs are rollout, rollout-<worlds> or rollout-<worlds>x<draws>, not " + parts[1]);
-                }
+                RolloutShape shape = RolloutShape.parse(parts[1]);
                 return new Contestant() {
                     @Override public String id() { return spec; }
                     @Override public String displayName() {
-                        return search.displayName() + ", lost declarer positions played out (" + worlds + " worlds"
-                                + (draws > 0 ? ", " + draws + " drawn defences each" : "") + ")";
+                        return search.displayName() + ", lost declarer positions played out (" + shape + ")";
                     }
                     @Override public SkatAiProvider newProvider(long seed) {
                         return new dev.skatklar.training.players.FlatHandoverProvider(spec, search.newProvider(seed),
-                                new dev.skatklar.training.players.RolloutRescue(
-                                        dev.skatklar.training.players.RolloutRescue.student(), worlds, draws,
-                                        seed ^ 0x5011L));
+                                shape.rescue(seed ^ 0x5011L));
                     }
                     @Override public String toString() { return spec; }
                 };

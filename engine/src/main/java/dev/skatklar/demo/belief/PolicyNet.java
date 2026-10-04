@@ -86,6 +86,11 @@ public final class PolicyNet {
         return net.logits(features);
     }
 
+    /** All 64 outputs for each of many inputs, each exactly as {@link #logits(float[])} gives it. */
+    public float[][] logits(float[][] batch) {
+        return net.logits(batch);
+    }
+
     /**
      * The legal card the policy scores highest; null when nothing is legal.
      * Ties go to the earlier card in {@code legal}, which is never reached in

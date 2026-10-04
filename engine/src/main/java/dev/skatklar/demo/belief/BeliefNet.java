@@ -168,6 +168,102 @@ public final class BeliefNet {
         return linear(head, activations);
     }
 
+    /**
+     * {@link #logits(float[])} for many inputs at once, each answer exactly the
+     * single call's: the same sums in the same order, in double. What changes
+     * is the loop order -- each weight row is read once for the whole batch
+     * instead of once per input, which is what the single call spends its time
+     * on (a 3 MB weight matrix streamed through the cache per input). For the
+     * play-outs, which ask hundreds of positions at a time.
+     */
+    public float[][] logits(float[][] batch) {
+        for (float[] features : batch) {
+            if (features.length != inputs) {
+                throw new IllegalArgumentException(
+                        "this model wants " + inputs + " inputs, not " + features.length);
+            }
+        }
+        float[][] activations = batch;
+        for (Layer layer : trunk) {
+            activations = linear(layer, activations);
+            for (float[] row : activations) gelu(normalise(row, layer));
+        }
+        return linear(head, activations);
+    }
+
+    /** Inputs per block of the batched pass: a block's transposed inputs stay in the L2 cache. */
+    private static final int BLOCK = 64;
+
+    /**
+     * The batched {@code y = W·x + b}. Each output is the single pass's sum, term
+     * for term in the same order and in double, so the answers are bitwise the
+     * same. What differs is the loop: for a block of inputs, the inputs are
+     * transposed into columns and every weight is multiplied into the whole
+     * block at once, four output rows at a time -- an update the JIT can run
+     * in vector registers, where the single pass's dot product is a chain of
+     * dependent additions that it cannot.
+     */
+    private static float[][] linear(Layer layer, float[][] inputs) {
+        int n = inputs.length;
+        float[][] out = new float[n][layer.out];
+        int in = layer.in;
+        for (int from = 0; from < n; from += BLOCK) {
+            int size = Math.min(BLOCK, n - from);
+            double[][] columns = new double[in][size];
+            for (int b = 0; b < size; b++) {
+                float[] input = inputs[from + b];
+                for (int column = 0; column < in; column++) columns[column][b] = input[column];
+            }
+            double[] a0 = new double[size];
+            double[] a1 = new double[size];
+            double[] a2 = new double[size];
+            double[] a3 = new double[size];
+            int row = 0;
+            for (; row + 3 < layer.out; row += 4) {
+                java.util.Arrays.fill(a0, layer.bias[row]);
+                java.util.Arrays.fill(a1, layer.bias[row + 1]);
+                java.util.Arrays.fill(a2, layer.bias[row + 2]);
+                java.util.Arrays.fill(a3, layer.bias[row + 3]);
+                int at0 = row * in;
+                int at1 = at0 + in;
+                int at2 = at1 + in;
+                int at3 = at2 + in;
+                for (int column = 0; column < in; column++) {
+                    double w0 = layer.weight[at0 + column];
+                    double w1 = layer.weight[at1 + column];
+                    double w2 = layer.weight[at2 + column];
+                    double w3 = layer.weight[at3 + column];
+                    double[] x = columns[column];
+                    for (int b = 0; b < size; b++) {
+                        double v = x[b];
+                        a0[b] += w0 * v;
+                        a1[b] += w1 * v;
+                        a2[b] += w2 * v;
+                        a3[b] += w3 * v;
+                    }
+                }
+                for (int b = 0; b < size; b++) {
+                    float[] o = out[from + b];
+                    o[row] = (float) a0[b];
+                    o[row + 1] = (float) a1[b];
+                    o[row + 2] = (float) a2[b];
+                    o[row + 3] = (float) a3[b];
+                }
+            }
+            for (; row < layer.out; row++) {
+                java.util.Arrays.fill(a0, layer.bias[row]);
+                int at = row * in;
+                for (int column = 0; column < in; column++) {
+                    double w = layer.weight[at + column];
+                    double[] x = columns[column];
+                    for (int b = 0; b < size; b++) a0[b] += w * x[b];
+                }
+                for (int b = 0; b < size; b++) out[from + b][row] = (float) a0[b];
+            }
+        }
+        return out;
+    }
+
     /** {@code y = W·x + b}, with W stored row-major as (out, in), the way torch does. */
     private static float[] linear(Layer layer, float[] input) {
         float[] out = new float[layer.out];
