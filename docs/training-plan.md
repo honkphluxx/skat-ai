@@ -812,6 +812,23 @@ chance of a defender's mistake, not the certainty of none), and the
 win-or-lose count scored as the game's value, so a lost Schneider and a
 lost game are not the same zero.
 
+*Drawn defences, built (2026-10-04; `flat:<search>/rollout-<worlds>x<draws>`).*
+The defenders' cards in a play-out are drawn from the student's own policy
+(softmax over the legal cards) rather than taken from its top, `draws`
+times per world, on one random stream per world and draw shared by every
+candidate card; the declarer's later cards stay the student's top card.
+The cards are ranked by the game's value as the engine settles it
+(`SkatRules.score` on the play-out: a loss doubled, Schneider counted, an
+overbid charged), summed, then wins, then points. `PlayoutTest` now also
+holds every play-out to the engine's settled game value, the draw to the
+softmax (1:3:6 within a point or so over 20,000 draws, an illegal card
+never), the value ranking's order, and drawn play-outs to be reproducible
+and to differ from the top-card ones; four new mutants fail. Container
+smoke against a 4-world search: twice the play-outs' time, the card
+changed in two thirds of the handed decisions, the best card winning a
+quarter of its play-outs (one in nine with the top card). The pairing:
+`./tools/defence-split.sh --only=teacher-flat-drawn`.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

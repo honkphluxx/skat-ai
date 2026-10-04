@@ -33,20 +33,48 @@ import java.util.Map;
  * <p>What the student stands for here is the defence at the table, and it is a
  * weaker defender than the players it will meet in the arena. Cards that only
  * win against its mistakes win less there; the pairing is the judge.
+ *
+ * <p>The sampled form ({@code rollout-<worlds>x<draws>}): the first form,
+ * measured, decided on too few events -- the student's top card defends well
+ * enough that the best card won about one play-out in nine, its rivals a win
+ * or two behind, and half the decisions had no win at all. So the defenders'
+ * cards are drawn from the student's own policy (softmax over the legal cards)
+ * instead of taken from its top, {@code draws} times per world: a defender's
+ * mistake becomes a chance, not a never. The declarer's own later cards stay
+ * the student's top card -- our declarer will play them with the search,
+ * which errs less. The draws of one world are the same random stream for
+ * every candidate card, so the cards are compared on the same luck. And the
+ * cards are ranked by the game's value as the score sheet would write it
+ * ({@link Playout.Result#gameValue}: a win at its value, a loss doubled, a
+ * Schneider lost worth more than a game lost), summed over the play-outs, then
+ * by wins, then by points.
  */
 public final class RolloutRescue {
 
     private final PolicyNet student;
     private final int worlds;
+    /** Play-outs per world with the defenders' cards drawn from the policy; 0 for the top card. */
+    private final int draws;
+    private final long seed;
 
     public RolloutRescue(PolicyNet student, int worlds) {
-        if (worlds < 1) throw new IllegalArgumentException("at least one world");
-        this.student = student;
-        this.worlds = worlds;
+        this(student, worlds, 0, 0L);
     }
 
-    /** What the play-outs found for each legal card: worlds won, declarer points summed. */
-    record Tally(Card card, int wins, int points) {}
+    /** @param draws play-outs per world with the defenders' cards drawn from the student's policy */
+    public RolloutRescue(PolicyNet student, int worlds, int draws, long seed) {
+        if (worlds < 1) throw new IllegalArgumentException("at least one world");
+        if (draws < 0) throw new IllegalArgumentException("draws cannot be negative");
+        this.student = student;
+        this.worlds = worlds;
+        this.draws = draws;
+        this.seed = seed;
+    }
+
+    /** What the play-outs found for each legal card: play-outs won, declarer points and game value summed. */
+    record Tally(Card card, int wins, int points, long value) {
+        Tally(Card card, int wins, int points) { this(card, wins, points, 0L); }
+    }
 
     /**
      * @param seen    the search's own evidence for this decision (its bids and discard)
@@ -63,11 +91,11 @@ public final class RolloutRescue {
             least = Math.min(least, t.wins);
         }
         DECIDED.incrementAndGet();
-        WORLDS.addAndGet(Math.min(worlds, sampled.size()));
+        WORLDS.addAndGet((long) Math.min(worlds, sampled.size()) * Math.max(1, draws));
         if (most > 0) ANY_WIN.incrementAndGet();
         if (most > least) SPREAD.incrementAndGet();
         BEST_WINS.addAndGet(most);
-        return pick(tallies, fallback);
+        return draws > 0 ? pickByValue(tallies, fallback) : pick(tallies, fallback);
     }
 
     private static final java.util.concurrent.atomic.AtomicLong DECIDED = new java.util.concurrent.atomic.AtomicLong();
@@ -99,26 +127,80 @@ public final class RolloutRescue {
         return best.card;
     }
 
+    /** The most game value over the play-outs, then wins, then points; the search's own card on a full tie. */
+    static Card pickByValue(List<Tally> tallies, Card fallback) {
+        Tally best = null;
+        for (Tally t : tallies) {
+            if (best == null || t.value > best.value
+                    || (t.value == best.value && (t.wins > best.wins
+                    || (t.wins == best.wins && t.points > best.points)))) {
+                best = t;
+            }
+        }
+        if (best == null) return fallback;
+        for (Tally t : tallies) {
+            if (t.card.equals(fallback) && t.value == best.value && t.wins == best.wins && t.points == best.points) {
+                return fallback;
+            }
+        }
+        return best.card;
+    }
+
+    /** The decisions this instance has made, mixed into each decision's random streams. */
+    private long decisions;
+
     List<Tally> tally(SkatAi.DecisionContext context, BeliefEncoding.Evidence seen,
                       List<WorldSampler.World> sampled) {
         Map<SkatAi.Seat, Integer> bids = seen == null ? Map.of() : seen.highestBids();
         List<Card> buried = seen == null ? null : seen.knownDiscard();
-        Playout.Policy policy = at -> student.choose(SelfPlayExportMain.perfectMemory(at, bids, buried),
-                new ArrayList<>(at.legalCards));
+        SkatAi.Seat declarer = context.game.declarer;
+        long decision = decisions++;
         List<Tally> out = new ArrayList<>();
         int n = Math.min(worlds, sampled.size());
+        int perWorld = Math.max(1, draws);
         for (Card card : context.legalCards) {
             int wins = 0;
             int points = 0;
+            long value = 0;
             for (int w = 0; w < n; w++) {
                 WorldSampler.World world = sampled.get(w);
-                Playout.Result r = new Playout(context, world.hands(), world.skat()).run(card, policy);
-                if (r.declarerWon()) wins++;
-                points += r.declarerPoints();
+                for (int d = 0; d < perWorld; d++) {
+                    // The same stream for every candidate card: compared on the same luck.
+                    java.util.SplittableRandom random = new java.util.SplittableRandom(
+                            dev.skatklar.training.arena.Seeds.mix(seed, decision, (long) w * 1009 + d));
+                    Playout.Policy policy = at -> {
+                        BeliefEncoding.Evidence evidence = SelfPlayExportMain.perfectMemory(at, bids, buried);
+                        List<Card> legal = new ArrayList<>(at.legalCards);
+                        if (draws == 0 || at.mySeat == declarer) return student.choose(evidence, legal);
+                        return draw(student.logits(PolicyNet.features(evidence)), legal, random);
+                    };
+                    Playout.Result r = new Playout(context, world.hands(), world.skat()).run(card, policy);
+                    if (r.declarerWon()) wins++;
+                    points += r.declarerPoints();
+                    value += r.gameValue();
+                }
             }
-            out.add(new Tally(card, wins, points));
+            out.add(new Tally(card, wins, points, value));
         }
         return out;
+    }
+
+    /** A legal card drawn from the softmax of the policy's scores over the legal cards. */
+    static Card draw(float[] logits, List<Card> legal, java.util.SplittableRandom random) {
+        double top = Double.NEGATIVE_INFINITY;
+        for (Card card : legal) top = Math.max(top, logits[BeliefEncoding.index(card)]);
+        double[] weight = new double[legal.size()];
+        double total = 0;
+        for (int i = 0; i < legal.size(); i++) {
+            weight[i] = Math.exp(logits[BeliefEncoding.index(legal.get(i))] - top);
+            total += weight[i];
+        }
+        double u = random.nextDouble() * total;
+        for (int i = 0; i < legal.size(); i++) {
+            u -= weight[i];
+            if (u < 0) return legal.get(i);
+        }
+        return legal.get(legal.size() - 1);
     }
 
     private static PolicyNet cached;

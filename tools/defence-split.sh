@@ -32,6 +32,10 @@
 #       card played out in the search's 64 worlds with the student at all
 #       seats, the card that wins most often kept (RolloutRescue). No
 #       SkatZero anywhere. Run it alone with --only=teacher-flat-rollout
+#   flat:belief-64-shipped/rollout-32x4 vs belief-64-shipped  seeds 11-16
+#       the play-outs with the defenders' cards drawn from the student's
+#       policy, four play-outs per world, cards ranked by the game's value.
+#       --only=teacher-flat-drawn
 #
 # Each report is skipped when it exists, so the same command resumes; touch
 # STOP to stop after the current one. Needs the SkatZero checkout
@@ -58,11 +62,11 @@ for arg in "$@"; do
         --boards=*)   BOARDS="${arg#*=}" ;;
         --only=*)     ONLY="${arg#*=}" ;;
         --seeds=*)    SEEDS_ARG="${arg#*=}" ;;
-        -h|--help)    sed -n '2,44p' "$DS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,48p' "$DS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
-if [ "$ONLY" != "teacher-flat-rollout" ]; then
+if [ "$ONLY" != "teacher-flat-rollout" ] && [ "$ONLY" != "teacher-flat-drawn" ]; then
     SZ=${SKATKLAR_SKATZERO_DIR:-third_party/skatzero}
     [ -f "$SZ/models/onnx/D_0.onnx" ] || { echo "no SkatZero checkout with ONNX models at $SZ" >&2; exit 2; }
     PY=${SKATKLAR_PYTHON:-python}
@@ -89,6 +93,7 @@ PAIRS=(
     "roles:skatzero/belief-64-shipped|belief-64-shipped|$SHORT|sz-decl-teacher-def"
     "flat:belief-64-shipped/skatzero|belief-64-shipped|$LONG|teacher-flat-sz"
     "flat:belief-64-shipped/rollout-64|belief-64-shipped|$LONG|teacher-flat-rollout"
+    "flat:belief-64-shipped/rollout-32x4|belief-64-shipped|$LONG|teacher-flat-drawn"
 )
 for pair in "${PAIRS[@]}"; do
     IFS='|' read -r P AGAINST SEEDS TAG <<< "$pair"

@@ -110,6 +110,8 @@ public class PlayoutTest {
                         outcome.declarerPoints(), result.declarerPoints());
                 assertEquals("board " + i + " from decision " + k + ": the result",
                         outcome.declarerPoints() >= 61, result.declarerWon());
+                assertEquals("board " + i + " from decision " + k + ": the game value as settled",
+                        outcome.gameValue(), result.gameValue());
                 List<byte[]> engine = new ArrayList<>();
                 for (Step later : steps.subList(k + 1, steps.size())) {
                     if (later.context().legalCards.size() > 1) engine.add(encode(later.context()));
@@ -136,6 +138,76 @@ public class PlayoutTest {
                 new RolloutRescue.Tally(c, 2, 600)), a));
         assertEquals("the search's card on a full tie", a, RolloutRescue.pick(List.of(
                 new RolloutRescue.Tally(c, 0, 400), new RolloutRescue.Tally(a, 0, 400)), a));
+    }
+
+    @Test public void theValueRankingTakesTheMostValueThenWinsThenPoints() {
+        Card a = new Card(Card.Suit.CLUBS, Card.Rank.ACE);
+        Card b = new Card(Card.Suit.CLUBS, Card.Rank.TEN);
+        Card c = new Card(Card.Suit.HEARTS, Card.Rank.SEVEN);
+        assertEquals("value first", c, RolloutRescue.pickByValue(List.of(new RolloutRescue.Tally(a, 9, 900, -40),
+                new RolloutRescue.Tally(c, 1, 100, -10)), a));
+        assertEquals("then wins", b, RolloutRescue.pickByValue(List.of(new RolloutRescue.Tally(a, 2, 900, -10),
+                new RolloutRescue.Tally(b, 3, 100, -10)), a));
+        assertEquals("then points", c, RolloutRescue.pickByValue(List.of(new RolloutRescue.Tally(a, 2, 500, -10),
+                new RolloutRescue.Tally(c, 2, 600, -10)), a));
+        assertEquals("the search's card on a full tie", a, RolloutRescue.pickByValue(List.of(
+                new RolloutRescue.Tally(c, 0, 400, -50), new RolloutRescue.Tally(a, 0, 400, -50)), a));
+    }
+
+    @Test public void aDrawnCardFollowsThePolicy() {
+        Card low = new Card(Card.Suit.CLUBS, Card.Rank.SEVEN);
+        Card mid = new Card(Card.Suit.CLUBS, Card.Rank.EIGHT);
+        Card high = new Card(Card.Suit.CLUBS, Card.Rank.ACE);
+        float[] logits = new float[64];
+        logits[BeliefEncoding.index(low)] = 0f;
+        logits[BeliefEncoding.index(mid)] = (float) Math.log(3);
+        logits[BeliefEncoding.index(high)] = (float) Math.log(6);
+        logits[BeliefEncoding.index(new Card(Card.Suit.SPADES, Card.Rank.ACE))] = 50f; // not legal: never drawn
+        java.util.SplittableRandom random = new java.util.SplittableRandom(3);
+        Map<Card, Integer> counts = new java.util.HashMap<>();
+        int n = 20_000;
+        for (int i = 0; i < n; i++) counts.merge(RolloutRescue.draw(logits, List.of(low, mid, high), random), 1, Integer::sum);
+        assertEquals(3, counts.size());
+        assertEquals("1 in 10", 0.1, counts.get(low) / (double) n, 0.01);
+        assertEquals("3 in 10", 0.3, counts.get(mid) / (double) n, 0.015);
+        assertEquals("6 in 10", 0.6, counts.get(high) / (double) n, 0.015);
+    }
+
+    @Test public void theDrawnPlayoutsAreReproducibleAndDiffer() throws Exception {
+        float[] bias = new float[PolicyNet.OUTPUTS];
+        for (int at = 0; at < 32; at++) bias[at] = (at % 5) * 0.3f;
+        PolicyNet net = SelfPlayExportTest.constantNet(bias);
+        long seed = 17;
+        ContractSource contracts = new AuctionContractSource(PlayerRegistry.withDefaults().resolve("greedy"), seed);
+        for (int i = 0; i < 20; i++) {
+            Board board = Board.of(seed, i);
+            ContractSource.FixedContract fixed = contracts.contractFor(board);
+            if (fixed == null || fixed.contract().isNull()) continue;
+            List<Step> steps = new ArrayList<>();
+            Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
+            for (SkatAi.Seat seat : SkatAi.Seat.values()) seating.put(seat, new Recorder(steps));
+            GameRunner.playFixed(board, seating, fixed, i);
+            // The declarer's second card: a position with the rest of the game to play.
+            Step at = steps.stream().filter(s -> s.context().mySeat == fixed.declarer()
+                    && s.context().history.completedTricks.size() == 1 && s.context().legalCards.size() > 1)
+                    .findFirst().orElse(null);
+            if (at == null) continue;
+            List<dev.skatklar.demo.search.WorldSampler.World> world = List.of(
+                    new dev.skatklar.demo.search.WorldSampler.World(at.hands(), at.skat()));
+            List<RolloutRescue.Tally> one = new RolloutRescue(net, 1, 16, 99).tally(at.context(), null, world);
+            List<RolloutRescue.Tally> again = new RolloutRescue(net, 1, 16, 99).tally(at.context(), null, world);
+            assertEquals("the same seed, the same play-outs", one, again);
+            List<RolloutRescue.Tally> top = new RolloutRescue(net, 1).tally(at.context(), null, world);
+            boolean spread = false;
+            for (RolloutRescue.Tally t : one) {
+                // 16 drawn play-outs of one world: at least one card's points must differ from 16 x its top-card play-out.
+                RolloutRescue.Tally same = top.stream().filter(x -> x.card().equals(t.card())).findFirst().orElseThrow();
+                if (t.points() != 16 * same.points()) spread = true;
+            }
+            assertTrue("drawn defences play differently from the top card", spread);
+            return;
+        }
+        throw new AssertionError("no position found");
     }
 
     @Test public void theRescuedPlayerPlaysWholeGames() throws Exception {

@@ -207,20 +207,28 @@ public final class PlayerRegistry {
             Contestant search = resolve(parts[0]);
             if (parts[1].equals("rollout") || parts[1].startsWith("rollout-")) {
                 int worlds;
+                int draws;
                 try {
-                    worlds = parts[1].equals("rollout") ? 32 : Integer.parseInt(parts[1].substring("rollout-".length()));
+                    String shape = parts[1].equals("rollout") ? "32" : parts[1].substring("rollout-".length());
+                    int x = shape.indexOf('x');
+                    worlds = Integer.parseInt(x < 0 ? shape : shape.substring(0, x));
+                    draws = x < 0 ? 0 : Integer.parseInt(shape.substring(x + 1));
+                    if (x >= 0 && draws < 1) throw new NumberFormatException();
                 } catch (NumberFormatException bad) {
-                    throw new IllegalArgumentException("play-outs are rollout or rollout-<worlds>, not " + parts[1]);
+                    throw new IllegalArgumentException(
+                            "play-outs are rollout, rollout-<worlds> or rollout-<worlds>x<draws>, not " + parts[1]);
                 }
                 return new Contestant() {
                     @Override public String id() { return spec; }
                     @Override public String displayName() {
-                        return search.displayName() + ", lost declarer positions played out (" + worlds + " worlds)";
+                        return search.displayName() + ", lost declarer positions played out (" + worlds + " worlds"
+                                + (draws > 0 ? ", " + draws + " drawn defences each" : "") + ")";
                     }
                     @Override public SkatAiProvider newProvider(long seed) {
                         return new dev.skatklar.training.players.FlatHandoverProvider(spec, search.newProvider(seed),
                                 new dev.skatklar.training.players.RolloutRescue(
-                                        dev.skatklar.training.players.RolloutRescue.student(), worlds));
+                                        dev.skatklar.training.players.RolloutRescue.student(), worlds, draws,
+                                        seed ^ 0x5011L));
                     }
                     @Override public String toString() { return spec; }
                 };

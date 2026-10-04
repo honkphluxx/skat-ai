@@ -35,8 +35,13 @@ final class Playout {
         Card choose(SkatAi.DecisionContext context);
     }
 
-    /** What came of one play-out. */
-    record Result(boolean declarerWon, int declarerPoints) {}
+    /**
+     * What came of one play-out: 61 card points reached, the declarer's card
+     * points (the skat included), and the game as the engine would settle it
+     * ({@link SkatRules#score}: the signed value, a loss doubled, an overbid
+     * charged) -- the score sheet's number for the declarer.
+     */
+    record Result(boolean declarerWon, int declarerPoints, int gameValue) {}
 
     private final SkatAi.GameDefinition game;
     private final List<List<Card>> hands = new ArrayList<>(3);
@@ -47,6 +52,7 @@ final class Playout {
     private final Map<SkatAi.Seat, Integer> tricksWon = new EnumMap<>(SkatAi.Seat.class);
     private final Map<SkatAi.Seat, Integer> points = new EnumMap<>(SkatAi.Seat.class);
     private final int skatPoints;
+    private final List<Card> skat;
     private SkatAi.Seat leader;
     private SkatAi.Seat toPlay;
 
@@ -74,6 +80,7 @@ final class Playout {
             points.put(seat, at.derived.cardPoints.getOrDefault(seat, 0));
         }
         this.skatPoints = SkatRules.cardPoints(skat);
+        this.skat = List.copyOf(skat);
         this.leader = at.currentTrick.leader;
         this.toPlay = at.mySeat;
     }
@@ -89,7 +96,13 @@ final class Playout {
             play(toPlay, card);
         }
         int declarer = points.get(game.declarer) + skatPoints;
-        return new Result(declarer >= 61, declarer);
+        List<Card> declarerPlayed = new ArrayList<>(10);
+        for (SkatAi.CompletedTrick done : history) {
+            for (SkatAi.PlayedCard p : done.plays) if (p.seat == game.declarer) declarerPlayed.add(p.card);
+        }
+        SkatRules.GameScore score = SkatRules.score(game, SkatRules.matadorCards(game, declarerPlayed, skat),
+                declarer, tricksWon);
+        return new Result(declarer >= 61, declarer, score.gameValue());
     }
 
     private SkatAi.DecisionContext context(SkatAi.Seat seat, Set<Card> legal) {
