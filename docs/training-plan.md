@@ -790,6 +790,28 @@ nothing against the teacher's defence: the student is the wrong model of
 the defenders at the table, the risk named when the play-outs were built.
 One seed of each rescuer with the counters (seed 21) says which.
 
+*The counters (seed 21, 2026-10-04).* Same seed, same handed positions
+(1,384 and 1,392 of about 4,130 declarer decisions):
+
+                          result   card differs from the search's
+    play-outs (rollout-64)  +1.00 [-0.54, +2.54]   46%
+    SkatZero                +0.98 [-0.61, +2.57]   58%
+
+Play-outs: in 52% of the handed decisions some card won some play-out; the
+cards' counts differed in 51%; the best card won 10.9% of its worlds. So
+the student is not the soft defender feared -- against it a lost position
+stays lost nine times in ten -- and the play-outs' signal is thin: a best
+card at about seven wins of 64, its rivals a win or two behind, and half
+the decisions with no win at all, where the points decide. Pooled over
+seven seeds: play-outs +0.22 [-0.23, +0.67], SkatZero +1.00 [+0.28,
++1.72]. On seed 21 the two are level, so the play-outs are not wrong in
+kind; they decide on too few events. Next: thicken the signal rather than
+change the defender -- several play-outs per world with the defenders'
+cards drawn from the student's policy instead of its top card (the
+chance of a defender's mistake, not the certainty of none), and the
+win-or-lose count scored as the game's value, so a lost Schneider and a
+lost game are not the same zero.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
