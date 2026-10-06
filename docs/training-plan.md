@@ -888,6 +888,48 @@ difference of 0.3 game points between scopes is below what seven seeds
 resolve (a pairing's interval is about +-0.5); the study is for the
 large effects and for whether the parts add.
 
+*The play-out study: the answer (2026-10-06, seeds 11-16 and 21).*
+Against belief-64-shipped, game points a game, pooled over seeds:
+
+| scope | pooled | per seed 11 12 13 14 15 16 21 |
+|---|---|---|
+| lost-decl (teacher-flat-drawn) | +0.93 [+0.47, +1.40] | +0.20 +1.22 +0.32 +0.94 +0.98 +1.47 +1.41 |
+| lost-decl, rollout-64v | +0.28 [-0.30, +0.87] (6 seeds) | -0.31 -- +0.12 -0.05 +0.44 +0.21 +1.29 |
+| lost-def | **+0.07 [+0.02, +0.12]** | +0.18 +0.02 +0.05 +0.09 +0.02 +0.08 +0.06 |
+| tie0-decl | **+0.42 [+0.05, +0.78]** | -0.13 +0.40 +1.11 +0.29 +0.10 +0.51 +0.64 |
+| tie0-def | -0.43 [-1.74, +0.87] | +1.62 -1.21 -1.37 -1.09 +0.94 -2.26 +0.33 |
+| all four | +0.86 [-0.20, +1.92] | +2.56 +0.61 +0.20 -0.57 +1.61 -0.19 +1.78 |
+
+The replay: `po:.../lost-decl` on seed 11 gave +0.200 and 1,242 of 4,221
+handed, 622 changed -- the old run exactly. Seed 11 ran under load (every
+pairing two to three times slower that night); from seed 12 on: the plain
+teacher about 22 minutes a seed at 16 threads, one scope 27-31, all four
+36-38 with 37 million positions through the student (the old drawn run
+moved 9 million in about 48 extra minutes; now about 14 extra minutes for
+four times as many). The rollout-64v seed 12 was killed mid-run and its
+partial report taken for done -- the script now writes `.partial` first.
+
+What it says. (1) The drawing carries the +0.93, not the value ranking:
+64 worlds, top card, value-ranked is +0.28, paired with the drawn run
+-0.60 [-1.07, -0.14]; the first win-ranked top-card run was +0.22. Not
+cleanly separated from the play-outs' count (64 against 128), but more
+worlds did not buy it. (2) The defenders' lost positions are real but
+small (+0.07, 10% of defender decisions handed, the card changed in a
+quarter). (3) The declarer's ties pay: about half its decisions tie at
+the top -- the ladder's won positions, every winning card at full votes,
+the best card winning 92% of its play-outs -- and choosing among those by
+the play-outs' game value is +0.42 (Schneider and points). (4) The
+defenders' ties do not: half the defender decisions handed, the card
+changed in half of those, seeds from -2.3 to +1.6 and the mean below
+zero; the teacher's own declaring gains up to four points a game against
+it. Why is open. (5) The parts add, seed by seed: the four single-scope
+results summed per seed track `all` closely (mean 0.99 against 0.86), and
+`all` minus lost-decl is -0.08 [-1.35, +1.20] -- the defenders' ties eat
+what the other two add. Summed the same way, lost-decl + lost-def +
+tie0-decl predicts about +1.4 [+0.8, +2.0] (a prediction, not a
+measurement). Next: measure that combination (`best`, `--only=best`), and
+find out what the defenders' ties are before trying them again.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

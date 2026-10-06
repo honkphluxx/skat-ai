@@ -38,11 +38,16 @@
 #   def-tie      po:.../rollout-32x4/tie0-def                       the defenders' tied cards
 #   all          po:.../rollout-32x4/lost-decl,lost-def,tie0-decl,tie0-def
 #                                                                   everything at once: do the parts add?
+#   best         po:.../rollout-32x4/lost-decl,lost-def,tie0-decl   all but the defenders' ties, the one
+#                                                                   scope that lost (added 2026-10-06)
 #
 # The scopes do not overlap (a lost position is never a tie), so `all` should
 # come near the sum of its parts, lost-decl's being teacher-flat-drawn
 # (+0.93 [+0.47, +1.40]). Each scope's line in the summary is also given
-# paired with teacher-flat-drawn on the same seeds where both exist.
+# paired with teacher-flat-drawn on the same seeds where both exist, for
+# decl-lost-v, all and best (for a single other scope that difference would
+# only rank two scopes, not say what one adds). A report is written as
+# .partial and renamed when the run ends, so a killed run is redone.
 #
 # Seeds run outermost, so after any number of seeds every question has that
 # many. Each report is skipped when it exists, so the same command resumes;
@@ -69,7 +74,7 @@ for arg in "$@"; do
         --boards=*)   BOARDS="${arg#*=}" ;;
         --only=*)     ONLY="${arg#*=}" ;;
         --seeds=*)    SEEDS="${arg#*=}" ;;
-        -h|--help)    sed -n '2,53p' "$PS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,58p' "$PS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -93,6 +98,7 @@ PAIRS=(
     "decl-tie|po:$T/rollout-32x4/tie0-decl|"
     "def-tie|po:$T/rollout-32x4/tie0-def|"
     "all|po:$T/rollout-32x4/lost-decl,lost-def,tie0-decl,tie0-def|"
+    "best|po:$T/rollout-32x4/lost-decl,lost-def,tie0-decl|"
 )
 
 for SEED in $SEEDS; do
@@ -108,7 +114,8 @@ for SEED in $SEEDS; do
             start=$(date +%s)
             ./gradlew --console=plain -q --no-daemon :arena:arena \
                 --args="--a=$P --b=$T --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
-                > "$report" 2>&1 || { mv "$report" "$LOG/$tag.failed.txt"; say "      FAILED -- see $LOG/$tag.failed.txt"; continue; }
+                > "$report.partial" 2>&1 || { mv "$report.partial" "$LOG/$tag.failed.txt"; say "      FAILED -- see $LOG/$tag.failed.txt"; continue; }
+            mv "$report.partial" "$report"
             say "      took $(( ($(date +%s) - start) / 60 )) min"
         fi
         grep -E "^  from declaring|^  from defending| = .*game pts/game|^  (lost|tied), (declarer|defender):|play-outs" "$report" \
@@ -144,6 +151,10 @@ for pair in "${PAIRS[@]}"; do
         [ -n "$b" ] && paired="$paired $(awk -v x="$d" -v y="$b" 'BEGIN { printf "%.4f", x - y }')"
     done
     echo "$diffs" | pool "$TAG ($P)" | tee -a "$SUMMARY"
-    [ "$TAG" != "decl-lost" ] && echo "$paired" | pool "    $TAG minus teacher-flat-drawn, same seeds" | tee -a "$SUMMARY"
+    # Only where the comparison means something: the same positions decided
+    # another way (decl-lost-v), or what the other scopes add on top (all, best).
+    case "$TAG" in
+        decl-lost-v|all|best) echo "$paired" | pool "    $TAG minus teacher-flat-drawn, same seeds" | tee -a "$SUMMARY" ;;
+    esac
 done
 say "play-out study finished $(date '+%Y-%m-%d %H:%M:%S')"
