@@ -930,6 +930,28 @@ tie0-decl predicts about +1.4 [+0.8, +2.0] (a prediction, not a
 measurement). Next: measure that combination (`best`, `--only=best`), and
 find out what the defenders' ties are before trying them again.
 
+*What the defenders' ties are (2026-10-06, container count).*
+The teacher already breaks its ties: a fifteen-point cushion asked
+whenever the top vote is shared (+1.10 when it shipped), then the rule
+tiebreak. The tie scopes overrule both. A container count, 12 boards of
+seed 16, `po:belief-64-shipped/rollout-32x4/tie0-decl,tie0-def` against
+the teacher (the counters now print this split): of 97 handed declarer
+ties, 60 at the full vote (the game held in every world) and 37 short of
+it; the cushion had settled 19 and the play-outs overruled it in 15. Of
+205 defender ties only 62 at the full vote and 143 short of it -- the
+defenders' ties are mostly open positions, not won ones, and 74 of the 95
+changed defender cards fell there; the cushion had settled 71 and the
+play-outs overruled it in 27. Small, one seed; it says where to look, not
+what it costs. Two new scope suffixes, for either role: `tie<k>c-...`
+hands over only what the cushion leaves tied (the play-outs never
+overrule it), `tie<k>w-...` only ties at the full vote; `tie<k>cw-...`
+both (`FlatHandoverProvider.candidates`, tested, five mutants fail).
+Three new pairings in `./tools/playout-study.sh`, each paired with the
+scope it narrows: `def-tie-w` (tie0w-def: are the open ties the loss?),
+`def-tie-c` (tie0c-def: is overruling the cushion the loss?), and
+`decl-tie-c` (tie0c-decl: does decl-tie gain more where it leaves the
+cushion alone?).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

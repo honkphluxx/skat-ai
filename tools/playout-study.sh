@@ -20,6 +20,10 @@
 #     tie<k>-decl the declarer's other positions where two or more cards are
 #                 within k votes of the best: the play-outs choose among those
 #     tie<k>-def  the same for a defender
+#     tie<k>c-... only what the search's own fifteen-point cushion leaves
+#                 tied: the play-outs never overrule the cushion
+#     tie<k>w-... only ties at the full vote (the game held for this side
+#                 in every world searched); tie<k>cw-... both
 #   rollout-32x4: 32 of the search's worlds, four play-outs each, the
 #     opponents' cards drawn from the student's policy, cards ranked by the
 #     game's value (the score sheet's number, schneider and a loss's doubling
@@ -40,13 +44,21 @@
 #                                                                   everything at once: do the parts add?
 #   best         po:.../rollout-32x4/lost-decl,lost-def,tie0-decl   all but the defenders' ties, the one
 #                                                                   scope that lost (added 2026-10-06)
+#   def-tie-w    po:.../rollout-32x4/tie0w-def                      the defenders' ties where the defence
+#                                                                   is through in every world only
+#   def-tie-c    po:.../rollout-32x4/tie0c-def                      the defenders' ties the cushion leaves
+#   decl-tie-c   po:.../rollout-32x4/tie0c-decl                     the declarer's ties the cushion leaves:
+#                                                                   does overruling it cost decl-tie?
+#                                                                   (these three added 2026-10-06, after
+#                                                                   a container count: most defender
+#                                                                   ties are short of the full vote)
 #
 # The scopes do not overlap (a lost position is never a tie), so `all` should
 # come near the sum of its parts, lost-decl's being teacher-flat-drawn
 # (+0.93 [+0.47, +1.40]). Each scope's line in the summary is also given
-# paired with teacher-flat-drawn on the same seeds where both exist, for
-# decl-lost-v, all and best (for a single other scope that difference would
-# only rank two scopes, not say what one adds). A report is written as
+# paired on the same seeds with what it changes: teacher-flat-drawn for
+# decl-lost-v, all and best; def-tie for def-tie-w and def-tie-c; decl-tie
+# for decl-tie-c. A report is written as
 # .partial and renamed when the run ends, so a killed run is redone.
 #
 # Seeds run outermost, so after any number of seeds every question has that
@@ -74,7 +86,7 @@ for arg in "$@"; do
         --boards=*)   BOARDS="${arg#*=}" ;;
         --only=*)     ONLY="${arg#*=}" ;;
         --seeds=*)    SEEDS="${arg#*=}" ;;
-        -h|--help)    sed -n '2,58p' "$PS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,70p' "$PS_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -90,20 +102,24 @@ say "============================================================"
 say "play-out study started $(date '+%Y-%m-%d %H:%M:%S')   boards=$BOARDS threads=$THREADS seeds=$SEEDS"
 
 T=belief-64-shipped
-# tag|player|only on these seeds (empty: every seed)
+# tag|player|only on these seeds (empty: every seed)|paired with (a report prefix, empty: none)
+FD=arena-logs/defence-split/teacher-flat-drawn
 PAIRS=(
-    "decl-lost|po:$T/rollout-32x4/lost-decl|11"
-    "decl-lost-v|po:$T/rollout-64v/lost-decl|"
-    "def-lost|po:$T/rollout-32x4/lost-def|"
-    "decl-tie|po:$T/rollout-32x4/tie0-decl|"
-    "def-tie|po:$T/rollout-32x4/tie0-def|"
-    "all|po:$T/rollout-32x4/lost-decl,lost-def,tie0-decl,tie0-def|"
-    "best|po:$T/rollout-32x4/lost-decl,lost-def,tie0-decl|"
+    "decl-lost|po:$T/rollout-32x4/lost-decl|11|"
+    "decl-lost-v|po:$T/rollout-64v/lost-decl||$FD"
+    "def-lost|po:$T/rollout-32x4/lost-def||"
+    "decl-tie|po:$T/rollout-32x4/tie0-decl||"
+    "def-tie|po:$T/rollout-32x4/tie0-def||"
+    "all|po:$T/rollout-32x4/lost-decl,lost-def,tie0-decl,tie0-def||$FD"
+    "best|po:$T/rollout-32x4/lost-decl,lost-def,tie0-decl||$FD"
+    "def-tie-w|po:$T/rollout-32x4/tie0w-def||$LOG/def-tie"
+    "def-tie-c|po:$T/rollout-32x4/tie0c-def||$LOG/def-tie"
+    "decl-tie-c|po:$T/rollout-32x4/tie0c-decl||$LOG/decl-tie"
 )
 
 for SEED in $SEEDS; do
     for pair in "${PAIRS[@]}"; do
-        IFS='|' read -r TAG P RESTRICT <<< "$pair"
+        IFS='|' read -r TAG P RESTRICT BASE <<< "$pair"
         [ -n "$ONLY" ] && [ "$ONLY" != "$TAG" ] && continue
         [ -n "$RESTRICT" ] && [ -z "$ONLY" ] && ! $QUICK && [[ " $RESTRICT " != *" $SEED "* ]] && continue
         [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
@@ -118,13 +134,12 @@ for SEED in $SEEDS; do
             mv "$report.partial" "$report"
             say "      took $(( ($(date +%s) - start) / 60 )) min"
         fi
-        grep -E "^  from declaring|^  from defending| = .*game pts/game|^  (lost|tied), (declarer|defender):|play-outs" "$report" \
+        grep -E "^  from declaring|^  from defending| = .*game pts/game|^  (lost|tied), (declarer|defender):|^  ties, |play-outs" "$report" \
             | sed 's/^/      /' | tee -a "$SUMMARY"
     done
 done
 
-# The pooled lines: every seed on disk, and paired with teacher-flat-drawn
-# (the declarer's lost positions alone, from tools/defence-split.sh).
+# The pooled lines: every seed on disk, and paired with what each changes.
 diff_of() { [ -f "$1" ] && grep -E " = .*game pts/game" "$1" | sed -E 's/.* = ([-+0-9.]+) game pts.*/\1/'; }
 pool() {
     awk -v label="$1" '{
@@ -137,9 +152,8 @@ pool() {
     }'
 }
 say "--- pooled, each against $T ---"
-BASE=arena-logs/defence-split/teacher-flat-drawn
 for pair in "${PAIRS[@]}"; do
-    IFS='|' read -r TAG P RESTRICT <<< "$pair"
+    IFS='|' read -r TAG P RESTRICT BASE <<< "$pair"
     [ -n "$ONLY" ] && [ "$ONLY" != "$TAG" ] && continue
     diffs=""; paired=""
     for report in "$LOG/$TAG"-s*-b"$BOARDS".txt; do
@@ -147,14 +161,10 @@ for pair in "${PAIRS[@]}"; do
         d=$(diff_of "$report"); [ -n "$d" ] || continue
         diffs="$diffs $d"
         seed=$(basename "$report" | sed -E "s/^$TAG-s([0-9]+)-b.*/\1/")
-        b=$(diff_of "$BASE-s$seed-b$BOARDS.txt")
+        b=""; [ -n "$BASE" ] && b=$(diff_of "$BASE-s$seed-b$BOARDS.txt")
         [ -n "$b" ] && paired="$paired $(awk -v x="$d" -v y="$b" 'BEGIN { printf "%.4f", x - y }')"
     done
     echo "$diffs" | pool "$TAG ($P)" | tee -a "$SUMMARY"
-    # Only where the comparison means something: the same positions decided
-    # another way (decl-lost-v), or what the other scopes add on top (all, best).
-    case "$TAG" in
-        decl-lost-v|all|best) echo "$paired" | pool "    $TAG minus teacher-flat-drawn, same seeds" | tee -a "$SUMMARY" ;;
-    esac
+    [ -n "$BASE" ] && echo "$paired" | pool "    $TAG minus $(basename "$BASE"), same seeds" | tee -a "$SUMMARY"
 done
 say "play-out study finished $(date '+%Y-%m-%d %H:%M:%S')"

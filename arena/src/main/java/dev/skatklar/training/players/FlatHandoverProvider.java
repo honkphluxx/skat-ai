@@ -62,25 +62,57 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
      * and as defender, and ties within {@code k} worlds of the top vote as
      * declarer and as defender ({@code -1}: never).
      */
-    public record Scope(boolean lostDeclarer, boolean lostDefender, int tieDeclarer, int tieDefender) {
+    public record Scope(boolean lostDeclarer, boolean lostDefender, int tieDeclarer, int tieDefender,
+                        boolean cushionFirstDeclarer, boolean cushionFirstDefender,
+                        boolean heldOnlyDeclarer, boolean heldOnlyDefender) {
         /** The first form: the declarer's lost positions and nothing else. */
         public static final Scope LOST_DECLARER = new Scope(true, false, -1, -1);
 
-        /** {@code lost-decl,lost-def,tie0-decl,tie2-def}: any of them, comma-separated. */
+        /** Ties on the vote alone, as first built. */
+        public Scope(boolean lostDeclarer, boolean lostDefender, int tieDeclarer, int tieDefender) {
+            this(lostDeclarer, lostDefender, tieDeclarer, tieDefender, false, false, false, false);
+        }
+
+        /**
+         * {@code lost-decl,lost-def,tie0-decl,tie2-def}: any of them,
+         * comma-separated. {@code tie<k>c-decl} / {@code tie<k>c-def}: the
+         * tie that is left after the search's own cushion -- among the cards
+         * tied on the vote, only those that also share the best cushion.
+         * {@code tie<k>w-...} (or {@code tie<k>cw-...}): only the ties at the
+         * full vote, where the best card holds the game for this side in
+         * every world searched.
+         */
         public static Scope parse(String text) {
             boolean lostDecl = false;
             boolean lostDef = false;
             int tieDecl = -1;
             int tieDef = -1;
+            boolean cushionDecl = false;
+            boolean cushionDef = false;
+            boolean heldDecl = false;
+            boolean heldDef = false;
             for (String part : text.split(",")) {
                 String p = part.trim();
+                java.util.regex.Matcher tie = java.util.regex.Pattern.compile("tie(\\d+)(c?)(w?)-(decl|def)").matcher(p);
                 if (p.equals("lost-decl")) lostDecl = true;
                 else if (p.equals("lost-def")) lostDef = true;
-                else if (p.matches("tie\\d+-decl")) tieDecl = Integer.parseInt(p.substring(3, p.indexOf('-')));
-                else if (p.matches("tie\\d+-def")) tieDef = Integer.parseInt(p.substring(3, p.indexOf('-')));
-                else throw new IllegalArgumentException("a scope is lost-decl, lost-def, tie<k>-decl, tie<k>-def; not " + p);
+                else if (tie.matches()) {
+                    int k = Integer.parseInt(tie.group(1));
+                    boolean afterCushion = !tie.group(2).isEmpty();
+                    boolean heldOnly = !tie.group(3).isEmpty();
+                    if (tie.group(4).equals("decl")) {
+                        tieDecl = k;
+                        cushionDecl = afterCushion;
+                        heldDecl = heldOnly;
+                    } else {
+                        tieDef = k;
+                        cushionDef = afterCushion;
+                        heldDef = heldOnly;
+                    }
+                }
+                else throw new IllegalArgumentException("a scope is lost-decl, lost-def, tie<k>[c][w]-decl, tie<k>[c][w]-def; not " + p);
             }
-            return new Scope(lostDecl, lostDef, tieDecl, tieDef);
+            return new Scope(lostDecl, lostDef, tieDecl, tieDef, cushionDecl, cushionDef, heldDecl, heldDef);
         }
 
         boolean covers(boolean declares) {
@@ -90,6 +122,19 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
 
     /** Per kind of hand-over: decisions looked at, handed over, card changed. Kinds: lost/tie x declarer/defender. */
     private static final String[] KINDS = {"lost, declarer", "lost, defender", "tied, declarer", "tied, defender"};
+    /**
+     * What the handed ties were, per role (declarer, defender): the top vote
+     * at every world searched (the game held for this side everywhere) or
+     * short of it; and whether the search's own cushion had already settled
+     * the tie (one card with the best cushion among the candidates), and
+     * whether the play-outs overruled that card.
+     */
+    private static final AtomicLong[] TIE_FULL = {new AtomicLong(), new AtomicLong()};
+    private static final AtomicLong[] TIE_FULL_CHANGED = {new AtomicLong(), new AtomicLong()};
+    private static final AtomicLong[] TIE_PART = {new AtomicLong(), new AtomicLong()};
+    private static final AtomicLong[] TIE_PART_CHANGED = {new AtomicLong(), new AtomicLong()};
+    private static final AtomicLong[] TIE_CUSHION_SETTLED = {new AtomicLong(), new AtomicLong()};
+    private static final AtomicLong[] TIE_CUSHION_OVERRULED = {new AtomicLong(), new AtomicLong()};
     private static final AtomicLong[] SEEN = {new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong()};
     private static final AtomicLong[] KIND_HANDED = {new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong()};
     private static final AtomicLong[] KIND_CHANGED = {new AtomicLong(), new AtomicLong(), new AtomicLong(), new AtomicLong()};
@@ -114,6 +159,15 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                             100.0 * KIND_HANDED[k].get() / Math.max(1, SEEN[k].get()), KIND_CHANGED[k].get(),
                             100.0 * KIND_CHANGED[k].get() / Math.max(1, KIND_HANDED[k].get()));
                 }
+                String[] roles = {"declarer", "defender"};
+                for (int r = 0; r < 2; r++) {
+                    long ties = TIE_FULL[r].get() + TIE_PART[r].get();
+                    if (ties == 0) continue;
+                    System.out.printf("  ties, %s: at the full vote %,d (changed %,d), short of it %,d (changed %,d); "
+                                    + "the search's cushion had settled %,d of them, the play-outs overruled it in %,d%n",
+                            roles[r], TIE_FULL[r].get(), TIE_FULL_CHANGED[r].get(), TIE_PART[r].get(),
+                            TIE_PART_CHANGED[r].get(), TIE_CUSHION_SETTLED[r].get(), TIE_CUSHION_OVERRULED[r].get());
+                }
                 RolloutRescue.report();
             }
         }));
@@ -126,6 +180,9 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
     private final RolloutRescue rollout;
     /** The search's last vote, delivered on the deciding thread inside its chooseCard. */
     private Map<Card, Integer> lastVotes;
+    /** The search's cushion with the last vote (empty when it was not asked) and the worlds searched. */
+    private Map<Card, Integer> lastCushion;
+    private int lastSearched;
     /** The search's last evidence and worlds, delivered the same way. */
     private BeliefEncoding.Evidence lastEvidence;
     private List<WorldSampler.World> lastWorlds;
@@ -177,6 +234,8 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                                         Map<Card, Integer> cushion, int worldsSearched,
                                         boolean cushionAsked, Card chosen) {
                 lastVotes = votes;
+                lastCushion = cushionAsked ? cushion : Map.of();
+                lastSearched = worldsSearched;
             }
         });
         this.rescuer = rescuer;
@@ -224,6 +283,17 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
      * position is never a tie.
      */
     static List<Card> candidates(Map<Card, Integer> votes, Set<Card> legal, boolean declares, Scope scope) {
+        return candidates(votes, Map.of(), 0, legal, declares, scope);
+    }
+
+    /**
+     * As above; where the scope asks for the tie left after the cushion, the
+     * tied cards are narrowed to those sharing the best {@code cushion} among
+     * them (no cushion asked: no narrowing); where it asks for held ties
+     * only, a tie whose best vote is short of {@code searched} is not handed.
+     */
+    static List<Card> candidates(Map<Card, Integer> votes, Map<Card, Integer> cushion, int searched,
+                                 Set<Card> legal, boolean declares, Scope scope) {
         if (legal.size() < 2 || !scope.covers(declares)) return List.of();
         if (flat(votes, legal)) {
             return (declares ? scope.lostDeclarer() : scope.lostDefender()) ? new java.util.ArrayList<>(legal) : List.of();
@@ -231,7 +301,25 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
         int margin = declares ? scope.tieDeclarer() : scope.tieDefender();
         if (margin < 0) return List.of();
         List<Card> tied = tied(votes, legal, margin);
+        if (declares ? scope.heldOnlyDeclarer() : scope.heldOnlyDefender()) {
+            int top = 0;
+            for (Card card : tied) top = Math.max(top, votes.getOrDefault(card, 0));
+            if (searched <= 0 || top < searched) return List.of();
+        }
+        if ((declares ? scope.cushionFirstDeclarer() : scope.cushionFirstDefender()) && cushion != null
+                && !cushion.isEmpty()) {
+            tied = bestCushion(tied, cushion);
+        }
         return tied.size() < 2 ? List.of() : tied;
+    }
+
+    /** The cards among {@code cards} with the best cushion, in their order. */
+    static List<Card> bestCushion(List<Card> cards, Map<Card, Integer> cushion) {
+        int top = Integer.MIN_VALUE;
+        for (Card card : cards) top = Math.max(top, cushion.getOrDefault(card, 0));
+        List<Card> out = new java.util.ArrayList<>();
+        for (Card card : cards) if (cushion.getOrDefault(card, 0) == top) out.add(card);
+        return out;
     }
 
     /** True when the search drew worlds and no legal card held the game in any of them. */
@@ -282,6 +370,8 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
             }
             @Override public Card chooseCard(SkatAi.DecisionContext context) {
                 lastVotes = null;
+                lastCushion = Map.of();
+                lastSearched = 0;
                 lastEvidence = null;
                 lastWorlds = null;
                 Card searched = main.chooseCard(context);
@@ -291,7 +381,8 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                 Map<Card, Integer> votes = lastVotes;
                 boolean lost = flat(votes, context.legalCards);
                 boolean handLost = lost && (declares ? scope.lostDeclarer() : scope.lostDefender());
-                List<Card> candidates = candidates(votes, context.legalCards, declares, scope);
+                Map<Card, Integer> cushion = lastCushion;
+                List<Card> candidates = candidates(votes, cushion, lastSearched, context.legalCards, declares, scope);
                 if (declares) DECLARER_DECISIONS.incrementAndGet();
                 int role = declares ? 0 : 1;
                 SEEN[role].incrementAndGet();
@@ -308,9 +399,23 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                 } else {
                     rescued = other.chooseCard(context);
                 }
-                if (!searched.equals(rescued)) {
+                boolean changed = !searched.equals(rescued);
+                if (changed) {
                     CHANGED.incrementAndGet();
                     KIND_CHANGED[kind].incrementAndGet();
+                }
+                if (!handLost) {
+                    int top = 0;
+                    for (Card card : candidates) top = Math.max(top, votes.getOrDefault(card, 0));
+                    boolean full = lastSearched > 0 && top >= lastSearched;
+                    (full ? TIE_FULL : TIE_PART)[role].incrementAndGet();
+                    if (changed) (full ? TIE_FULL_CHANGED : TIE_PART_CHANGED)[role].incrementAndGet();
+                    if (!cushion.isEmpty() && bestCushion(candidates, cushion).size() == 1) {
+                        TIE_CUSHION_SETTLED[role].incrementAndGet();
+                        if (!bestCushion(candidates, cushion).get(0).equals(rescued)) {
+                            TIE_CUSHION_OVERRULED[role].incrementAndGet();
+                        }
+                    }
                 }
                 return context.legalCards.contains(rescued) ? rescued : searched;
             }

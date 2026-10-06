@@ -191,6 +191,60 @@ public class RolloutRescueTest {
         assertEquals("no votes, no hand-over", List.of(), FlatHandoverProvider.candidates(null, legal, true, all));
     }
 
+    @Test public void theTieAfterTheCushionIsWhatTheCushionLeaves() {
+        Card a = new Card(Card.Suit.CLUBS, Card.Rank.ACE);
+        Card b = new Card(Card.Suit.CLUBS, Card.Rank.TEN);
+        Card c = new Card(Card.Suit.HEARTS, Card.Rank.SEVEN);
+        Card d = new Card(Card.Suit.HEARTS, Card.Rank.EIGHT);
+        Set<Card> legal = new java.util.LinkedHashSet<>(List.of(a, b, c, d));
+        Map<Card, Integer> tie = Map.of(a, 5, b, 5, c, 5, d, 1);
+        FlatHandoverProvider.Scope after = FlatHandoverProvider.Scope.parse("tie0c-decl,tie0c-def");
+        FlatHandoverProvider.Scope before = FlatHandoverProvider.Scope.parse("tie0-decl,tie0-def");
+        assertEquals(new FlatHandoverProvider.Scope(false, false, 0, 0, true, true, false, false), after);
+        assertEquals(new FlatHandoverProvider.Scope(false, false, 0, -1), FlatHandoverProvider.Scope.parse("tie0-decl"));
+        assertEquals(new FlatHandoverProvider.Scope(false, false, -1, 2, false, true, false, true),
+                FlatHandoverProvider.Scope.parse("tie2cw-def"));
+        Map<Card, Integer> settled = Map.of(a, 3, b, 4, c, 2, d, 9);
+        Map<Card, Integer> open = Map.of(a, 4, b, 2, c, 4, d, 9);
+        assertEquals("the cushion settled it", List.of(), FlatHandoverProvider.candidates(tie, settled, 9, legal, false, after));
+        assertEquals("what the cushion leaves tied", List.of(a, c), FlatHandoverProvider.candidates(tie, open, 9, legal, true, after));
+        assertEquals("a vote-only tie ignores the cushion", List.of(a, b, c), FlatHandoverProvider.candidates(tie, settled, 9, legal, false, before));
+        assertEquals("no cushion asked, no narrowing", List.of(a, b, c), FlatHandoverProvider.candidates(tie, Map.of(), 9, legal, true, after));
+        assertEquals("only the role named is narrowed", List.of(a, b, c),
+                FlatHandoverProvider.candidates(tie, settled, 9, legal, false, FlatHandoverProvider.Scope.parse("tie0c-decl,tie0-def")));
+        // Held ties only: the best vote at every world searched.
+        Map<Card, Integer> held = Map.of(a, 9, b, 9, c, 9, d, 1);
+        FlatHandoverProvider.Scope heldOnly = FlatHandoverProvider.Scope.parse("tie0w-decl,tie0w-def");
+        assertEquals(List.of(a, b, c), FlatHandoverProvider.candidates(held, Map.of(), 9, legal, false, heldOnly));
+        assertEquals("a tie short of the full vote is not handed", List.of(),
+                FlatHandoverProvider.candidates(tie, Map.of(), 9, legal, true, heldOnly));
+        assertEquals("nothing searched, nothing held", List.of(),
+                FlatHandoverProvider.candidates(held, Map.of(), 0, legal, true, heldOnly));
+        Map<Card, Integer> nearly = Map.of(a, 8, b, 8, c, 8, d, 1);
+        assertEquals("one world short is short", List.of(),
+                FlatHandoverProvider.candidates(nearly, Map.of(), 9, legal, false, heldOnly));
+        assertEquals("the declarer's w alone", List.of(),
+                FlatHandoverProvider.candidates(nearly, Map.of(), 9, legal, true, FlatHandoverProvider.Scope.parse("tie0w-decl,tie0-def")));
+        assertEquals("the declarer's w leaves the defender's ties", List.of(a, b, c),
+                FlatHandoverProvider.candidates(nearly, Map.of(), 9, legal, false, FlatHandoverProvider.Scope.parse("tie0w-decl,tie0-def")));
+        assertEquals("the defender's w leaves the declarer's ties", List.of(a, b, c),
+                FlatHandoverProvider.candidates(nearly, Map.of(), 9, legal, true, FlatHandoverProvider.Scope.parse("tie0-decl,tie0w-def")));
+        assertEquals("a tie short of the full vote is handed without w", List.of(a, b, c),
+                FlatHandoverProvider.candidates(tie, Map.of(), 9, legal, true, before));
+        try {
+            FlatHandoverProvider.Scope.parse("tiewc-def");
+            fail("tiewc-def should not parse");
+        } catch (IllegalArgumentException expected) {
+            // as it should
+        }
+        try {
+            FlatHandoverProvider.Scope.parse("tiec-def");
+            fail("tiec-def should not parse");
+        } catch (IllegalArgumentException expected) {
+            // as it should
+        }
+    }
+
     @Test public void theScopedPlayerPlaysWholeGamesAsBothRoles() throws IOException {
         PolicyNet net = randomNet(6);
         long seed = 37;
