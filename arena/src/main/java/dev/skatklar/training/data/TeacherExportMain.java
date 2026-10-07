@@ -62,6 +62,11 @@ import java.util.concurrent.Future;
  * <p>Watching does not move a card: the observer is told after the tally, and
  * {@code TeacherExportTest} holds the recorded games to the unwatched ones.
  *
+ * <p>The teacher can also be a search with play-outs ({@code po:...},
+ * {@link dev.skatklar.training.players.FlatHandoverProvider}): the record is
+ * the search's as always -- its evidence, vote, cushion and verdicts -- but
+ * the card is the one played, the play-outs' where they decided.
+ *
  * <p>Flat binary, little-endian, one record {@link #RECORD_BYTES} long; see
  * {@link #layout()} and {@code teacher-format.json}, written beside the shards.
  *
@@ -396,13 +401,19 @@ public final class TeacherExportMain {
             int who = players[seat.ordinal()];
             Contestant contestant = who == 0 ? teacher : population.get(who - 1);
             SkatAiProvider provider = contestant.newProvider(Seeds.mix(seed, board.index(), seat.ordinal()));
-            if (who == 0 && provider instanceof SearchAiProvider search) {
+            if (who == 0) {
                 byte[] seatingBytes = {
                         (byte) players[seat.ordinal()],
                         (byte) players[seat.next().ordinal()],
                         (byte) players[seat.next().next().ordinal()],
                         (byte) teacherSeats};
-                provider = search.withCardPlayObserver(new Recorder(sink, deal, seatingBytes));
+                if (provider instanceof SearchAiProvider search) {
+                    provider = search.withCardPlayObserver(new Recorder(sink, deal, seatingBytes));
+                } else if (provider instanceof dev.skatklar.training.players.FlatHandoverProvider handover) {
+                    // A search with play-outs (po:...): the search's vote and
+                    // worlds as always, the card the one actually played.
+                    provider = handover.withTap(new Recorder(sink, deal, seatingBytes));
+                }
             }
             seating.put(seat, provider);
         }

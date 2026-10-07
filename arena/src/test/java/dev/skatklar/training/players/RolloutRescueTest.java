@@ -245,6 +245,92 @@ public class RolloutRescueTest {
         }
     }
 
+    /** A seat's provider whose sessions write down every card they play, by the context it answered. */
+    interface Watched extends SkatAiProvider, dev.skatklar.training.arena.TableObserver {}
+
+    static SkatAiProvider played(FlatHandoverProvider provider, Map<SkatAi.DecisionContext, Card> out) {
+        return new Watched() {
+            @Override public SkatAi.AiDescriptor descriptor() { return provider.descriptor(); }
+            @Override public void observe(dev.skatklar.demo.GameEngine engine) { provider.observe(engine); }
+            @Override public void observeFixedContract(Board board, ContractSource.FixedContract fixed) {
+                provider.observeFixedContract(board, fixed);
+            }
+            @Override public dev.skatklar.demo.ai.SkatAiSession createSession() {
+                dev.skatklar.demo.ai.SkatAiSession inner = provider.createSession();
+                return (dev.skatklar.demo.ai.SkatAiSession) java.lang.reflect.Proxy.newProxyInstance(
+                        RolloutRescueTest.class.getClassLoader(),
+                        new Class<?>[] {dev.skatklar.demo.ai.SkatAiSession.class},
+                        (proxy, method, args) -> {
+                            Object result;
+                            try {
+                                result = method.invoke(inner, args);
+                            } catch (java.lang.reflect.InvocationTargetException e) {
+                                throw e.getCause();
+                            }
+                            if (method.getName().equals("chooseCard")) {
+                                out.put((SkatAi.DecisionContext) args[0], (Card) result);
+                            }
+                            return result;
+                        });
+            }
+        };
+    }
+
+    @Test public void theTapHearsTheCardPlayedAndMovesNone() throws IOException {
+        PolicyNet net = randomNet(8);
+        long seed = 43;
+        ContractSource contracts = new AuctionContractSource(PlayerRegistry.withDefaults().resolve("greedy"), seed);
+        FlatHandoverProvider.Scope scope = FlatHandoverProvider.Scope.parse("lost-decl,lost-def,tie0-decl,tie0-def");
+        int games = 0;
+        int tapped = 0;
+        for (int i = 0; games < 3 && i < 30; i++) {
+            Board board = Board.of(seed, i);
+            ContractSource.FixedContract fixed = contracts.contractFor(board);
+            if (fixed == null || fixed.contract().isNull()) continue;
+            GameOutcome[] outcomes = new GameOutcome[2];
+            Map<SkatAi.DecisionContext, Card> playedCards = new java.util.IdentityHashMap<>();
+            Map<SkatAi.DecisionContext, Card> heard = new java.util.IdentityHashMap<>();
+            Set<SkatAi.DecisionContext> verdicts = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+            for (int watched = 0; watched < 2; watched++) {
+                Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
+                for (SkatAi.Seat seat : SkatAi.Seat.values()) {
+                    FlatHandoverProvider p = new FlatHandoverProvider("po:test", new SearchAiProvider(
+                            new GreedyAiProvider(), 4, seed + i * 3 + seat.ordinal()),
+                            new RolloutRescue(net, 4, 2, 17), scope);
+                    if (watched == 1) {
+                        p = p.withTap(new SearchAiProvider.CardPlayObserver() {
+                            @Override public void decided(SearchAiProvider.CardPlayReport report) {}
+                            @Override public boolean wantsWorldVerdicts() { return true; }
+                            @Override public void worldVerdicts(SkatAi.DecisionContext context, List<Card> legal,
+                                                                long[] holds, int worlds) {
+                                verdicts.add(context);
+                            }
+                            @Override public void voted(SkatAi.DecisionContext context, Map<Card, Integer> votes,
+                                                        Map<Card, Integer> cushion, int worlds, boolean cushionAsked,
+                                                        Card chosen) {
+                                heard.put(context, chosen);
+                            }
+                        });
+                        seating.put(seat, played(p, playedCards));
+                    } else {
+                        seating.put(seat, p);
+                    }
+                }
+                outcomes[watched] = GameRunner.playFixed(board, seating, fixed, i);
+            }
+            assertEquals("the tap moves no card", outcomes[0], outcomes[1]);
+            assertFalse("the tap heard decisions", heard.isEmpty());
+            for (Map.Entry<SkatAi.DecisionContext, Card> e : heard.entrySet()) {
+                assertEquals("the tap hears the card played", playedCards.get(e.getKey()), e.getValue());
+                assertTrue("and the world-by-world verdicts first", verdicts.contains(e.getKey()));
+                tapped++;
+            }
+            games++;
+        }
+        assertEquals(3, games);
+        assertTrue("decisions tapped: " + tapped, tapped > 30);
+    }
+
     @Test public void theScopedPlayerPlaysWholeGamesAsBothRoles() throws IOException {
         PolicyNet net = randomNet(6);
         long seed = 37;

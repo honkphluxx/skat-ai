@@ -979,6 +979,28 @@ cushion does not matter: tie0c-decl against tie0-decl -0.06 [-0.31,
 +0.20], so `best` keeps tie0-decl. The defenders'-only reports printed no
 counters (the shutdown hook asked for declarer decisions); fixed.
 
+*best outside, and best as the teacher: prepared (2026-10-07; `./tools/best-run.sh`).*
+Two questions in one run. First, does the edge hold against a player that
+is not us: best and the teacher alone, each against XSkat at fixed
+contracts, seeds 11-16, pooled each and best minus the teacher paired by
+seed. Second, the data for the loop the plan calls Phase R: best as the
+teacher of `TeacherExportMain`, on the first 30,000 boards of
+teacher-data-v3's deals and seating (seed 101), into teacher-data-best/.
+A record is the search's as in v3 -- evidence, vote, cushion, verdicts,
+play state -- with the card best played: the play-outs' where they
+decided. `FlatHandoverProvider.withTap` carries the exporter's observer
+through the hand-over and tells it the vote only once the card is
+settled; a test holds the tapped card to the card each session returned
+and the tapped games to the untapped ones (three mutants fail). Container
+smoke on a 4-world search: 248 records from 20 boards, every decision
+recorded, the corpus checks passing, the chosen card always at the top
+vote (a play-out card is a tied or a lost one). The student trained on it
+against the one trained on v3's first 30 shards, and then the play-outs
+with each, is the next step; the yardstick will not see the difference --
+it scores against the votes, and best only chooses among cards the votes
+rate equal -- so the arena decides. About six hours for the check and
+seventeen for the export at 16 threads.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

@@ -190,6 +190,20 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
     private List<WorldSampler.World> lastWorlds;
     private final BiConsumer<Map<Card, Integer>, Boolean> listener;
     private final Scope scope;
+    /** The search as given, before this provider's observer: what {@link #withTap} rebuilds from. */
+    private final SearchAiProvider plainSearch;
+    /**
+     * Another observer of the search's decisions, or null: told everything the
+     * search tells, except that its vote arrives after the hand-over with the
+     * card actually played -- the search's own or the play-outs'. What the
+     * teacher exporter records a player with play-outs through.
+     */
+    private final SearchAiProvider.CardPlayObserver tap;
+    /** The search's last vote, held for the tap until the card is settled. */
+    private SkatAi.DecisionContext pendingContext;
+    private Map<Card, Integer> pendingCushion;
+    private int pendingWorlds;
+    private boolean pendingCushionAsked;
 
     public FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer) {
         this(id, search, rescuer, null, null);
@@ -213,6 +227,17 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
     /** @param listener told, at every declarer decision, the search's votes and whether it was handed over as lost */
     FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer, RolloutRescue rollout,
                          BiConsumer<Map<Card, Integer>, Boolean> listener, Scope scope) {
+        this(id, search, rescuer, rollout, listener, scope, null);
+    }
+
+    /** The same player, with {@code tap} told of every card decision (see {@link #tap}). */
+    public FlatHandoverProvider withTap(SearchAiProvider.CardPlayObserver tap) {
+        return new FlatHandoverProvider(id, plainSearch, rescuer, rollout, listener, scope, tap);
+    }
+
+    private FlatHandoverProvider(String id, SkatAiProvider search, SkatAiProvider rescuer, RolloutRescue rollout,
+                                 BiConsumer<Map<Card, Integer>, Boolean> listener, Scope scope,
+                                 SearchAiProvider.CardPlayObserver tap) {
         if ((rescuer == null) == (rollout == null)) {
             throw new IllegalArgumentException(id + ": a rescuer or the play-outs, exactly one");
         }
@@ -225,12 +250,24 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                     + search.descriptor().id);
         }
         this.id = id;
+        this.plainSearch = searching;
+        this.tap = tap;
         this.search = searching.withCardPlayObserver(new SearchAiProvider.CardPlayObserver() {
-            @Override public void decided(SearchAiProvider.CardPlayReport report) {}
+            @Override public void decided(SearchAiProvider.CardPlayReport report) {
+                if (tap != null) tap.decided(report);
+            }
             @Override public void sampled(SkatAi.DecisionContext context, BeliefEncoding.Evidence evidence,
                                           List<WorldSampler.World> worlds) {
                 lastEvidence = evidence;
                 lastWorlds = worlds;
+                if (tap != null) tap.sampled(context, evidence, worlds);
+            }
+            @Override public boolean wantsWorldVerdicts() {
+                return tap != null && tap.wantsWorldVerdicts();
+            }
+            @Override public void worldVerdicts(SkatAi.DecisionContext context, List<Card> legal, long[] holds,
+                                                int worlds) {
+                if (tap != null) tap.worldVerdicts(context, legal, holds, worlds);
             }
             @Override public void voted(SkatAi.DecisionContext context, Map<Card, Integer> votes,
                                         Map<Card, Integer> cushion, int worldsSearched,
@@ -238,6 +275,10 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                 lastVotes = votes;
                 lastCushion = cushionAsked ? cushion : Map.of();
                 lastSearched = worldsSearched;
+                pendingContext = context;
+                pendingCushion = cushion;
+                pendingWorlds = worldsSearched;
+                pendingCushionAsked = cushionAsked;
             }
         });
         this.rescuer = rescuer;
@@ -371,6 +412,16 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
                 other.startGame(context);
             }
             @Override public Card chooseCard(SkatAi.DecisionContext context) {
+                pendingContext = null;
+                Card card = decide(context);
+                if (tap != null && pendingContext == context && lastVotes != null) {
+                    tap.voted(context, lastVotes, pendingCushion, pendingWorlds, pendingCushionAsked, card);
+                }
+                pendingContext = null;
+                return card;
+            }
+
+            private Card decide(SkatAi.DecisionContext context) {
                 lastVotes = null;
                 lastCushion = Map.of();
                 lastSearched = 0;
