@@ -952,6 +952,33 @@ scope it narrows: `def-tie-w` (tie0w-def: are the open ties the loss?),
 `decl-tie-c` (tie0c-decl: does decl-tie gain more where it leaves the
 cushion alone?).
 
+*Best, and the ties narrowed: the answer (2026-10-07, seeds 11-16 and 21).*
+Against belief-64-shipped, game points a game:
+
+| player | pooled | per seed 11 12 13 14 15 16 21 |
+|---|---|---|
+| **best** (lost-decl, lost-def, tie0-decl) | **+1.31 [+0.81, +1.81]** | +0.88 +1.77 +1.59 +0.57 +0.90 +2.04 +1.44 |
+| tie0w-def (held defender ties only) | -0.18 [-0.64, +0.28] | -0.27 +0.42 -0.77 +0.05 -0.91 +0.03 +0.20 |
+| tie0c-def (what the cushion leaves) | +0.31 [-0.75, +1.37] | +1.53 -0.15 +1.17 -0.68 +1.14 -1.59 +0.74 |
+| tie0c-decl | +0.36 [-0.17, +0.90] | -0.01 +0.38 +1.42 +0.31 -0.47 +0.30 +0.61 |
+| lost-decl, rollout-64v (seed 12 redone) | +0.37 [-0.15, +0.88] | -0.31 +0.88 +0.12 -0.05 +0.44 +0.21 +1.29 |
+
+`best` came in where the per-seed sum of its parts put it (+1.42
+[+0.84, +2.01] predicted), every seed positive, +0.38 [-0.14, +0.89] over
+the declarer's lost positions alone. It is the strongest player of our own
+measured here, with no SkatZero in it; about 32 minutes a seed at 16
+threads against the plain teacher's 22. The value-ranked top-card
+play-outs, now on seven seeds, stay -0.57 [-0.95, -0.18] below the drawn
+ones: the drawing carries the gain. The defenders' ties stay with the
+search. Held ties only are nothing (-0.18); leaving the cushion alone
+takes back most of the loss (+0.74 [-0.06, +1.55] over tie0-def) but what
+is left swings -1.6 to +1.5 from seed to seed -- a defender's card changes
+the rest of the game more than a declarer's, and the student's judgement
+there is no better than the teacher's tiebreak. For the declarer the
+cushion does not matter: tie0c-decl against tie0-decl -0.06 [-0.31,
++0.20], so `best` keeps tie0-decl. The defenders'-only reports printed no
+counters (the shutdown hook asked for declarer decisions); fixed.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

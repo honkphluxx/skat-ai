@@ -145,10 +145,12 @@ public final class FlatHandoverProvider implements SkatAiProvider, TableObserver
     private static final AtomicLong CHANGED = new AtomicLong();
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (DECLARER_DECISIONS.get() > 0) {
+            // Any decision a scope looked at, either role: a defenders'-only
+            // scope sees no declarer decisions and used to print nothing.
+            if (SEEN[0].get() + SEEN[1].get() > 0) {
                 long decisions = SEEN[0].get() + SEEN[1].get();
                 System.out.printf("Flat handover: %,d of %,d %s decisions handed to the rescuer (%.1f%%)%n",
-                        HANDED.get(), decisions, SEEN[1].get() == 0 ? "declarer" : "declarer and defender",
+                        HANDED.get(), decisions, SEEN[1].get() == 0 ? "declarer" : SEEN[0].get() == 0 ? "defender" : "declarer and defender",
                         100.0 * HANDED.get() / Math.max(1, decisions));
                 System.out.printf("  the rescuer's card differed from the search's in %,d of them (%.1f%%)%n",
                         CHANGED.get(), 100.0 * CHANGED.get() / Math.max(1, HANDED.get()));
