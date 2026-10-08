@@ -34,8 +34,22 @@ public final class PlayerRegistry {
      * {@code rollout}, {@code rollout-<worlds>}, {@code rollout-<worlds>v} (top card, ranked by game value)
      * or {@code rollout-<worlds>x<draws>} (opponents drawn, ranked by game value).
      */
-    private record RolloutShape(int worlds, int draws, boolean valueRanked) {
+    private record RolloutShape(int worlds, int draws, boolean valueRanked, String student) {
+        RolloutShape(int worlds, int draws, boolean valueRanked) {
+            this(worlds, draws, valueRanked, null);
+        }
+
+        /** {@code <shape>@<dir>}: the play-outs' student from that folder instead of policy-model/. */
         static RolloutShape parse(String text) {
+            int at = text.indexOf('@');
+            if (at < 0) return parseShape(text);
+            String dir = text.substring(at + 1);
+            if (dir.isBlank()) throw new IllegalArgumentException("a student folder after @, not " + text);
+            RolloutShape shape = parseShape(text.substring(0, at));
+            return new RolloutShape(shape.worlds, shape.draws, shape.valueRanked, dir);
+        }
+
+        private static RolloutShape parseShape(String text) {
             try {
                 if (text.equals("rollout")) return new RolloutShape(32, 0, false);
                 if (!text.startsWith("rollout-")) throw new NumberFormatException();
@@ -54,13 +68,15 @@ public final class PlayerRegistry {
         }
 
         dev.skatklar.training.players.RolloutRescue rescue(long seed) {
-            return new dev.skatklar.training.players.RolloutRescue(
-                    dev.skatklar.training.players.RolloutRescue.student(), worlds, draws, valueRanked, seed);
+            return new dev.skatklar.training.players.RolloutRescue(student == null
+                    ? dev.skatklar.training.players.RolloutRescue.student()
+                    : dev.skatklar.training.players.RolloutRescue.student(java.nio.file.Path.of(student)),
+                    worlds, draws, valueRanked, seed);
         }
 
         @Override public String toString() {
             return worlds + " worlds" + (draws > 0 ? ", " + draws + " drawn defences each" : "")
-                    + (valueRanked ? ", by game value" : "");
+                    + (valueRanked ? ", by game value" : "") + (student == null ? "" : ", student " + student);
         }
     }
 

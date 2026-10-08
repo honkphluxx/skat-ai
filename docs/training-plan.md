@@ -1001,6 +1001,31 @@ it scores against the votes, and best only chooses among cards the votes
 rate equal -- so the arena decides. About six hours for the check and
 seventeen for the export at 16 threads.
 
+*best outside, and best as the teacher: the answer (2026-10-08).*
+Against XSkat at fixed contracts, seeds 11-16, 200 boards each:
+belief-64-shipped +5.30 [+4.27, +6.33], best +6.92 [+5.08, +8.76]; best
+minus the teacher paired by seed **+1.62 [+0.39, +2.85]**, every seed
+positive (per seed, teacher / best: +5.67 / +7.33, +5.56 / +9.45, +6.81 /
++8.02, +5.06 / +6.39, +3.86 / +4.39, +4.85 / +5.94). The edge measured
+against our own teacher holds against a player that is not us, and is no
+smaller there. The export: 399,846 records from 30,000 boards in 13.5
+hours at 16 threads (8.2 a second; v3 took 10.0). In the auction's own
+games the declarer's lost positions are fewer than at greedy's fixed
+contracts (7% of the declarer's decisions against about 30%), the
+defenders' 17%, the declarer's ties 74%; best's card differs from the
+search's in 60,217 records, 15% of the corpus.
+
+*The first turn of the loop, prepared (2026-10-08; `./tools/loop-test.sh`).*
+Two students, policy-model's recipe (encoding only, 3 x 512, random start,
+20 epochs): policy-v3-30 on teacher-data-v3's first 30 shards (the control,
+the same deals and seating) and policy-best on teacher-data-best. The
+yardstick on the control's held-out deals, then best's play-outs by each
+student against belief-64-shipped, seeds 11-16 and 21, paired by seed;
+best with policy-model (90,000 deals of v2) is the reference, not the
+control. The play-outs' student is now named in the spec:
+`rollout-32x4@policy-best` loads policy-best/policy.bin (a folder in the
+working directory, no slash), each folder once.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

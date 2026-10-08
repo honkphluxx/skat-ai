@@ -335,4 +335,25 @@ public final class RolloutRescue {
         }
         throw new IllegalArgumentException("no policy-model/policy.bin for the play-outs' student");
     }
+
+    /** Students named by folder, each loaded once. */
+    private static final Map<Path, PolicyNet> NAMED = new java.util.HashMap<>();
+
+    /** The student in {@code dir} (its policy.bin and policy-parity.bin); loaded once. */
+    public static synchronized PolicyNet student(Path dir) {
+        Path key = dir.toAbsolutePath().normalize();
+        PolicyNet known = NAMED.get(key);
+        if (known != null) return known;
+        if (!Files.isRegularFile(key.resolve("policy.bin"))) {
+            throw new IllegalArgumentException("no policy.bin in " + dir + " for the play-outs' student");
+        }
+        try (InputStream weights = Files.newInputStream(key.resolve("policy.bin"));
+             InputStream parity = Files.newInputStream(key.resolve("policy-parity.bin"))) {
+            PolicyNet net = PolicyNet.load(weights, parity);
+            NAMED.put(key, net);
+            return net;
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
 }
