@@ -1049,6 +1049,18 @@ The loop turns once and the player improves: best with policy-best is the
 strongest player of our own, +2.01 against the teacher, and no SkatZero in
 any of it.
 
+*The second turn, prepared (2026-10-08; `./tools/loop-turn.sh`).*
+best with policy-best's play-outs is the teacher now, on the next 30,000
+deals (boards 30,000-59,999 of seed 101, the same seating draw; no student
+sees a deal twice), into teacher-data-best2/. policy-best2 learns that
+alone -- like for like with policy-best, the same recipe and amount -- and
+policy-best2-u learns turn 1's and turn 2's data together (twice the
+deals). best with each doing the play-outs against belief-64-shipped,
+seeds 11-16 and 21, paired with policy-best's reports from the loop test
+(the arena is deterministic; they are not played again). The question:
+does the loop keep climbing, or stop after one turn? `--turn=3` runs the
+next one from policy-best2.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
