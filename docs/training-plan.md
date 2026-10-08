@@ -1026,6 +1026,29 @@ control. The play-outs' student is now named in the spec:
 `rollout-32x4@policy-best` loads policy-best/policy.bin (a folder in the
 working directory, no slash), each folder once.
 
+*The first turn of the loop: the answer (2026-10-08, seeds 11-16 and 21).*
+best's play-outs (lost-decl, lost-def, tie0-decl) against belief-64-shipped,
+by student:
+
+| play-outs by | trained on | pooled | per seed 11 12 13 14 15 16 21 |
+|---|---|---|---|
+| policy-best | best's cards, 30,000 deals | **+2.01 [+1.40, +2.63]** | +1.92 +2.03 +3.29 +1.43 +1.70 +2.38 +1.34 |
+| policy-v3-30 | the teacher's, the same deals | +1.23 [+0.06, +2.41] | +0.13 +2.97 +2.16 +2.11 +0.10 -0.33 +1.49 |
+| policy-model | the teacher's, 90,000 deals (v2) | +1.31 [+0.81, +1.81] | +0.88 +1.77 +1.59 +0.57 +0.90 +2.04 +1.44 |
+
+Paired by seed: policy-best minus policy-v3-30 +0.78 [-0.50, +2.06] (the
+control swings from -0.3 to +3.0 and leaves it unresolved); policy-best
+minus policy-model +0.70 [+0.15, +1.25], six seeds of seven positive -- a
+student taught by best on a third of the deals makes better play-outs than
+one taught by the teacher on all of them. The yardstick says the opposite
+(regret as declarer 3-9: policy-model 0.45, policy-v3-30 0.73, policy-best
+0.72; the 30,000-deal students are both far behind on it): it scores
+agreement with the teacher's votes, and what makes a play-out good is
+evidently not that. Each student trained in about 30 seconds on the GPU.
+The loop turns once and the player improves: best with policy-best is the
+strongest player of our own, +2.01 against the teacher, and no SkatZero in
+any of it.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
