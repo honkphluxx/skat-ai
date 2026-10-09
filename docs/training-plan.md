@@ -1061,6 +1061,32 @@ seeds 11-16 and 21, paired with policy-best's reports from the loop test
 does the loop keep climbing, or stop after one turn? `--turn=3` runs the
 next one from policy-best2.
 
+*The second turn: the answer (2026-10-09, seeds 11-16 and 21).* The loop
+did not climb. best with policy-best's play-outs exported deals
+30,000-59,999 (398,985 records, 13.8 hours; 42% of the handed cards
+changed, as in turn 1). best's play-outs against belief-64-shipped:
+policy-best2 (turn 2's data alone) **+1.07 [-0.03, +2.17]**, per seed
+-0.28 +2.95 +0.85 +1.20 -0.21 +0.75 +2.23; policy-best2-u (both turns'
+data, 798,831 records) **+1.10 [+0.12, +2.08]**, per seed -0.23 +1.73
++2.06 +0.11 +0.57 +2.63 +0.86. Paired with policy-best (+2.01): -0.94
+[-2.28, +0.40] and -0.91 [-1.64, -0.17]. Twice the data bought nothing
+(the union is level with the single turn), so the pace of the export is
+not what limits the loop. Two readings. Either turn 1's data is better
+than turn 2's -- the second teacher's handed cards came from a student's
+play-outs that had been taught by play-outs, and whatever drifted in that
+step hurt -- or policy-best is a lucky draw of its training: every
+student here is one initialisation and one batch order, and the five
+students measured so far stand at +1.07, +1.10, +1.23, +1.31 and +2.01,
+which a student-to-student spread of about +-0.5 would produce from a
+single level near +1.3 with one outlier. The two readings call for
+opposite next steps (turn the loop from policy-best again, or stop
+turning it), so the draw is measured first: `./tools/student-seeds.sh`
+re-trains policy-best twice (init seeds 2 and 3) and policy-best2 once
+on their own data, and runs best's play-outs with each, paired with the
+student it re-draws; about 11 hours. Until then, turn 1's +0.70 over
+policy-model stands as measured but is read as one draw, not as the
+loop's gain.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
