@@ -171,6 +171,21 @@ public class PlayoutTest {
         assertEquals("1 in 10", 0.1, counts.get(low) / (double) n, 0.01);
         assertEquals("3 in 10", 0.3, counts.get(mid) / (double) n, 0.015);
         assertEquals("6 in 10", 0.6, counts.get(high) / (double) n, 0.015);
+        // At temperature 2 the odds are the square roots of 1:3:6; at a tenth,
+        // the top card nearly always.
+        Map<Card, Integer> flat = new java.util.HashMap<>();
+        Map<Card, Integer> sharp = new java.util.HashMap<>();
+        for (int i = 0; i < n; i++) {
+            flat.merge(RolloutRescue.draw(logits, List.of(low, mid, high), 2.0, random), 1, Integer::sum);
+            sharp.merge(RolloutRescue.draw(logits, List.of(low, mid, high), 0.1, random), 1, Integer::sum);
+        }
+        double z = 1 + Math.sqrt(3) + Math.sqrt(6);
+        assertEquals("flat: low", 1 / z, flat.get(low) / (double) n, 0.015);
+        assertEquals("flat: mid", Math.sqrt(3) / z, flat.get(mid) / (double) n, 0.015);
+        assertEquals("flat: high", Math.sqrt(6) / z, flat.get(high) / (double) n, 0.015);
+        assertTrue("sharp: the top card nearly always", sharp.get(high) > 0.99 * n);
+        assertEquals("temperature 1 is the plain draw", RolloutRescue.draw(logits, List.of(low, mid, high), new java.util.SplittableRandom(5)),
+                RolloutRescue.draw(logits, List.of(low, mid, high), 1.0, new java.util.SplittableRandom(5)));
     }
 
     @Test public void theDrawnPlayoutsAreReproducibleAndDiffer() throws Exception {

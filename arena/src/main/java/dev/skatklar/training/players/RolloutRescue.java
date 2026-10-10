@@ -57,6 +57,14 @@ public final class RolloutRescue {
     private final int draws;
     private final boolean valueRanked;
     private final long seed;
+    /**
+     * The temperature of the opponents' draws: their cards are drawn from the
+     * softmax of the student's scores divided by it. 1 is the student's own
+     * distribution; towards 0 the top card (a sharper, stronger opponent),
+     * above 1 flatter (a weaker one). The opponent model's strength, as one
+     * number, with the student unchanged.
+     */
+    private final double temperature;
 
     public RolloutRescue(PolicyNet student, int worlds) {
         this(student, worlds, 0, 0L);
@@ -68,12 +76,21 @@ public final class RolloutRescue {
     }
 
     public RolloutRescue(PolicyNet student, int worlds, int draws, boolean valueRanked, long seed) {
+        this(student, worlds, draws, valueRanked, 1.0, seed);
+    }
+
+    /** @param temperature of the opponents' draws, see {@link #temperature}; 1 draws from the student as it is */
+    public RolloutRescue(PolicyNet student, int worlds, int draws, boolean valueRanked, double temperature, long seed) {
         if (worlds < 1) throw new IllegalArgumentException("at least one world");
         if (draws < 0) throw new IllegalArgumentException("draws cannot be negative");
+        if (!(temperature > 0) || Double.isInfinite(temperature)) {
+            throw new IllegalArgumentException("the temperature is a positive number, not " + temperature);
+        }
         this.student = student;
         this.worlds = worlds;
         this.draws = draws;
         this.valueRanked = valueRanked;
+        this.temperature = temperature;
         this.seed = seed;
     }
 
@@ -280,7 +297,7 @@ public final class RolloutRescue {
         List<Card> legal = new ArrayList<>(at.legalCards);
         boolean ownSide = (at.mySeat == at.game.declarer) == declares(decision);
         if (draws == 0 || ownSide) return top(scores, legal);
-        return draw(scores, legal, random);
+        return draw(scores, legal, temperature, random);
     }
 
     /** The policy's highest-scoring legal card, ties to the earlier card: {@link PolicyNet#choose}'s rule. */
@@ -299,12 +316,17 @@ public final class RolloutRescue {
 
     /** A legal card drawn from the softmax of the policy's scores over the legal cards. */
     static Card draw(float[] logits, List<Card> legal, SplittableRandom random) {
+        return draw(logits, legal, 1.0, random);
+    }
+
+    /** As above, the scores divided by {@code temperature} first (1: as they are). */
+    static Card draw(float[] logits, List<Card> legal, double temperature, SplittableRandom random) {
         double top = Double.NEGATIVE_INFINITY;
         for (Card card : legal) top = Math.max(top, logits[BeliefEncoding.index(card)]);
         double[] weight = new double[legal.size()];
         double total = 0;
         for (int i = 0; i < legal.size(); i++) {
-            weight[i] = Math.exp(logits[BeliefEncoding.index(legal.get(i))] - top);
+            weight[i] = Math.exp((logits[BeliefEncoding.index(legal.get(i))] - top) / temperature);
             total += weight[i];
         }
         double u = random.nextDouble() * total;

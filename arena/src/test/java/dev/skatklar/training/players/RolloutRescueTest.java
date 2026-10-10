@@ -125,6 +125,24 @@ public class RolloutRescueTest {
         assertTrue("defender decisions checked: " + checked, checked > 10);
     }
 
+    @Test public void theTemperatureReachesTheOpponentsDraws() throws IOException {
+        PolicyNet net = randomNet(9);
+        int differ = 0;
+        int same = 0;
+        for (PlayoutTest.Step step : steps(53, 3)) {
+            SkatAi.DecisionContext at = step.context();
+            if (at.legalCards.size() < 2 || at.history.completedTricks.size() > 6) continue;
+            List<WorldSampler.World> world = List.of(new WorldSampler.World(step.hands(), step.skat()));
+            List<Card> all = new ArrayList<>(at.legalCards);
+            List<RolloutRescue.Tally> plain = new RolloutRescue(net, 1, 3, true, 1.0, 7).tally(at, null, world, all);
+            List<RolloutRescue.Tally> one = new RolloutRescue(net, 1, 3, true, 7).tally(at, null, world, all);
+            List<RolloutRescue.Tally> hot = new RolloutRescue(net, 1, 3, true, 4.0, 7).tally(at, null, world, all);
+            assertEquals("temperature 1 is the plain play-out", one, plain);
+            if (hot.equals(plain)) same++; else differ++;
+        }
+        assertTrue("a hot temperature changes play-outs (" + differ + " of " + (differ + same) + ")", differ > same);
+    }
+
     @Test public void aChoiceAmongCandidatesIsOneOfThem() throws IOException {
         PolicyNet net = randomNet(5);
         int checked = 0;

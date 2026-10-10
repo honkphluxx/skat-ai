@@ -1116,6 +1116,24 @@ drawn +0.93 -- the one setting already measured), the play-outs' count,
 the tie margin, and the opponent-model question (2026-10-09): whether
 the best temperature depends on who is across the table.
 
+*The opponents' temperature, prepared (2026-10-10; `./tools/temperature-study.sh`).*
+The play-outs' opponents are now drawn at a temperature
+(`rollout-32x4t<T>`: the student's scores divided by T before the
+softmax; 1 is the draw as it was, bit for bit; `RolloutRescue`'s
+constructor takes it, `PlayoutTest` holds the odds at 2 and 0.1 and
+`RolloutRescueTest` that it reaches the play-outs; two mutants fail). The
+opponent model's strength as one number with the student unchanged, so
+the draw of its training stays out. The study: best at temperatures 0.5,
+2 and 4 against belief-64-shipped (seeds 11-16 and 21) and against XSkat
+(11-16), each pooled and paired by seed with temperature 1, which is on
+disk from the play-out study and the best run. It separates the two
+readings of top card +0.28 against drawn +0.93: if the best temperature
+against XSkat is above the best against the teacher, the opponent model
+wants to match the opponent (2026-10-09), and the app's play-outs would
+want tuning to the level across the table; if one temperature wins
+against both, the drawing is about the signal. About 16-17 hours at 16
+threads.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

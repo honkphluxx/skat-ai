@@ -34,9 +34,9 @@ public final class PlayerRegistry {
      * {@code rollout}, {@code rollout-<worlds>}, {@code rollout-<worlds>v} (top card, ranked by game value)
      * or {@code rollout-<worlds>x<draws>} (opponents drawn, ranked by game value).
      */
-    private record RolloutShape(int worlds, int draws, boolean valueRanked, String student) {
+    private record RolloutShape(int worlds, int draws, boolean valueRanked, String student, double temperature) {
         RolloutShape(int worlds, int draws, boolean valueRanked) {
-            this(worlds, draws, valueRanked, null);
+            this(worlds, draws, valueRanked, null, 1.0);
         }
 
         /** {@code <shape>@<dir>}: the play-outs' student from that folder instead of policy-model/. */
@@ -46,24 +46,36 @@ public final class PlayerRegistry {
             String dir = text.substring(at + 1);
             if (dir.isBlank()) throw new IllegalArgumentException("a student folder after @, not " + text);
             RolloutShape shape = parseShape(text.substring(0, at));
-            return new RolloutShape(shape.worlds, shape.draws, shape.valueRanked, dir);
+            return new RolloutShape(shape.worlds, shape.draws, shape.valueRanked, dir, shape.temperature);
         }
 
+        /**
+         * {@code rollout}, {@code rollout-N}, {@code rollout-Nv}, {@code rollout-NxD}, and
+         * {@code rollout-NxDt<T>}: the opponents drawn at temperature T (a decimal, 1 as without).
+         */
         private static RolloutShape parseShape(String text) {
             try {
                 if (text.equals("rollout")) return new RolloutShape(32, 0, false);
                 if (!text.startsWith("rollout-")) throw new NumberFormatException();
                 String shape = text.substring("rollout-".length());
+                double temperature = 1.0;
+                int t = shape.indexOf('t');
+                if (t >= 0) {
+                    temperature = Double.parseDouble(shape.substring(t + 1));
+                    shape = shape.substring(0, t);
+                    if (!(temperature > 0) || Double.isInfinite(temperature)) throw new NumberFormatException();
+                }
                 boolean value = shape.endsWith("v");
                 if (value) shape = shape.substring(0, shape.length() - 1);
                 int x = shape.indexOf('x');
                 int worlds = Integer.parseInt(x < 0 ? shape : shape.substring(0, x));
                 int draws = x < 0 ? 0 : Integer.parseInt(shape.substring(x + 1));
                 if ((x >= 0 && draws < 1) || worlds < 1 || (value && x >= 0)) throw new NumberFormatException();
-                return new RolloutShape(worlds, draws, value || draws > 0);
+                if (t >= 0 && draws == 0) throw new NumberFormatException();
+                return new RolloutShape(worlds, draws, value || draws > 0, null, temperature);
             } catch (NumberFormatException bad) {
-                throw new IllegalArgumentException("play-outs are rollout, rollout-<worlds>, rollout-<worlds>v or "
-                        + "rollout-<worlds>x<draws>, not " + text);
+                throw new IllegalArgumentException("play-outs are rollout, rollout-<worlds>, rollout-<worlds>v, "
+                        + "rollout-<worlds>x<draws> or rollout-<worlds>x<draws>t<temperature>, not " + text);
             }
         }
 
@@ -71,11 +83,12 @@ public final class PlayerRegistry {
             return new dev.skatklar.training.players.RolloutRescue(student == null
                     ? dev.skatklar.training.players.RolloutRescue.student()
                     : dev.skatklar.training.players.RolloutRescue.student(java.nio.file.Path.of(student)),
-                    worlds, draws, valueRanked, seed);
+                    worlds, draws, valueRanked, temperature, seed);
         }
 
         @Override public String toString() {
             return worlds + " worlds" + (draws > 0 ? ", " + draws + " drawn defences each" : "")
+                    + (temperature != 1.0 ? " at temperature " + temperature : "")
                     + (valueRanked ? ", by game value" : "") + (student == null ? "" : ", student " + student);
         }
     }
