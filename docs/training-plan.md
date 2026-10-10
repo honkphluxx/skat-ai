@@ -1087,6 +1087,35 @@ student it re-draws; about 11 hours. Until then, turn 1's +0.70 over
 policy-model stands as measured but is read as one draw, not as the
 loop's gain.
 
+*The draw: the answer (2026-10-10, seeds 11-16 and 21).* The +2.01 was the
+draw. The same data again with other initialisations and batch orders:
+policy-best-i2 **+1.21 [+0.25, +2.17]**, policy-best-i3 **+1.05 [+0.11,
++1.98]** (teacher-data-best, as policy-best); policy-best2-i2 **+0.99
+[+0.16, +1.83]** (teacher-data-best2, as policy-best2's +1.07). Eight
+students have now done best's play-outs against belief-64-shipped on the
+same seven seeds -- trained on the teacher's cards (policy-model 90,000
+deals +1.31, policy-v3-30 +1.23), on best's (policy-best +2.01, its
+re-draws +1.21 and +1.05), on turn 2's (policy-best2 +1.07, +0.99) and on
+both turns' (policy-best2-u +1.10): mean +1.25, spread 0.33, and without
+the one outlier mean +1.14, spread 0.11. Nothing about the training data
+-- whose cards, how many, which turn -- moves the result; one draw of the
+training moves it by as much as anything we changed. So: (1) the
+play-outs' gain is robust, about +1.1 to +1.3 against the teacher for any
+student of this family, the worst draw still +0.99 [+0.16, +1.83]; it
+comes from the mechanism -- drawn opponents over the search's worlds,
+the game's value -- not from the student's precision; (2) the loop does
+not climb: a student taught by best is no better at best's play-outs
+than one taught by the teacher, so Phase R's "the teacher produces new
+data, the student is retrained" adds nothing here, and turn 1's +0.70 is
+withdrawn; (3) a student is a draw: comparing two students needs several
+draws of each (three draws, pooled, about 11 hours a candidate), and
+every single-student comparison before this note is one sample of two
+noise sources. The knobs that remain are the mechanism's, with the
+student held fixed: the draws' temperature (the top card was +0.28, the
+drawn +0.93 -- the one setting already measured), the play-outs' count,
+the tie margin, and the opponent-model question (2026-10-09): whether
+the best temperature depends on who is across the table.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
