@@ -1169,6 +1169,33 @@ seeds) put most of SkatZero's edge in Null, which the play-outs never
 touch. SkatZero is an opponent here, not a source: nothing it plays is
 recorded.
 
+*best against SkatZero: the answer (2026-10-11, seeds 11-16).* Not level
+yet. Fixed contracts (greedy's auction), 200 boards a seed, SkatZero
+playing all its cards:
+
+| player | against SkatZero | per seed 11 12 13 14 15 16 |
+|---|---|---|
+| belief-64-shipped | **-2.00 [-3.23, -0.78]** | -0.03 -1.81 -3.42 -1.66 -2.23 -2.87 |
+| best | **-0.96 [-2.27, +0.35]** | +0.44 +0.15 -2.58 -0.36 -1.22 -2.20 |
+| best minus the teacher, paired | **+1.04 [+0.48, +1.60]** | +0.47 +1.96 +0.84 +1.31 +1.01 +0.67 |
+
+The play-outs' gain holds a third time, now against the strongest
+opponent we have: +1.31 against the teacher, +1.62 against XSkat, +1.04
+against SkatZero, every seed positive in all three. But the parity
+inferred from the split pairings was too hopeful -- SkatZero declaring for
+the teacher was +1.54, best's gain about +1.0 to +1.3, so the arithmetic
+always left half a point or more -- and best is still about a point behind
+SkatZero's card play, not resolved. Greedy's auction gave no Null here
+(the per-contract table holds suit and grand games only), so what is left
+is not the Null edge the oracle-contract pairings of September found: it
+is in the trump games. The declaring rows carry it -- on five seeds of six
+SkatZero's declarer play against our defenders out-scores ours against
+its defenders by more than the defending rows differ -- which fits the
+split pairings: SkatZero declares better, defends about as we do. Where,
+card by card, is what `tools/declaring-audit.sh --par=skatzero` reads
+(SkatZero in par's chair, the solver judging both declarers' cards on the
+same boards). Cost: about 17 minutes a seed for the teacher, 26 for best.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
