@@ -1134,6 +1134,28 @@ want tuning to the level across the table; if one temperature wins
 against both, the drawing is about the signal. About 16-17 hours at 16
 threads.
 
+*The opponents' temperature: the answer (2026-10-11).* Flat. best's play-outs
+with the opponents drawn at temperature T, paired by seed with T = 1:
+
+| T | against belief-64-shipped (7 seeds) | paired with 1 | against XSkat (6 seeds) | paired with 1 |
+|---|---|---|---|---|
+| 0.5 | +1.34 [+0.39, +2.29] | +0.03 [-0.92, +0.98] | +6.62 [+4.21, +9.02] | -0.30 [-1.02, +0.41] |
+| 1 | +1.31 [+0.81, +1.81] | -- | +6.92 [+5.08, +8.76] | -- |
+| 2 | +1.55 [+0.66, +2.43] | +0.23 [-0.65, +1.11] | +6.41 [+4.59, +8.23] | -0.51 [-1.05, +0.03] |
+| 4 | +1.15 [+0.16, +2.13] | -0.16 [-1.20, +0.87] | +6.80 [+5.11, +8.49] | -0.12 [-1.14, +0.91] |
+
+No temperature from 0.5 to 4 is distinguishable from 1, against either
+opponent. The matching hypothesis (2026-10-09) predicts a flatter model
+paying more against the weaker XSkat; the nearest thing to a signal points
+the other way (T = 2: +0.23 against the teacher, -0.51 against XSkat), and
+neither is resolved. So the step that matters is from the top card (+0.28
+in the declarer's lost positions) to any draw at all (+0.93): what the
+play-outs need is variety in the opponents' replies, not a model of how
+strong they are, and once there is variety its exact sharpness over an
+eightfold range makes no difference we can see. The student's own
+distribution (T = 1) stays; the real-time opponent model has no measured
+basis here and is shelved.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
