@@ -1156,6 +1156,19 @@ eightfold range makes no difference we can see. The student's own
 distribution (T = 1) stays; the real-time opponent model has no measured
 basis here and is shelved.
 
+*best against SkatZero, prepared (2026-10-11; `./tools/best-run.sh --check-only --against=skatzero`).*
+What `best` gains over the teacher, +1.1 to +1.3, was inferred to put it
+about level with SkatZero's card play (SkatZero declaring for the teacher
++1.54, its hand-over in the lost positions +1.00, ours there +0.93); it has
+never been measured. The same check as against XSkat: best and the teacher
+alone, each against SkatZero, fixed contracts (greedy's auction; SkatZero
+never bids), seeds 11-16, 200 boards; pooled each and best minus the
+teacher paired by seed. The per-contract lines go into the summary, since
+the last oracle-contract pairings (belief-32-shipped, -2.6 over three
+seeds) put most of SkatZero's edge in Null, which the play-outs never
+touch. SkatZero is an opponent here, not a source: nothing it plays is
+recorded.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

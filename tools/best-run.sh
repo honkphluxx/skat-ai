@@ -4,6 +4,10 @@
 #   ./tools/best-run.sh                  the XSkat check, then the export
 #   ./tools/best-run.sh --quick          two boards of each, a shard of ten: the plumbing
 #   ./tools/best-run.sh --check-only     the XSkat check alone
+#   ./tools/best-run.sh --check-only --against=skatzero
+#                                        the same check against SkatZero (card play
+#                                        only: SkatZero never bids, so fixed contracts
+#                                        are the only way it can sit at the table)
 #   ./tools/best-run.sh --export-only    the export alone
 #   ./tools/best-run.sh --threads=20 --seeds="11 12 13" --boards=30000
 #
@@ -16,6 +20,9 @@
 #    contracts (greedy's auction), duplicate, 200 boards a seed, seeds 11-16;
 #    pooled each, and best minus the teacher paired by seed: does the edge
 #    measured against our own teacher hold against a player that is not us?
+#    --against=skatzero: the same against the strongest card play we know of,
+#    which no corpus of ours has seen so far; seeds 11-16 by default as for
+#    XSkat.
 # 2. The export. best as the teacher of tools/teacher-export.sh: the first
 #    30,000 boards of teacher-data-v3's deals (seed 101, the same seating
 #    draw), into teacher-data-best/. Each record is the search's as in v3 --
@@ -41,17 +48,18 @@ fi
 cd "$(dirname "$BR_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
-QUICK=false; CHECK=true; EXPORT=true; THREADS=16; BOARDS=200; SEEDS="11 12 13 14 15 16"
+AGAINST=xskat; QUICK=false; CHECK=true; EXPORT=true; THREADS=16; BOARDS=200; SEEDS="11 12 13 14 15 16"
 EXPORT_BOARDS=30000; SHARD_ARG=""; OUT=teacher-data-best
 for arg in "$@"; do
     case "$arg" in
         --quick)        QUICK=true ;;
         --check-only)   EXPORT=false ;;
         --export-only)  CHECK=false ;;
+        --against=*)    AGAINST="${arg#*=}" ;;
         --threads=*)    THREADS="${arg#*=}" ;;
         --seeds=*)      SEEDS="${arg#*=}" ;;
         --boards=*)     EXPORT_BOARDS="${arg#*=}" ;;
-        -h|--help)      sed -n '2,33p' "$BR_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)      sed -n '2,40p' "$BR_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)              echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -66,7 +74,7 @@ SUMMARY=arena-logs/summary-best-run.txt
 $QUICK && SUMMARY=arena-logs/summary-best-run-quick.txt
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
-say "best run started $(date '+%Y-%m-%d %H:%M:%S')   threads=$THREADS check=$CHECK ($SEEDS, $BOARDS boards) export=$EXPORT ($EXPORT_BOARDS boards into $OUT)"
+say "best run started $(date '+%Y-%m-%d %H:%M:%S')   threads=$THREADS check=$CHECK (against $AGAINST, $SEEDS, $BOARDS boards) export=$EXPORT ($EXPORT_BOARDS boards into $OUT)"
 
 diff_of() { [ -f "$1" ] && grep -E " = .*game pts/game" "$1" | sed -E 's/.* = ([-+0-9.]+) game pts.*/\1/'; }
 pool() {
@@ -81,40 +89,56 @@ pool() {
 }
 
 if $CHECK; then
-    if [ ! -x third_party/xskat/skatklar-xskat ] && [ ! -x third_party/xskat/skatklar-xskat.exe ]; then
-        say "no XSkat build under third_party/xskat (tools/build-external-bots.sh) -- skipping the check"
-    else
-        say "--- 1. against XSkat, fixed contracts, seeds $SEEDS ---"
+    available=true
+    case "$AGAINST" in
+        xskat)
+            if [ ! -x third_party/xskat/skatklar-xskat ] && [ ! -x third_party/xskat/skatklar-xskat.exe ]; then
+                say "no XSkat build under third_party/xskat (tools/build-external-bots.sh) -- skipping the check"
+                available=false
+            fi ;;
+        skatzero)
+            SZ=${SKATKLAR_SKATZERO_DIR:-third_party/skatzero}
+            PY=${SKATKLAR_PYTHON:-python}
+            if [ ! -f "$SZ/models/onnx/D_0.onnx" ]; then
+                say "no SkatZero checkout with ONNX models at $SZ -- skipping the check"; available=false
+            elif ! "$PY" -c "import numpy, onnxruntime" 2>/dev/null; then
+                say "$PY lacks numpy or onnxruntime (the SkatZero bot runs under it); set SKATKLAR_PYTHON -- skipping the check"
+                available=false
+            fi ;;
+        *) say "--against is xskat or skatzero, not $AGAINST"; exit 2 ;;
+    esac
+    if $available; then
+        say "--- 1. against $AGAINST, fixed contracts, seeds $SEEDS ---"
         PAIRS=("teacher|$T" "best|$BEST")
         for SEED in $SEEDS; do
             for pair in "${PAIRS[@]}"; do
                 IFS='|' read -r TAG P <<< "$pair"
                 [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
-                tag="$TAG-vs-xskat-s$SEED-b$BOARDS"
+                tag="$TAG-vs-$AGAINST-s$SEED-b$BOARDS"
                 report="$LOG/$tag.txt"
                 if [ ! -f "$report" ]; then
                     say "  [$(date '+%H:%M:%S')] $tag   $P"
                     start=$(date +%s)
                     ./gradlew --console=plain -q --no-daemon :arena:arena \
-                        --args="--a=$P --b=xskat --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
+                        --args="--a=$P --b=$AGAINST --boards=$BOARDS --seed=$SEED --threads=$THREADS --fixed-contract --quiet --csv=$ROOT/$LOG/$tag.csv" \
                         > "$report.partial" 2>&1 || { mv "$report.partial" "$LOG/$tag.failed.txt"; say "      FAILED -- see $LOG/$tag.failed.txt"; continue; }
                     mv "$report.partial" "$report"
                     say "      took $(( ($(date +%s) - start) / 60 )) min"
                 fi
-                grep -E "^  from declaring|^  from defending| = .*game pts/game|rule violations|^  (lost|tied), |play-outs' cost" "$report" \
+                grep -E "^  from declaring|^  from defending| = .*game pts/game|rule violations|^  (lost|tied), |play-outs' cost|^  (Diamonds|Hearts|Spades|Clubs|Grand|Null) " "$report" \
                     | sed 's/^/      /' | tee -a "$SUMMARY"
             done
         done
         teacher=""; best=""; paired=""
         for SEED in $SEEDS; do
-            a=$(diff_of "$LOG/teacher-vs-xskat-s$SEED-b$BOARDS.txt"); b=$(diff_of "$LOG/best-vs-xskat-s$SEED-b$BOARDS.txt")
+            a=$(diff_of "$LOG/teacher-vs-$AGAINST-s$SEED-b$BOARDS.txt"); b=$(diff_of "$LOG/best-vs-$AGAINST-s$SEED-b$BOARDS.txt")
             [ -n "$a" ] && teacher="$teacher $a"
             [ -n "$b" ] && best="$best $b"
             [ -n "$a" ] && [ -n "$b" ] && paired="$paired $(awk -v x="$b" -v y="$a" 'BEGIN { printf "%.4f", x - y }')"
         done
-        echo "$teacher" | pool "$T - xskat" | tee -a "$SUMMARY"
-        echo "$best" | pool "best - xskat" | tee -a "$SUMMARY"
-        echo "$paired" | pool "    best minus $T, both against xskat, same seeds" | tee -a "$SUMMARY"
+        echo "$teacher" | pool "$T - $AGAINST" | tee -a "$SUMMARY"
+        echo "$best" | pool "best - $AGAINST" | tee -a "$SUMMARY"
+        echo "$paired" | pool "    best minus $T, both against $AGAINST, same seeds" | tee -a "$SUMMARY"
     fi
 fi
 
