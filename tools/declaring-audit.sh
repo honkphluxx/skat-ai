@@ -10,6 +10,10 @@
 #                              --candidate=belief-model-bids-structure
 #                                          the shipped player with another
 #                                          net (-Dbelief.model.candidate.dir)
+#   ./tools/declaring-audit.sh --player="po:belief-64-shipped/rollout-32x4/lost-decl,lost-def,tie0-decl" \
+#                              --tag=best --par=skatzero
+#                                          a player whose id is no folder name (a
+#                                          spec with ':' or '/'): --tag names its folder
 #   ./tools/declaring-audit.sh --par=skatzero
 #                                          another declarer in par's chair:
 #                                          the same boards, the same contracts,
@@ -55,7 +59,8 @@ for arg in "$@"; do
         --player=*)   PLAYER_ARG="${arg#*=}" ;;
         --candidate=*) CANDIDATE="${arg#*=}" ;;
         --par=*)      PAR_ARG="${arg#*=}" ;;
-        -h|--help)    sed -n '2,33p' "$AUDIT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --tag=*)      TAG_ARG="${arg#*=}" ;;
+        -h|--help)    sed -n '2,41p' "$AUDIT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -74,7 +79,11 @@ mkdir -p "$LOG"
 stamp=$(date '+%Y%m%d-%H%M%S')
 # A variant's files go in a folder of their own, so they never overwrite the
 # shipped player's -- and its report names the player.
-[ "$US" != belief-32-shipped ] && LOG="$LOG/$US" && mkdir -p "$LOG"
+TAG=${TAG_ARG:-$US}
+case "$TAG" in
+    */*|*:*|*\\*) echo "the player $US is no folder name: name its folder with --tag=" >&2; exit 2 ;;
+esac
+[ "$US" != belief-32-shipped ] && LOG="$LOG/$TAG" && mkdir -p "$LOG"
 [ "$PAR" != solver-heuristic-discard ] && LOG="$LOG/par-$PAR" && mkdir -p "$LOG"
 PROPS=""
 [ -n "${CANDIDATE:-}" ] && PROPS="-Dbelief.model.candidate.dir=$CANDIDATE" && LOG="$LOG/$(basename "$CANDIDATE")" && mkdir -p "$LOG"

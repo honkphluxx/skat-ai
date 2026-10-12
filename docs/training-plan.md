@@ -1196,6 +1196,38 @@ card by card, is what `tools/declaring-audit.sh --par=skatzero` reads
 (SkatZero in par's chair, the solver judging both declarers' cards on the
 same boards). Cost: about 17 minutes a seed for the teacher, 26 for best.
 
+*Where SkatZero declares better: the audit (2026-10-12; `tools/declaring-audit.sh --par=skatzero`).*
+Caution first: the audit's declarer is its default, belief-32-shipped
+(32 worlds, no play-outs), not the teacher and not best -- it says where
+SkatZero's declaring beats our search family, not what is left against
+best. Same boards (seeds 11-16, 1,049 declared at greedy's contracts), our
+defenders both times, the solver judging every card. SkatZero wins 57.2%
+against our 55.0%, +1.42 from declaring. The gap, by kind:
+
+- Lost-looking positions. 34.7% of our declarer's voted decisions were
+  flat zero (every card loses in every sampled world), in 490 games; we
+  won 32 of those games, SkatZero 87 of the same boards. Not cold: only
+  SkatZero won 73 boards, only we 54. SkatZero is no more accurate double
+  dummy -- it throws more (92 throws against our 71) -- but its lines draw
+  more mistakes from the defenders: a gift in 31.3% of its not-cold games
+  against 28.0% of ours (257 gifts received against 224). This is what
+  best's lost-decl play-outs already chase (+0.93 there).
+- Won games' value. On cold boards the gap is +0.50, of it +0.28 the same
+  result at a different value -- Schneider and points -- what tie0-decl
+  chases.
+- Our own throws are small: 22 games won at some point and lost (6 by a
+  tie, 8 narrow, 8 wide); SkatZero won 18 of those boards.
+- The vote is calibrated, a little over-confident in the middle (cards at
+  26-50% of the worlds win 33% of the time, not 39%).
+
+So SkatZero's declaring edge over the search family is mostly in the two
+places best's play-outs already work on, and very little in plain
+accuracy. What is still left against best is the next question: the same
+audit with best and with the teacher in our declarer's chair
+(`--player=... --tag=best`, the hand-over now reports its vote with the
+card actually played, `DeclaringAuditMain` through
+`FlatHandoverProvider.withTap`).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

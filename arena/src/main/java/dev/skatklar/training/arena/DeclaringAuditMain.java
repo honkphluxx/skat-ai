@@ -223,15 +223,20 @@ public final class DeclaringAuditMain {
             SkatAiProvider provider = contestant.newProvider(Seeds.mix(
                     seed, board.index(), declarer.ordinal(), seat.ordinal()));
             boolean watch = seat == declarer ? watchTheVote : watchDefenders;
+            SearchAiProvider.CardPlayObserver voteWatcher = new SearchAiProvider.CardPlayObserver() {
+                @Override public void decided(SearchAiProvider.CardPlayReport report) {}
+                @Override public void voted(SkatAi.DecisionContext context,
+                                            Map<Card, Integer> votes, Map<Card, Integer> cushion,
+                                            int worldsSearched, boolean cushionAsked, Card chosen) {
+                    lastVote[0] = new Vote(votes, worldsSearched, cushionAsked, chosen);
+                }
+            };
             if (watch && provider instanceof SearchAiProvider search) {
-                provider = search.withCardPlayObserver(new SearchAiProvider.CardPlayObserver() {
-                    @Override public void decided(SearchAiProvider.CardPlayReport report) {}
-                    @Override public void voted(SkatAi.DecisionContext context,
-                                                Map<Card, Integer> votes, Map<Card, Integer> cushion,
-                                                int worldsSearched, boolean cushionAsked, Card chosen) {
-                        lastVote[0] = new Vote(votes, worldsSearched, cushionAsked, chosen);
-                    }
-                });
+                provider = search.withCardPlayObserver(voteWatcher);
+            } else if (watch && provider instanceof dev.skatklar.training.players.FlatHandoverProvider handover) {
+                // A search with play-outs (po:...): the search's vote, told
+                // once the card is settled, with the card actually played.
+                provider = handover.withTap(voteWatcher);
             }
             seating.put(seat, provider);
         }
