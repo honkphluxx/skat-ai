@@ -1267,6 +1267,17 @@ among the cards within k of the best by playing them out, which a single
 vote's luck cannot fool), and, for the wide ones, the belief that feeds
 the worlds. The first is a knob on what exists.
 
+*The declarer's tie margin, prepared (2026-10-13; `./tools/tie-margin.sh`).*
+best with the declarer's near-ties handed to the play-outs as well:
+tie<k>-decl for k = 2, 4 and 8 worlds of 64, the rest of best unchanged,
+against belief-64-shipped, seeds 11-16 and 21, each paired by seed with
+best at k = 0 from the play-out study. The audit's narrow outvotes (within
+a tenth of the worlds, about 6) fall inside k = 8; the vote's flattery of
+the card it picks is a few worlds at the margins that matter. No code
+change: the scope already takes a margin. A container smoke on an 8-world
+search handed 37% of the declarer's decisions at k = 4 against 30% at 0.
+About 12-14 hours at 16 threads.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
