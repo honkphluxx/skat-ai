@@ -1228,6 +1228,45 @@ audit with best and with the teacher in our declarer's chair
 card actually played, `DeclaringAuditMain` through
 `FlatHandoverProvider.withTap`).
 
+*Where SkatZero declares better than the teacher, and than best (2026-10-13).*
+The same audit with the teacher and with best in our declarer's chair
+(same 1,049 boards, our player defending both games, the solver judging):
+
+| | teacher | best |
+|---|---|---|
+| SkatZero's card-play share over ours | **3.20** | **1.56** |
+| cold boards: gap (of it the same result at another value) | +0.94 (+0.26) | +0.78 (+0.11) |
+| cold boards won only by SkatZero / only by us | 17 / 6 | 17 / 6 |
+| not cold: gap | +2.26 | +0.77 |
+| not cold boards won only by SkatZero / only by us | 75 / 47 | 71 / 57 |
+| flat-zero games won by us / by SkatZero on the same boards | 19 / 87 | 34 / 81 |
+| a gift in our not-cold games (SkatZero 30.0%) | 24.6% | 27.2% |
+| our games won at some point and lost | 18 | 20 |
+
+(The "from declaring" figures are not comparable with the 32-world audit
+of 2026-10-12: the defenders are our player in both games, so they change
+with it. The gaps are.)
+
+best closes half of SkatZero's declaring edge over the teacher, and where
+it was meant to: the not-cold boards (2.26 to 0.77 -- more swindles, the
+flat-zero games won 34 times instead of 19) and the value of won games
+(0.26 to 0.11). What it leaves is the other half of the cold-board gap,
+and it is not value: SkatZero loses 6 cold boards we win, we lose 17 it
+wins, the same 17 and 6 with best as with the teacher -- the play-outs
+never see these, because when the game is thrown it is neither lost nor
+tied. They are our throws of won games: 20 such games with best, the
+throwing card chosen over a winning one that was outvoted narrowly (9,
+within a tenth of the worlds), widely (7) or tied (4). The calibration
+says why the narrow ones happen: the card our declarer plays at a vote of
+51-75% wins 49% of the time (the claim is 64%), at 26-50% 26% (claim 38%)
+-- the card picked for its vote is picked partly for the vote's luck, and
+the sampled worlds are a little too kind. Two levers follow, both ours:
+widen the declarer's tie margin so that a near-tie goes to the play-outs
+(tie<k>-decl, k of 3 to 6 worlds out of 64 -- the play-outs then choose
+among the cards within k of the best by playing them out, which a single
+vote's luck cannot fool), and, for the wide ones, the belief that feeds
+the worlds. The first is a knob on what exists.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
