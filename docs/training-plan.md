@@ -1278,6 +1278,31 @@ change: the scope already takes a margin. A container smoke on an 8-world
 search handed 37% of the declarer's decisions at k = 4 against 30% at 0.
 About 12-14 hours at 16 threads.
 
+*The declarer's tie margin: the answer (2026-10-14, seeds 11-16 and 21).*
+It costs. best with near-ties handed over too, paired by seed with best at
+margin 0 (+1.31):
+
+| margin k (worlds of 64) | against the teacher | paired with k = 0 | per seed 11 12 13 14 15 16 21 |
+|---|---|---|---|
+| 2 | +0.72 [-0.05, +1.48] | -0.60 [-1.24, +0.05] | -0.43 +0.98 +0.56 +1.26 -0.10 +2.05 +0.70 |
+| 4 | +0.50 [-0.29, +1.30] | **-0.81 [-1.61, -0.01]** | -0.66 +0.03 +0.47 +1.38 -0.21 +1.74 +0.79 |
+| 8 | +0.83 [+0.10, +1.56] | -0.49 [-1.26, +0.29] | +0.21 +0.36 +0.66 +1.67 +0.09 +2.18 +0.63 |
+
+Every margin is below 0, k = 4 resolved. Few decisions move -- on seed 11
+the declarer's handed share goes from 55% at k = 0 to 61%, 64% and 65%,
+the added ones mostly ties short of the full vote, in open games -- and
+they cost half a point to most of a point: per decision the dearest
+change measured. The reading: where two cards' votes differ by even two
+worlds of 64, the solver over the sampled worlds knows something the
+play-outs do not, and the play-outs' ranking (the game's value first,
+under the student's play) overrides it at a loss. The play-outs win where
+the vote is silent -- every card lost, or exactly tied -- and lose where
+it speaks, however softly. So the thrown won games of the audit are not
+the play-outs' to fix; margin 0 stays. What remains for them is the
+belief and the worlds (the audit's wide outvotes), and the vote's
+flattery of its pick, which is the search's own statistics, not a
+hand-over question. About 39 minutes a seed and margin.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
