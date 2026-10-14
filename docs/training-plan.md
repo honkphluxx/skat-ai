@@ -1303,6 +1303,23 @@ belief and the worlds (the audit's wide outvotes), and the vote's
 flattery of its pick, which is the search's own statistics, not a
 hand-over question. About 39 minutes a seed and margin.
 
+*The student and more of best's data, prepared (2026-10-14; `./tools/data-scale.sh`).*
+The September curve (the teacher's cards: a quarter, a half and all of
+90,000 deals at 0.74, 0.62 and 0.51 held-out regret, about 0.12 a
+doubling, twice the epochs nothing) said the student is data-limited. This
+continues it on best's cards and asks what matters for a phone player:
+does the student on its own get stronger in games? best exports boards
+60,000-149,999 of seed 101 (teacher-data-best3, about 41 hours; with
+teacher-data-best and -best2, 150,000 deals of best's cards). Three
+training draws at 30,000 deals (policy-best, -i2, -i3, on disk), 60,000
+(policy-best2-u on disk, policy-b60-i2, -i3) and 150,000 (policy-b150,
+-i2, -i3), policy-model's recipe; the yardstick on teacher-data-best's
+held-out deals, which no student here has seen; then student-64 -- the
+student for every card of a suit or grand game -- with each, against
+belief-64-shipped, fixed contracts, seeds 11-16 and 21, the draws of a
+size averaged seed by seed and 60,000 and 150,000 paired with 30,000.
+About 13 hours of arena on top of the export.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
