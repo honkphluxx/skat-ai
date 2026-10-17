@@ -1353,6 +1353,28 @@ Then the data: 1,195,777 records took 44.8 hours (7.4 a second), so
 another 450,000 deals is about 9 days on this machine, or one to two on
 rented cores.
 
+*Training or size? The capacity check (2026-10-17, planned).*
+`tools/capacity-check.sh` asks both cheaper questions on
+teacher-data-best-150 alone, no new export. Two training-only variants,
+three init draws each (seeds 1-3):
+
+- **e40** -- 3 x 512, 40 epochs, the one-cycle learning rate stretched to
+  fit (policy-b150-e40, -i2, -i3). A best epoch at the end of a one-cycle
+  schedule is what the schedule does, not proof of under-training; this
+  asks whether the longer cycle pays.
+- **h1024** -- 3 x 1024, about four times the weights and the
+  multiply-adds a card (still a few milliseconds on a phone), also 40
+  epochs (policy-b150-h1024, -i2, -i3), so it is read against e40 and
+  the two changes stay apart.
+
+The yardstick on teacher-data-best's held-out deals beside the three
+20-epoch students of the data-scale run, then student-64 with each
+against belief-64-shipped, fixed contracts, seeds 11-16 and 21; the draws
+of a variant averaged seed by seed, e40 paired with the 20-epoch students
+(their reports in arena-logs/data-scale/) and h1024 with e40. About 8.5
+hours of arena. If neither moves the student, the 3.7 left are the data's
+to close, and the next 450,000 deals are the step.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
