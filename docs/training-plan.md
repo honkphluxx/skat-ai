@@ -1320,6 +1320,39 @@ belief-64-shipped, fixed contracts, seeds 11-16 and 21, the draws of a
 size averaged seed by seed and 60,000 and 150,000 paired with 30,000.
 About 13 hours of arena on top of the export.
 
+*The student and more of best's data: the answer (2026-10-17).* The curve
+is still straight, on the yardstick and in games. Three training draws a
+size, policy-model's recipe:
+
+| deals of best's cards | held-out regret, all (three draws) | student-64 against the teacher (draws averaged by seed, 7 seeds) | paired with 30,000 |
+|---|---|---|---|
+| 30,000 | 0.646 0.638 0.649 | -8.79 [-10.33, -7.26] | -- |
+| 60,000 | 0.520 0.515 0.516 | -6.54 [-7.95, -5.14] | **+2.25 [+1.47, +3.03]** |
+| 150,000 | 0.398 0.398 0.398 | -3.72 [-5.15, -2.29] | **+5.07 [+4.43, +5.72]** |
+
+The yardstick falls 0.13 from 30,000 to 60,000 and 0.12 more to 150,000
+(1.3 doublings): about 0.09-0.13 a doubling, a slight bend at most. The
+150,000-deal student regrets 0.40, between an 8-world (0.50) and a
+16-world search (0.33), and beats policy-model (the teacher's cards,
+90,000 deals: 0.50) as the curve says it should. In games the student
+playing every card of a suit or grand game on its own gains about 2.2
+game points a game a doubling (+2.25 for the first, +2.8 over the next
+1.3), with no bend yet; it is 3.7 behind the teacher at 150,000 deals. The
+draws of a size agree within 0.6 to 1.1, so the sizes are not the draw.
+This is the other side of 2026-10-10: the student's quality does not
+matter to best's play-outs, and it matters a great deal to the student
+playing alone, the phone's player. Extrapolated -- these curves bend
+eventually, and the ceiling is the player imitated -- level with the
+teacher wants about two more doublings, some 500,000-600,000 deals.
+
+Two cheaper questions come first. The 150,000-deal students were at their
+best held-out regret in epochs 18-20 of 20, so they may be
+under-trained, and 2 million records may want more than 3 x 512: both
+are training-only (minutes on the GPU) plus 4 hours of arena a variant.
+Then the data: 1,195,777 records took 44.8 hours (7.4 a second), so
+another 450,000 deals is about 9 days on this machine, or one to two on
+rented cores.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
