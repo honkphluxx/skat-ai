@@ -1375,6 +1375,36 @@ of a variant averaged seed by seed, e40 paired with the 20-epoch students
 hours of arena. If neither moves the student, the 3.7 left are the data's
 to close, and the next 450,000 deals are the step.
 
+*Training or size: the answer (2026-10-18).* Neither. The 150,000-deal
+student is short of data, not of epochs or width.
+
+| variant (three draws) | best epoch | held-out regret, all | student-64 against the teacher (7 seeds) | paired |
+|---|---|---|---|---|
+| 3 x 512, 20 epochs (data-scale) | 18-20 of 20 | 0.398 0.398 0.398 | -3.72 [-5.15, -2.29] | -- |
+| e40: 3 x 512, 40 epochs | 39, 24, 39 of 40 | 0.397 0.396 0.398 | -3.84 [-5.16, -2.52] | minus 20 epochs: -0.12 [-1.05, +0.80] |
+| h1024: 3 x 1024, 40 epochs | 14, 15, 16 of 40 | 0.419 0.421 0.421 | -4.30 [-6.07, -2.52] | minus e40: -0.45 [-1.29, +0.38] |
+
+The longer cycle changes nothing: on the training run's own held-out
+tricks the regret is flat at 0.75 from epoch 25 to 40 while the held-out
+loss turns up after epoch 25, so 3 x 512 is already at the edge of what
+2 million records support. The wider net overfits outright: its
+held-out loss is lowest near epoch 13 and climbs from 0.85 to 1.10 by
+epoch 40 while its training loss halves, and even at its kept (best)
+epoch it is worse on the yardstick (0.42 against 0.40) and, within the
+noise, in games. Best epochs at the end of a one-cycle schedule were the
+schedule, not under-training.
+
+So the lever is the data. Before 9 days of export, a cheaper way to more
+of it: the encoding is absolute in the suits (cards suit-major,
+BeliefEncoding.index), so the net learns every suit arrangement apart.
+The game is symmetric under permuting suits -- the side suits of a suit
+game (6 ways), the non-jack cards of a grand (24), whole suits in a Null
+(24) -- and the teacher's votes and the solver are with it, up to
+the order of the rule tiebreak. Permuting the
+features and the per-card targets in the trainer multiplies the records
+without a new board; whether it is worth a doubling is a training-only
+question.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
