@@ -291,6 +291,21 @@ tasks.register<JavaExec>("exportTeacher") {
     maxHeapSize = "2g"
 }
 
+/**
+ * The encoder's own pairs for the trainer's suit permutation
+ * (arena/python/fixtures/suit-permutation.bin; SuitPermutationFixtures). Run
+ * when the encoding changes and SuitPermutationFixturesTest says so.
+ *
+ * ./gradlew :arena:suitPermutationFixtures
+ */
+tasks.register<JavaExec>("suitPermutationFixtures") {
+    group = "verification"
+    description = "Writes the encoder's position pairs the trainer's suit permutation is checked against"
+    mainClass.set("dev.skatklar.training.data.SuitPermutationFixtures")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = projectDir
+}
+
 /** ./gradlew :arena:export --args="--boards=50000 --threads=4" */
 tasks.register<JavaExec>("export") {
     group = "verification"

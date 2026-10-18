@@ -43,8 +43,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from teacher_data import (CARDS, CONTRACTS, PLAY_STATE_FEATURES, SPLIT_RULE, TeacherCorpus, play_state_features,
-                          run_checks, split_by_board)
+from teacher_data import (CARDS, CONTRACTS, PLAY_STATE_FEATURES, SPLIT_RULE, Records, TeacherCorpus,
+                          play_state_features, run_checks, split_by_board)
+import suit_permutation
 
 for stream in (sys.stdout, sys.stderr):
     if hasattr(stream, "reconfigure"):
@@ -84,7 +85,7 @@ def losses(policy_logits, value_logits, legal, chosen, share):
 class Batches:
     """Tensors for a set of rows, a batch at a time."""
 
-    def __init__(self, corpus, records, device, play_state=False):
+    def __init__(self, corpus, records, device, play_state=False, permute=None, seed=0):
         self.corpus = corpus
         self.r = records
         self.device = device
@@ -92,22 +93,40 @@ class Batches:
         if play_state and records.play_state is None:
             raise SystemExit("the play state needs a format-3 corpus")
         self.play_state = play_state
+        # permute: a suit_permutation mode; training batches then draw a
+        # permutation of the suits per record (get(..., augment=True)).
+        self.permutation = None
+        if permute:
+            self.permutation = suit_permutation.SuitPermutation.for_corpus(corpus)
+            self.allowed = self.permutation.allowed(records.features, records.contract, permute)
+            self.rng = np.random.default_rng(seed)
+
+    def _inputs(self, features, state):
+        x = self.corpus.unpack(features)
+        if self.play_state:
+            x = np.concatenate([x, play_state_features(self.corpus, state, features)], axis=1)
+        return x
 
     def inputs(self, rows):
         """The input vectors for these rows, the play state appended when asked for."""
-        x = self.corpus.unpack(self.r.features[rows])
-        if self.play_state:
-            x = np.concatenate([x, play_state_features(self.corpus, self.r.play_state[rows],
-                                                       self.r.features[rows])], axis=1)
-        return x
+        return self._inputs(self.r.features[rows], self.r.play_state[rows] if self.play_state else None)
 
-    def get(self, rows):
+    def get(self, rows, augment=False):
         r = self.r
         d = self.device
-        return (torch.from_numpy(self.inputs(rows)).to(d),
-                torch.from_numpy(r.legal[rows]).to(d),
-                torch.from_numpy(r.chosen[rows]).to(d),
-                torch.from_numpy(self.share[rows]).to(d))
+        features, legal, chosen, share = r.features[rows], r.legal[rows], r.chosen[rows], self.share[rows]
+        state = r.play_state[rows] if self.play_state else None
+        if augment and self.permutation is not None:
+            p, contract = self.permutation, r.contract[rows]
+            k = p.draw(self.allowed[rows], self.rng)
+            features, legal = p.features(features, contract, k), p.per_card(legal, contract, k)
+            chosen, share = p.card(chosen, contract, k), p.per_card(share, contract, k)
+            if state is not None:
+                state = p.play_state(state, contract, k)
+        return (torch.from_numpy(self._inputs(features, state)).to(d),
+                torch.from_numpy(np.ascontiguousarray(legal)).to(d),
+                torch.from_numpy(np.ascontiguousarray(chosen)).to(d),
+                torch.from_numpy(np.ascontiguousarray(share)).to(d))
 
 
 def predict(model, batches, rows, batch=8192):
@@ -227,6 +246,11 @@ def main():
     parser.add_argument("--play-state", action="store_true",
                         help="format 3: append the play so far -- points and tricks won, and for each "
                              "card when it fell, where in its trick and who took it -- to the inputs")
+    parser.add_argument("--permute-suits", default="off", choices=("off",) + suit_permutation.MODES,
+                        help="draw a permutation of the suits for every training record, every epoch "
+                             "(suit_permutation.py): 'all' every one the contract admits, 'bids' only "
+                             "those that keep each remembered bid's suits onto themselves; the held-out "
+                             "set is never permuted")
     parser.add_argument("--limit", type=int, default=0, help="read only this many records; a smoke run")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
@@ -265,8 +289,23 @@ def main():
     print(f"{len(train):,} training records, {len(val):,} held out "
           f"({len(np.unique(records.deal[val])):,} whole deals)")
 
+    permute = None if args.permute_suits == "off" else args.permute_suits
+    if permute:
+        print(f"suit permutation, mode {permute}:")
+        if not suit_permutation.check_fixtures(corpus.fields, corpus.size):
+            print("the permutation does not reproduce the Java encoder's pairs; not training with it")
+            sys.exit(1)
+        sample = Records(records.raw[:100_000])
+        if not suit_permutation.check_corpus(corpus, sample, permute, seed=init_seed, verbose=False):
+            print("the permuted records fail the corpus checks; not training with them")
+            sys.exit(1)
+        table = suit_permutation.SuitPermutation.for_corpus(corpus)
+        suit_permutation.report_allowed(table.allowed(records.features[train], records.contract[train], permute),
+                                        records.contract[train], permute)
+        print()
+
     device = torch.device(args.device)
-    batches = Batches(corpus, records, device, args.play_state)
+    batches = Batches(corpus, records, device, args.play_state, permute, seed=init_seed + 1)
     inputs = corpus.size + (PLAY_STATE_FEATURES if args.play_state else 0)
     model = PolicyNet(inputs, args.hidden, args.layers).to(device)
     if args.init_from:
@@ -320,7 +359,7 @@ def main():
         running_p = running_v = 0.0
         for step in range(steps_per_epoch):
             rows = order[step * args.batch:(step + 1) * args.batch]
-            x, legal, chosen, share = batches.get(rows)
+            x, legal, chosen, share = batches.get(rows, augment=True)
             p, v = model(x)
             lp, lv = losses(p, v, legal, chosen, share)
             loss = lp + args.value_weight * lv
@@ -399,6 +438,7 @@ def write_descriptor(out, corpus, args, summary, best_epoch, train_rows, val_row
         "init_from": str(pathlib.Path(args.init_from).resolve().name) if args.init_from else None,
         "freeze_epochs": args.freeze_epochs if args.init_from else 0,
         "lr": args.lr,
+        "permute_suits": None if args.permute_suits == "off" else args.permute_suits,
         "split_rule": SPLIT_RULE,
         "split_seed": args.seed,
         "split_fraction": args.val_fraction,

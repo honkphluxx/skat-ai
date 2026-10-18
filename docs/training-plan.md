@@ -1405,6 +1405,49 @@ features and the per-card targets in the trainer multiplies the records
 without a new board; whether it is worth a doubling is a training-only
 question.
 
+*The suits permuted (2026-10-18, planned).* `train_policy.py
+--permute-suits` draws, for every training record and every epoch, a
+permutation of the suits the contract admits and moves the inputs and the
+targets with it (`arena/python/suit_permutation.py`): the three side suits
+of a suit game (the trump suit stays: the contract and the bids are priced
+on it, and the encoder's trump counts change when it moves), the four suits
+of a grand or a Ramsch with the jacks kept, the whole suits of a Null. It
+moves the eight per-card fields, the follow classes shown out of, and in a
+Null the unseen jacks; the legal cards, the card played, the votes and the
+play so far with them; the held-out set is never permuted. A field the
+module has not been told about stops it. Two checks before it trains: 192
+pairs the Java encoder wrote itself (`SuitPermutationFixtures`: a random
+position and the same position with every card moved, both through
+`BeliefEncoding`; committed as `arena/python/fixtures/suit-permutation.bin`,
+and `SuitPermutationFixturesTest` fails when the encoder writes other
+bytes), which the table must reproduce byte for byte -- mutants that move
+the jacks outside a Null, keep them in one, or leave the voids, the unseen
+jacks or a card field behind all fail it -- and the corpus checks of
+`teacher_data.run_checks` on 100,000 permuted records, which catch a
+verdict or a play state left unmoved.
+
+A bid names suits without saying so (22 is spades), and a permutation
+leaves it saying the same number. Mode `all` permutes anyway, 8.2
+permutations a record on average (6 in a suit game, 24 in a grand); mode
+`bids` only those mapping each remembered bid's suits (and the winning
+bid's) onto themselves, 3.2 on average -- the declarer's 18 alone pins the
+diamonds in most hearts, spades and clubs games. Without the flag the
+trainer is unchanged, epoch for epoch.
+
+A first reading on six shards of teacher-data-best (5,400 training
+deals), one draw, 3 x 512, 12 epochs on the CPU, the run's own held-out
+deals: regret 1.87 unpermuted (best at epoch 9; training loss 0.59 against
+1.28 held out by epoch 12), 1.57 with `all`, 1.62 with `bids`. That is a
+small-data reading and one draw; `tools/permute-check.sh` makes the real
+one: `all` and `bids` at 20 and 40 epochs on 30,000 deals, `all` at 20 and
+40 and `bids` at 20 on 150,000, three draws each; the yardstick beside the
+unpermuted 30,000-, 60,000- and 150,000-deal students, each variant's
+regret read off that curve as the deals it is worth; then student-64 with
+the best 150,000-deal variant against belief-64-shipped, seeds 11-16 and
+21, paired with the unpermuted students of the same epochs. About 1.2
+hours of training and 4.2 of arena. Nothing changes at play time: the
+student reads the same encoding.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
