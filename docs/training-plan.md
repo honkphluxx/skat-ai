@@ -1448,6 +1448,36 @@ the best 150,000-deal variant against belief-64-shipped, seeds 11-16 and
 hours of training and 4.2 of arena. Nothing changes at play time: the
 student reads the same encoding.
 
+*The suits permuted: the answer (2026-10-18).* It pays, on the yardstick
+and in games. Three draws a variant; the yardstick on teacher-data-best's
+held-out deals, read off the unpermuted curve (30,000 0.644, 60,000 0.517,
+150,000 0.398) as the deals it is worth:
+
+| deals | variant | held-out regret | worth, unpermuted |
+|---|---|---|---|
+| 30,000 | all, 20 epochs | 0.526 | about 57,000 |
+| 30,000 | all, 40 epochs | **0.482** | about 79,000 |
+| 30,000 | bids, 20 / 40 epochs | 0.557 / 0.553 | about 48,000 |
+| 150,000 | all, 20 epochs | 0.366 | about 192,000 |
+| 150,000 | all, 40 epochs | **0.339** | about 236,000 |
+| 150,000 | bids, 20 epochs | 0.377 | about 176,000 |
+
+(Beyond 150,000 the worth extends the curve's last segment: an
+extrapolation.) `all` beats `bids` everywhere: the more permutations are
+worth more than the bids they leave contradicted. And 40 epochs now pays
+where unpermuted it did not (2026-10-18: -0.12), the best epochs at 37-40
+of 40: the permuted records hold more than 20 epochs take in. The gain
+shrinks with the data, 2.6 times the deals at 30,000 and 1.6 at 150,000,
+as an augmentation should.
+
+In games, student-64 with the three `all`/40 students against
+belief-64-shipped, seeds 11-16 and 21: -2.61 [-3.99, -1.23], against
+-3.84 for the unpermuted 40-epoch students; **paired +1.23 [+0.35,
++2.11]**. The data-scale curve's 2.2 game points a doubling over the
+0.65 doublings the yardstick reads predicts +1.4: the yardstick and the
+games agree again. `--permute-suits all` at 40 epochs is the student's
+recipe from here; nothing changes at play time.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
