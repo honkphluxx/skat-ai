@@ -1478,6 +1478,22 @@ belief-64-shipped, seeds 11-16 and 21: -2.61 [-3.99, -1.23], against
 games agree again. `--permute-suits all` at 40 epochs is the student's
 recipe from here; nothing changes at play time.
 
+*Next: the data, and the recipe beside it (2026-10-18, planned).* Two runs
+at once, one on the cores and one on the GPU. `tools/export-more.sh`
+exports best on boards 150,000-599,999 of seed 101 as data-scale did (the
+same seating draw, population and mix) into teacher-data-best4/, about
+2,000 deals an hour, 9 to 10 days; it resumes shard by shard, and
+`--assemble-only` builds teacher-data-best-<N> (the 150,000 and every
+complete shard so far) for a point on the curve before it is through --
+teacher-data-best-600 at the end. `tools/recipe-check.sh` asks, on the
+permuted records, what the unpermuted ones answered no to: 60 and 80
+epochs (the permuted 40 were best at epochs 37-40), and 3 x 1024 at 40 and
+80 (it overfitted by epoch 14 unpermuted); three draws each, the yardstick
+beside pa40 and the unpermuted students. Training only by default, so it
+does not take the export's cores; `--arena=auto` later plays the
+lowest-regret variant against pa40, and `--data=teacher-data-best-600`
+repeats the whole question on the larger corpus.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
