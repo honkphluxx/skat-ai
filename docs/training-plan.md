@@ -1544,6 +1544,28 @@ question is open. `tools/recipe-check.sh` takes `--variants` and `--draws`:
 yardstick beside pa40 and 3 x 1024/80 (their three draws on disk). Training
 only; games for whichever clearly beats 0.274.
 
+*The size test: the answer (2026-10-31).* One draw each, 600,000 deals,
+suits permuted, 80 epochs; the yardstick (all / tricks 4-6 / 7-9):
+
+| network | weights | held-out regret | tricks 4-6 | tricks 7-9 | best epoch |
+|---|---|---|---|---|---|
+| 3 x 512, 40 epochs (pa40, three draws) | 0.7 M | 0.297 | 0.38 | 0.22 | 37-40 |
+| 3 x 1024 (three draws) | 2.5 M | 0.274 | 0.34 | 0.21 | 78-80 |
+| 5 x 1024 | 4.6 M | **0.265** | 0.32 | 0.20 | 79 |
+| 4 x 2048 | 13.4 M | 0.279 | 0.34 | 0.21 | 52 |
+
+Depth buys a little more (0.009 on 3 x 1024, against a draw-to-draw spread
+of about 0.002); width to 2,048 overfits: held-out loss lowest near epoch
+40 (0.709), 0.754 by 80 while training loss falls to 0.556; the
+teacher's card agreed with about 70% of the time at every size. Each
+doubling of the weights buys less (0.023, then 0.009, then nothing), and
+the 0.023 of 3 x 1024 was +0.15 [-0.53, +0.83] in games. Size is not what
+holds the student back: a few hundredths of yardstick, a few tenths of a
+game point at most, for many times the phone's work. The endgame, where
+the 32-world search regrets 0.04, stays at 0.20 whatever the size. Next:
+learning from outcomes, starting from 3 x 512 (or 5 x 1024 if the phone's
+budget allows).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
