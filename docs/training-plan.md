@@ -1566,6 +1566,44 @@ the 32-world search regrets 0.04, stays at 0.20 whatever the size. Next:
 learning from outcomes, starting from 3 x 512 (or 5 x 1024 if the phone's
 budget allows).
 
+*Route 1: learning from outcomes, the plan (2026-10-31).* The student is
+now limited by what imitation can teach, not by data or size: 1.41 behind
+the teacher on its own (policy-b600-pa40), its endgame at 0.20 worlds of 32
+whatever its width, while SkatZero -- a net of the same size, 1.5 billion
+self-play games -- learned the declarer's endgame from outcomes. The DMC
+pilot (2026-10-02) showed how not to: one outcome per decision is decided
+by the deal, not the card, and drowned the difference between cards (value
+head worse every iteration, policy drifting). The plan follows that
+note's own conclusion -- compare the cards on the same deal:
+
+1. *The all-cards self-play exporter.* Self-play with the student in all
+   three seats, fixed suit and grand contracts (greedy's auction), board
+   seeds away from 101. At a decision, every legal card is played out to
+   the end of the game K times on the true cards, each seat played by the
+   net from its own evidence only (no seat sees a hidden card), the others'
+   cards drawn from the softmax as in rollout-32x4; each card labelled with
+   its mean win, card points and game value. The deal is the game's own,
+   a draw from the true posterior given the decider's knowledge, so the
+   labels estimate each card's value with no belief model in them, and
+   the deal's variance cancels between the cards of one decision.
+   RolloutRescue's lockstep batched play-outs do this in sampled worlds
+   already; here the world is the real one. Throughput first.
+2. *Training,* from policy-b600-pa40: the value head on every legal card's
+   label, the policy head towards the best card by the labels (game value,
+   then wins, then points, as best ranks), the teacher-data-best-600
+   imitation loss mixed in as an anchor against the pilot's drift, suits
+   permuted on both.
+3. *Measures:* the yardstick by trick (the referee is double-dummy, so a
+   gain in games with a flat yardstick is possible), then student-64
+   against belief-64-shipped, seeds 11-16 and 21, three draws, paired
+   with policy-b600-pa40.
+4. *Iterate:* the new net plays and labels the next round; opponents
+   partly from earlier nets and fixed outsiders (Phase P's rule); two
+   failed gates end it.
+
+Out of scope for now: the auction, Null, Ramsch. No SkatZero in any
+training data; it stays a held-out yardstick, measured at the end.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
