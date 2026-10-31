@@ -7,6 +7,8 @@
 #   ./tools/recipe-check.sh --arena=h1024-pa80
 #   ./tools/recipe-check.sh --data=teacher-data-best-600 --arena=auto
 #   ./tools/recipe-check.sh --threads=15 --seeds="11 12 13" --python=/c/Python312/python.exe
+#   ./tools/recipe-check.sh --data=teacher-data-best-600 --variants="h1024x5-pa80 h2048x4-pa80" --draws=1
+#                                             the size test: deeper and wider, one draw each
 #
 # With the suits permuted (--permute-suits all) 40 epochs paid where it had
 # not before, the best epochs at 37-40 of 40, and the student gained +1.23
@@ -30,6 +32,12 @@
 # played too). About 2.5 hours of training at 150,000 deals, more beside the
 # export; 4.2 hours of arena a variant at 16 threads.
 #
+# --variants names others: pa<epochs> for 3 x 512, h<width>[x<layers>]-pa<epochs>
+# otherwise (h2048x4-pa80: four layers of 2048, 80 epochs); pa40, the
+# yardstick's reference, is always among them. --draws=N trains N init draws
+# of a variant not yet on disk; draws already on disk are always read. The
+# yardstick is rerun whenever a student is missing from it.
+#
 # Each step is skipped when its output exists; arena reports are written as
 # .partial first; touch STOP to stop after the current one. Read
 # arena-logs/summary-recipe-check.txt.
@@ -46,6 +54,7 @@ cd "$(dirname "$RC_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
 QUICK=false; THREADS=16; BOARDS=200; SEEDS="11 12 13 14 15 16 21"; ARENA=none; DATA=teacher-data-best-150
+VARIANTS=""; DRAWS=3
 PYTHON=${SKATKLAR_PYTHON:-}
 for arg in "$@"; do
     case "$arg" in
@@ -54,8 +63,10 @@ for arg in "$@"; do
         --seeds=*)    SEEDS="${arg#*=}" ;;
         --arena=*)    ARENA="${arg#*=}" ;;
         --data=*)     DATA="${arg#*=}" ;;
+        --variants=*) VARIANTS="${arg#*=}" ;;
+        --draws=*)    DRAWS="${arg#*=}" ;;
         --python=*)   PYTHON="${arg#*=}" ;;
-        -h|--help)    sed -n '2,37p' "$RC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,45p' "$RC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -78,21 +89,29 @@ case "$DATA" in teacher-data-best-*) TAG="b${DATA#teacher-data-best-}" ;; *) TAG
 T=belief-64-shipped
 SUFFIX=""
 $QUICK && { BOARDS=20; SEEDS="11"; SUFFIX="-quick"; }
-# variant|model|hidden|epochs|init seed
+# variant|model|hidden|layers|epochs|init seed
 STUDENTS=()
-add() {   # $1 variant, $2 hidden, $3 epochs
-    local draws="1 2 3"; $QUICK && draws="1"
-    local e=$3; $QUICK && e=2
-    for i in $draws; do
-        local m="policy-$TAG-$1"; [ "$i" -gt 1 ] && m="$m-i$i"
-        STUDENTS+=("$1|$m$SUFFIX|$2|$e|$i")
+add() {   # $1 variant: pa<epochs>, or h<width>[x<layers>]-pa<epochs>
+    local v=$1 hidden=512 layers=3 e i m
+    if [[ $v =~ ^pa([0-9]+)$ ]]; then e=${BASH_REMATCH[1]}
+    elif [[ $v =~ ^h([0-9]+)(x([0-9]+))?-pa([0-9]+)$ ]]; then
+        hidden=${BASH_REMATCH[1]}; layers=${BASH_REMATCH[3]:-3}; e=${BASH_REMATCH[4]}
+    else echo "a variant is pa<epochs> or h<width>[x<layers>]-pa<epochs>, not $v" >&2; exit 2; fi
+    $QUICK && e=2
+    for i in 1 2 3; do
+        m="policy-$TAG-$v"; [ "$i" -gt 1 ] && m="$m-i$i"; m="$m$SUFFIX"
+        # Draws beyond --draws only when they are on disk already.
+        [ "$i" -gt "$DRAWS" ] && [ ! -f "$m/policy.pt" ] && continue
+        STUDENTS+=("$v|$m|$hidden|$layers|$e|$i")
     done
 }
-if $QUICK; then
-    add pa40 512 40; add h1024-pa40 1024 40
-else
-    add pa40 512 40; add pa60 512 60; add pa80 512 80; add h1024-pa40 1024 40; add h1024-pa80 1024 80
+if [ -z "$VARIANTS" ]; then
+    VARIANTS="pa40 pa60 pa80 h1024-pa40 h1024-pa80"; $QUICK && VARIANTS="pa40 h1024-pa40"
 fi
+$QUICK && DRAWS=1
+case "$DRAWS" in [123]) ;; *) echo "--draws is 1, 2 or 3, not $DRAWS" >&2; exit 2 ;; esac
+case " $VARIANTS " in *" pa40 "*) ;; *) VARIANTS="pa40 $VARIANTS" ;; esac
+for v in $VARIANTS; do add "$v"; done
 # The unpermuted students on disk (tools/data-scale.sh, tools/capacity-check.sh), for the yardstick.
 UNPERMUTED=(policy-best policy-best-i2 policy-best-i3 policy-b150 policy-b150-i2 policy-b150-i3
             policy-b150-e40 policy-b150-e40-i2 policy-b150-e40-i3)
@@ -105,12 +124,12 @@ say "============================================================"
 say "recipe check started $(date '+%Y-%m-%d %H:%M:%S')   data=$DATA boards=$BOARDS threads=$THREADS seeds=$SEEDS arena=$ARENA"
 
 for entry in "${STUDENTS[@]}"; do
-    IFS='|' read -r variant model hidden epochs init <<< "$entry"
+    IFS='|' read -r variant model hidden layers epochs init <<< "$entry"
     [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
     if [ ! -f "$model/policy.pt" ]; then
-        say "  [$(date '+%H:%M:%S')] train $model: 3 x $hidden, $epochs epochs, suits permuted, init seed $init"
+        say "  [$(date '+%H:%M:%S')] train $model: $layers x $hidden, $epochs epochs, suits permuted, init seed $init"
         if ! "$PYTHON" arena/python/train_policy.py --data "$DATA" --out "$model" --epochs "$epochs" \
-                --hidden "$hidden" --permute-suits all --init-seed "$init" > "$LOG/train-$model.txt" 2>&1; then
+                --hidden "$hidden" --layers "$layers" --permute-suits all --init-seed "$init" > "$LOG/train-$model.txt" 2>&1; then
             tail -8 "$LOG/train-$model.txt" | sed 's/^/      /' | tee -a "$SUMMARY"
             say "  TRAINING FAILED -- see $LOG/train-$model.txt"; exit 1
         fi
@@ -123,10 +142,17 @@ for entry in "${STUDENTS[@]}"; do
 done
 
 YARD="$LOG/yardstick-$TAG$SUFFIX.txt"
+# Rerun when a student is missing from it (a later --variants).
+if [ -f "$YARD" ]; then
+    for entry in "${STUDENTS[@]}"; do
+        IFS='|' read -r variant model hidden layers epochs init <<< "$entry"
+        grep -qE "^ +student $model +[0-9]" "$YARD" || { say "  the yardstick lacks $model -- rerunning it"; mv "$YARD" "$YARD.old"; break; }
+    done
+fi
 if [ ! -f "$YARD" ]; then
     models=""
     for m in "${UNPERMUTED[@]}"; do [ -f "$m/policy.pt" ] && models="$models --model $m"; done
-    for entry in "${STUDENTS[@]}"; do IFS='|' read -r variant model hidden epochs init <<< "$entry"; models="$models --model $model"; done
+    for entry in "${STUDENTS[@]}"; do IFS='|' read -r variant model hidden layers epochs init <<< "$entry"; models="$models --model $model"; done
     say "  [$(date '+%H:%M:%S')] yardstick on teacher-data-best's held-out deals"
     # shellcheck disable=SC2086 -- $models is deliberately word-split
     "$PYTHON" arena/python/eval_policy.py --data teacher-data-best $models > "$YARD.partial" 2>&1 \
@@ -146,7 +172,7 @@ mean_regret() {
 best_epoch_of() { [ -f "$1/model.json" ] && sed -nE 's/.*"best_epoch": ([0-9]+).*/\1/p' "$1/model.json"; }
 models_of() {
     local want=$1 out=""
-    for entry in "${STUDENTS[@]}"; do IFS='|' read -r variant model hidden epochs init <<< "$entry"; [ "$variant" = "$want" ] && out="$out $model"; done
+    for entry in "${STUDENTS[@]}"; do IFS='|' read -r variant model hidden layers epochs init <<< "$entry"; [ "$variant" = "$want" ] && out="$out $model"; done
     echo "$out"
 }
 variants() {

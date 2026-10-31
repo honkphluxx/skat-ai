@@ -1530,6 +1530,20 @@ regrets 0.30 worlds of 32, between a 16- and a 32-world search; best,
 whose cards it imitates, is +1.31 above the teacher. More of the same data
 is no longer the cheap lever it was.
 
+*The size test (2026-10-31, planned).* Is the student short of size, now
+that more data has stopped paying? SkatZero's nets are no bigger than ours
+(five layers of 512 and an LSTM of 128 over the history, about 1.5
+million weights each, nine of them by game type and seat); what it does
+better on our yardstick -- the declarer's endgame -- it learned from
+outcomes. Still, 3 x 1024 at 600,000 deals was best at epochs 78-80 and
+improved the yardstick from 0.297 to 0.274, mostly in tricks 4-6, so the
+question is open. `tools/recipe-check.sh` takes `--variants` and `--draws`:
+`--data=teacher-data-best-600 --variants="h1024x5-pa80 h2048x4-pa80"
+--draws=1` trains five layers of 1,024 (4.5 million weights) and four of
+2,048 (13 million), 80 epochs, suits permuted, one draw each, and runs the
+yardstick beside pa40 and 3 x 1024/80 (their three draws on disk). Training
+only; games for whichever clearly beats 0.274.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
