@@ -1494,6 +1494,42 @@ does not take the export's cores; `--arena=auto` later plays the
 lowest-regret variant against pa40, and `--data=teacher-data-best-600`
 repeats the whole question on the larger corpus.
 
+*The recipe and 600,000 deals: the answer (2026-10-31).* The export
+finished: boards 150,000-599,999 in 258.7 hours (450 shards, 5.96 million
+records), teacher-data-best-600 assembled. Both recipe checks, three draws
+a variant, suits permuted throughout; the yardstick on teacher-data-best's
+held-out deals:
+
+| variant | 150,000 deals | 600,000 deals |
+|---|---|---|
+| 3 x 512, 40 epochs (pa40) | 0.339 | 0.297 |
+| 3 x 512, 60 epochs | 0.330 | 0.293 |
+| 3 x 512, 80 epochs | 0.325 | 0.288 |
+| 3 x 1024, 40 epochs | **0.324** | 0.278 |
+| 3 x 1024, 80 epochs | 0.332 (overfits after ~50) | **0.274** |
+
+In games, student-64 against belief-64-shipped, seeds 11-16 and 21, the
+draws averaged seed by seed:
+
+- at 150,000, 3 x 1024/40 -2.39 against pa40's -2.61: **+0.22 [-0.26,
+  +0.71]**;
+- at 600,000, 3 x 1024/80 -1.26 against pa40's -1.41: **+0.15 [-0.53,
+  +0.83]**;
+- pa40 at 600,000 against pa40 at 150,000: **+1.20 [+0.41, +1.98]**; against
+  the unpermuted 20-epoch students at 150,000, +2.31 [+0.80, +3.81].
+
+Two readings. Width and epochs buy yardstick (0.02 at 600,000) and next
+to nothing measurable in games; a 3 x 1024 student costs the phone four
+times the multiply-adds for at most a few tenths, so 3 x 512 with the
+suits permuted at 40 epochs stays the recipe. And the curve bends: four
+times the deals gave +1.2 game points, 0.6 a doubling against the 2.2 a
+doubling from 30,000 to 150,000, and the yardstick fell 0.04 over the two
+doublings against 0.12-0.13 a doubling before. The student playing on its
+own is now 1.4 behind the teacher (it was 8.8 at 30,000 unpermuted) and
+regrets 0.30 worlds of 32, between a 16- and a 32-world search; best,
+whose cards it imitates, is +1.31 above the teacher. More of the same data
+is no longer the cheap lever it was.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
