@@ -144,6 +144,22 @@ tasks.register<JavaExec>("selfPlayExport") {
     forwardProperties()
 }
 
+/**
+ * The play-outs' discard fix, proven narrow: best against the teacher in the
+ * old form and the new, every rotation of a few boards; only defenders'
+ * hand-overs may move. See DefenderDiscardReplayMain and tools/defender-fix.sh.
+ *
+ * ./gradlew :arena:defenderReplay --args="--seed=11 --boards=10 --threads=16"
+ */
+tasks.register<JavaExec>("defenderReplay") {
+    group = "application"
+    description = "Replays best with and without the play-outs' discard fix and checks only defenders moved"
+    mainClass.set("dev.skatklar.training.players.DefenderDiscardReplayMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:play --args="--level=club" */
 tasks.register<JavaExec>("play") {
     group = "application"

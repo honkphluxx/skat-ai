@@ -116,13 +116,98 @@ public class RolloutRescueTest {
                     List.of(new WorldSampler.World(step.hands(), step.skat())), List.of(card)).get(0);
             Playout.Result r = new Playout(at, step.hands(), step.skat()).run(card, x -> RolloutRescue.top(
                     net.logits(PolicyNet.features(dev.skatklar.training.data.SelfPlayExportMain.perfectMemory(
-                            x, Map.of(), null))), new ArrayList<>(x.legalCards)));
+                            x, Map.of(), x.mySeat == x.game.declarer ? step.skat() : null))),
+                    new ArrayList<>(x.legalCards)));
             assertEquals("a defender wins when the declarer loses", r.declarerWon() ? 0 : 1, t.wins());
             assertEquals("the defenders' card points", 120 - r.declarerPoints(), t.points());
             assertEquals("the defenders' value is the declarer's turned round", -r.gameValue(), t.value());
             checked++;
         }
         assertTrue("defender decisions checked: " + checked, checked > 10);
+    }
+
+    /** The tally of every legal card in one world, every seat by the top card, each seat's evidence as given. */
+    static List<RolloutRescue.Tally> reference(PolicyNet net, PlayoutTest.Step step, List<Card> declarersDiscard) {
+        SkatAi.DecisionContext at = step.context();
+        boolean declares = at.mySeat == at.game.declarer;
+        List<RolloutRescue.Tally> out = new ArrayList<>();
+        for (Card card : at.legalCards) {
+            Playout.Result r = new Playout(at, step.hands(), step.skat()).run(card, x -> RolloutRescue.top(
+                    net.logits(PolicyNet.features(dev.skatklar.training.data.SelfPlayExportMain.perfectMemory(
+                            x, Map.of(), x.mySeat == x.game.declarer ? declarersDiscard : null))),
+                    new ArrayList<>(x.legalCards)));
+            out.add(new RolloutRescue.Tally(card, r.declarerWon() == declares ? 1 : 0,
+                    declares ? r.declarerPoints() : 120 - r.declarerPoints(),
+                    declares ? r.gameValue() : -r.gameValue()));
+        }
+        return out;
+    }
+
+    @Test public void aDefendersPlayOutsGiveTheDeclarerItsDiscard() throws IOException {
+        // The defect of 2026-10-31: when a defender decided, the declarer in its
+        // play-outs played without its own discard. The reference here gives
+        // every seat the evidence it has at the table; the tally must equal it,
+        // and on enough decisions must differ from a declarer that forgot.
+        PolicyNet net = randomNet(12);
+        int checked = 0;
+        int forgettingDiffers = 0;
+        for (PlayoutTest.Step step : steps(61, 4)) {
+            SkatAi.DecisionContext at = step.context();
+            if (at.legalCards.size() < 2 || at.mySeat == at.game.declarer) continue;
+            List<WorldSampler.World> world = List.of(new WorldSampler.World(step.hands(), step.skat()));
+            List<RolloutRescue.Tally> tally = new RolloutRescue(net, 1, 0, true, 7)
+                    .tally(at, null, world, new ArrayList<>(at.legalCards));
+            assertEquals("a defender's play-outs: the declarer remembers its discard",
+                    reference(net, step, step.skat()), tally);
+            if (!reference(net, step, null).equals(tally)) forgettingDiffers++;
+            checked++;
+        }
+        assertTrue("defender decisions checked: " + checked, checked > 20);
+        assertTrue("the discard changes some tallies (" + forgettingDiffers + " of " + checked + ")",
+                forgettingDiffers >= 3);
+    }
+
+    @Test public void theDiscardRuleNamesTheDeclarersOwn() {
+        List<PlayoutTest.Step> all = steps(67, 2);
+        PlayoutTest.Step defending = null;
+        PlayoutTest.Step declaring = null;
+        for (PlayoutTest.Step step : all) {
+            if (step.context().legalCards.size() < 2) continue;
+            if (step.context().mySeat == step.context().game.declarer) {
+                if (declaring == null) declaring = step;
+            } else if (defending == null) {
+                defending = step;
+            }
+        }
+        WorldSampler.World world = new WorldSampler.World(defending.hands(), defending.skat());
+        assertEquals("a defender decides: the world's skat", defending.skat(),
+                RolloutRescue.declarersDiscard(defending.context(), null, world, false));
+        assertEquals("the old form: the defender's evidence, which has none", null,
+                RolloutRescue.declarersDiscard(defending.context(), null, world, true));
+
+        SkatAi.DecisionContext d = defending.context();
+        SkatAi.GameDefinition g = d.game;
+        SkatAi.GameDefinition hand = new SkatAi.GameDefinition(g.declarer, g.initialLeader, g.contract, g.round,
+                g.bidValue, true, false, false, false);
+        SkatAi.DecisionContext inHand = new SkatAi.DecisionContext(hand, d.mySeat, d.hand, d.legalCards,
+                d.currentTrick, d.history, d.derived);
+        assertEquals("a hand game: the declarer never saw the skat", null,
+                RolloutRescue.declarersDiscard(inHand, null, world, false));
+
+        // The declarer decides: its own evidence, not the world -- here a world
+        // whose skat is not the discard, which the declarer's path must ignore.
+        SkatAi.DecisionContext c = declaring.context();
+        List<Card> discard = declaring.skat();
+        BeliefEncoding.Evidence seen = dev.skatklar.training.data.SelfPlayExportMain.perfectMemory(c, Map.of(), discard);
+        List<Card> other = new ArrayList<>();
+        for (List<Card> h : declaring.hands()) {
+            for (Card card : h) if (other.size() < 2 && !discard.contains(card) && !c.hand.contains(card)) other.add(card);
+        }
+        WorldSampler.World odd = new WorldSampler.World(declaring.hands(), other);
+        assertEquals("the declarer decides: its own discard", discard,
+                RolloutRescue.declarersDiscard(c, seen, odd, false));
+        assertEquals("and the old form agrees", discard, RolloutRescue.declarersDiscard(c, seen, odd, true));
+        assertEquals("no evidence, no discard", null, RolloutRescue.declarersDiscard(c, null, odd, false));
     }
 
     @Test public void theTemperatureReachesTheOpponentsDraws() throws IOException {

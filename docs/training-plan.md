@@ -1604,6 +1604,63 @@ note's own conclusion -- compare the cards on the same deal:
 Out of scope for now: the auction, Null, Ramsch. No SkatZero in any
 training data; it stays a held-out yardstick, measured at the end.
 
+*The play-outs' discard defect, fixed (2026-10-31; `tools/defender-fix.sh`).*
+Found while reading `RolloutRescue` for the route-1 exporter. In a play-out
+every seat reads its own evidence, and the declarer's includes its discard.
+`tally` took that discard from the deciding seat's evidence. When the
+declarer decided, that was right; when a defender decided, the defender's
+evidence has no discard, so the declarer in every one of those play-outs
+played as though it had none (its discard field empty, as in a hand
+game). Only the defenders' scopes ran that path: `lost-def` and every
+`tie<k>-def`. The declarer's scopes (`lost-decl`, `tie<k>-decl`), student-64
+and the yardstick never did. So `best` (+1.31 [+0.81, +1.81], which holds
+`lost-def`), the defenders' own verdicts of the play-out study and its
+narrowing (lost-def +0.07, tie0-def -0.43, tie0w-def -0.18, tie0c-def +0.31,
+all four +0.86), the best-run pairings against XSkat and SkatZero, and the
+data best exported were all measured or made with it. The +0.07 is the
+play-out study's `def-lost` arm (2026-10-06): `lost-def` alone against the
+teacher, seven seeds, about 10% of the defenders' decisions handed over and
+the card changed in a quarter of those. Its share inside best was never
+measured on its own; best matched the per-seed sum of its parts (+1.42
+predicted), which counted it at +0.07.
+
+The fix (`RolloutRescue.declarersDiscard`): the play-out's declarer remembers
+the world's skat when a defender decides -- in a sampled world, the
+declarer's discard as that world has it -- and nothing in a hand game, where
+it never saw the skat; when the declarer decides, its own evidence as
+before. Tests: a defender's tally equals a reference that gives every seat
+its table evidence, and differs from a forgetting declarer on enough
+decisions to have power (`aDefendersPlayOutsGiveTheDeclarerItsDiscard`); the
+rule itself, hand games and a declarer whose world's skat is not its discard
+included (`theDiscardRuleNamesTheDeclarersOwn`); the defender-turned-round
+test's reference now gives the declarer its discard. The replay
+(`DefenderDiscardReplayMain`, `:arena:defenderReplay`) plays every rotation
+of a few boards as the duplicate match seeds it, in the old form and the new,
+the new one also picking by the old form at every hand-over on the same
+decision and streams: declarers' hand-overs must not move, a game must be
+the same card for card unless a hand-over moved, and then part exactly at
+the first one, a defender's, with the old game playing the shadow's card.
+`DefenderDiscardReplayTest` runs it on a 4-world search with random play-out
+weights (18 games: 75 declarer hand-overs, none moved; 127 defenders', 42
+moved; 15 games parted, each at a defender's hand-over) and checks the
+comparison on made-up games. Six mutants fail: the old rule, the fix spilt
+onto the declarer, hand games ignored, the one-by-one reference left
+unfixed, a shadow on other streams, the old form not honoured in the
+replay.
+
+The study, prepared: step 0 the replay with best on ten boards of seed 11
+(stops the script if a rule breaks); then against belief-64-shipped, fixed
+contracts, seeds 11-16 and 21, 200 boards, into arena-logs/defender-fix/:
+`best` fixed, paired with the old best reports; `best-nolostdef`
+(lost-decl,tie0-decl, untouched by the fix), so best minus it is lost-def's
+own share; `best-tie0`, `best-tie0w`, `best-tie0c` (best plus each
+defender-tie scope), each paired with fixed best, and best-tie0 also with
+the old `all` (the same spec). The old single-scope arms can be rerun with
+`--only=def-lost` etc., each paired with its own old report. About 4.5 hours
+an arm at 16 threads. Not now: re-exporting best's 600,000 deals; the
+temperature, tie-margin and declaring-audit verdicts stand (the first
+compared arms under the same defect, the other two are declarer-only).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

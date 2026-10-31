@@ -48,6 +48,14 @@ import java.util.concurrent.atomic.AtomicLong;
  * ({@link PolicyNet#logits(float[][])}, bitwise the single pass's answers), so
  * the result is exactly the one-at-a-time result ({@link #tallyOneByOne}, kept
  * as the reference) at a fraction of the time.
+ *
+ * <p>The play-outs' declarer remembers its own discard, whoever decides
+ * ({@link #declarersDiscard}): its evidence is the declarer's at the table.
+ * Until 2026-10-31 it did so only when the declarer itself decided; when a
+ * defender decided, the discard was taken from the defender's evidence, where
+ * it is absent, and the declarer in those play-outs played as if it had none
+ * (the {@code lost-def} and {@code tie*-def} scopes). A declarer's decisions
+ * were never affected. {@link DefenderDiscardReplayMain} replays both forms.
  */
 public final class RolloutRescue {
 
@@ -113,7 +121,21 @@ public final class RolloutRescue {
      */
     Card choose(SkatAi.DecisionContext context, BeliefEncoding.Evidence seen,
                 List<WorldSampler.World> sampled, Collection<Card> candidates, Card fallback) {
-        List<Tally> tallies = tally(context, seen, sampled, candidates);
+        Replay replay = REPLAY.get();
+        boolean legacy = replay != null && replay.legacy;
+        long decision = decisions++;
+        List<Tally> tallies = tallyAt(decision, context, seen, sampled, candidates, legacy, true);
+        Card picked = valueRanked ? pickByValue(tallies, fallback) : pick(tallies, fallback);
+        if (replay != null) {
+            Card other = null;
+            if (replay.shadow) {
+                // The other form on the same decision and the same random streams.
+                List<Tally> shadow = tallyAt(decision, context, seen, sampled, candidates, !legacy, false);
+                other = valueRanked ? pickByValue(shadow, fallback) : pick(shadow, fallback);
+            }
+            replay.journal.add(new Decided(context.mySeat, declares(context),
+                    3 * context.history.completedTricks.size() + context.currentTrick.plays.size(), picked, other));
+        }
         int most = 0;
         int least = Integer.MAX_VALUE;
         for (Tally t : tallies) {
@@ -125,8 +147,48 @@ public final class RolloutRescue {
         if (most > 0) ANY_WIN.incrementAndGet();
         if (most > least) SPREAD.incrementAndGet();
         BEST_WINS.addAndGet(most);
-        return valueRanked ? pickByValue(tallies, fallback) : pick(tallies, fallback);
+        return picked;
     }
+
+    /**
+     * The discard the play-outs' declarer remembers: its own, as at the table.
+     * When the declarer decides, the one in its evidence (none in a hand game);
+     * when a defender decides, the world's skat -- in a sampled world the
+     * declarer's discard as that world has it -- or none in a hand game, where
+     * the declarer never saw it.
+     *
+     * @param legacy the form before 2026-10-31: the decider's evidence whoever
+     *               decides, so a defender's play-outs had a declarer without
+     *               its discard; only {@link DefenderDiscardReplayMain} asks for it
+     */
+    static List<Card> declarersDiscard(SkatAi.DecisionContext decision, BeliefEncoding.Evidence seen,
+                                       WorldSampler.World world, boolean legacy) {
+        if (legacy || declares(decision)) return seen == null ? null : seen.knownDiscard();
+        return decision.game.hand ? null : List.copyOf(world.skat());
+    }
+
+    /**
+     * A replay of the discard fix, for {@link DefenderDiscardReplayMain} and its
+     * test only: set on the thread that plays a game, never in a match. The
+     * {@code legacy} form plays as before the fix; {@code shadow} also picks by
+     * the other form at every hand-over, on the same decision and streams; every
+     * hand-over is written to the journal.
+     */
+    static final class Replay {
+        final boolean legacy;
+        final boolean shadow;
+        final List<Decided> journal = new ArrayList<>();
+
+        Replay(boolean legacy, boolean shadow) {
+            this.legacy = legacy;
+            this.shadow = shadow;
+        }
+    }
+
+    /** One hand-over: who decided, after how many cards of the game, the card picked and the other form's. */
+    record Decided(SkatAi.Seat seat, boolean declarer, int cardsBefore, Card picked, Card other) {}
+
+    static final ThreadLocal<Replay> REPLAY = new ThreadLocal<>();
 
     private static final AtomicLong DECIDED = new AtomicLong();
     private static final AtomicLong PLAYOUTS = new AtomicLong();
@@ -184,7 +246,7 @@ public final class RolloutRescue {
     private long decisions;
 
     /** One play-out in flight: which candidate it counts for, and its own random stream. */
-    private record Flight(int candidate, Playout playout, SplittableRandom random) {}
+    private record Flight(int candidate, Playout playout, SplittableRandom random, List<Card> discard) {}
 
     List<Tally> tally(SkatAi.DecisionContext context, BeliefEncoding.Evidence seen,
                       List<WorldSampler.World> sampled) {
@@ -194,10 +256,15 @@ public final class RolloutRescue {
     /** All play-outs of the decision in lockstep, a batched forward pass a step. */
     List<Tally> tally(SkatAi.DecisionContext context, BeliefEncoding.Evidence seen,
                       List<WorldSampler.World> sampled, Collection<Card> candidates) {
+        Replay replay = REPLAY.get();
+        return tallyAt(decisions++, context, seen, sampled, candidates, replay != null && replay.legacy, true);
+    }
+
+    private List<Tally> tallyAt(long decision, SkatAi.DecisionContext context, BeliefEncoding.Evidence seen,
+                                List<WorldSampler.World> sampled, Collection<Card> candidates, boolean legacy,
+                                boolean counted) {
         long started = System.nanoTime();
         Map<SkatAi.Seat, Integer> bids = seen == null ? Map.of() : seen.highestBids();
-        List<Card> buried = seen == null ? null : seen.knownDiscard();
-        long decision = decisions++;
         List<Card> cards = new ArrayList<>(candidates);
         int n = Math.min(worlds, sampled.size());
         int perWorld = Math.max(1, draws);
@@ -205,10 +272,11 @@ public final class RolloutRescue {
         for (int c = 0; c < cards.size(); c++) {
             for (int w = 0; w < n; w++) {
                 WorldSampler.World world = sampled.get(w);
+                List<Card> discard = declarersDiscard(context, seen, world, legacy);
                 for (int d = 0; d < perWorld; d++) {
                     Playout playout = new Playout(context, world.hands(), world.skat());
                     playout.start(cards.get(c));
-                    flights.add(new Flight(c, playout, stream(decision, w, d)));
+                    flights.add(new Flight(c, playout, stream(decision, w, d), discard));
                 }
             }
         }
@@ -226,10 +294,11 @@ public final class RolloutRescue {
             if (waiting.isEmpty()) break;
             float[][] inputs = new float[positions.size()][];
             for (int i = 0; i < inputs.length; i++) {
-                inputs[i] = PolicyNet.features(SelfPlayExportMain.perfectMemory(positions.get(i), bids, buried));
+                inputs[i] = PolicyNet.features(SelfPlayExportMain.perfectMemory(positions.get(i), bids,
+                        waiting.get(i).discard));
             }
             float[][] scores = student.logits(inputs);
-            FORWARDS.addAndGet(inputs.length);
+            if (counted) FORWARDS.addAndGet(inputs.length);
             for (int i = 0; i < inputs.length; i++) {
                 SkatAi.DecisionContext at = positions.get(i);
                 waiting.get(i).playout.play(answer(context, at, scores[i], waiting.get(i).random));
@@ -247,7 +316,7 @@ public final class RolloutRescue {
         }
         List<Tally> out = new ArrayList<>(cards.size());
         for (int c = 0; c < cards.size(); c++) out.add(new Tally(cards.get(c), wins[c], points[c], value[c]));
-        NANOS.addAndGet(System.nanoTime() - started);
+        if (counted) NANOS.addAndGet(System.nanoTime() - started);
         return out;
     }
 
@@ -255,7 +324,8 @@ public final class RolloutRescue {
     List<Tally> tallyOneByOne(SkatAi.DecisionContext context, BeliefEncoding.Evidence seen,
                               List<WorldSampler.World> sampled, Collection<Card> candidates) {
         Map<SkatAi.Seat, Integer> bids = seen == null ? Map.of() : seen.highestBids();
-        List<Card> buried = seen == null ? null : seen.knownDiscard();
+        Replay replay = REPLAY.get();
+        boolean legacy = replay != null && replay.legacy;
         long decision = decisions++;
         boolean declares = declares(context);
         List<Tally> out = new ArrayList<>();
@@ -267,6 +337,7 @@ public final class RolloutRescue {
             long value = 0;
             for (int w = 0; w < n; w++) {
                 WorldSampler.World world = sampled.get(w);
+                List<Card> buried = declarersDiscard(context, seen, world, legacy);
                 for (int d = 0; d < perWorld; d++) {
                     SplittableRandom random = stream(decision, w, d);
                     Playout.Result r = new Playout(context, world.hands(), world.skat()).run(card, at -> answer(
