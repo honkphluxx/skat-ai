@@ -112,7 +112,7 @@ say "permute check started $(date '+%Y-%m-%d %H:%M:%S')   boards=$BOARDS threads
 for entry in "${STUDENTS[@]}"; do
     IFS='|' read -r variant model data epochs mode init <<< "$entry"
     [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
-    if [ ! -f "$model/policy.pt" ]; then
+    if [ ! -f "$model/model.json" ]; then
         say "  [$(date '+%H:%M:%S')] train $model: $data, $epochs epochs, suits permuted ($mode), init seed $init"
         if ! "$PYTHON" arena/python/train_policy.py --data "$data" --out "$model" --epochs "$epochs" \
                 --permute-suits "$mode" --init-seed "$init" > "$LOG/train-$model.txt" 2>&1; then
@@ -130,7 +130,7 @@ done
 YARD="$LOG/yardstick$SUFFIX.txt"
 if [ ! -f "$YARD" ]; then
     models=""
-    for m in "${B30[@]}" "${B60[@]}" "${B150[@]}" "${B150E40[@]}"; do [ -f "$m/policy.pt" ] && models="$models --model $m"; done
+    for m in "${B30[@]}" "${B60[@]}" "${B150[@]}" "${B150E40[@]}"; do [ -f "$m/model.json" ] && models="$models --model $m"; done
     for entry in "${STUDENTS[@]}"; do IFS='|' read -r variant model data epochs mode init <<< "$entry"; models="$models --model $model"; done
     say "  [$(date '+%H:%M:%S')] yardstick on teacher-data-best's held-out deals"
     # shellcheck disable=SC2086 -- $models is deliberately word-split

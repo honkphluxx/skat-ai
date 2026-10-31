@@ -145,7 +145,7 @@ fi
 for entry in "${STUDENTS[@]}"; do
     IFS='|' read -r size model data init <<< "$entry"
     [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
-    if [ ! -f "$model/policy.pt" ]; then
+    if [ ! -f "$model/model.json" ]; then
         say "  [$(date '+%H:%M:%S')] train $model on $data, init seed $init"
         if ! "$PYTHON" arena/python/train_policy.py --data "$data" --out "$model" --epochs "$EPOCHS" --init-seed "$init" \
                 > "$LOG/train-$model.txt" 2>&1; then

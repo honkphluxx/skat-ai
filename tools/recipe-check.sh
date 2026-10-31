@@ -101,7 +101,7 @@ add() {   # $1 variant: pa<epochs>, or h<width>[x<layers>]-pa<epochs>
     for i in 1 2 3; do
         m="policy-$TAG-$v"; [ "$i" -gt 1 ] && m="$m-i$i"; m="$m$SUFFIX"
         # Draws beyond --draws only when they are on disk already.
-        [ "$i" -gt "$DRAWS" ] && [ ! -f "$m/policy.pt" ] && continue
+        [ "$i" -gt "$DRAWS" ] && [ ! -f "$m/model.json" ] && continue
         STUDENTS+=("$v|$m|$hidden|$layers|$e|$i")
     done
 }
@@ -126,7 +126,7 @@ say "recipe check started $(date '+%Y-%m-%d %H:%M:%S')   data=$DATA boards=$BOAR
 for entry in "${STUDENTS[@]}"; do
     IFS='|' read -r variant model hidden layers epochs init <<< "$entry"
     [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
-    if [ ! -f "$model/policy.pt" ]; then
+    if [ ! -f "$model/model.json" ]; then
         say "  [$(date '+%H:%M:%S')] train $model: $layers x $hidden, $epochs epochs, suits permuted, init seed $init"
         if ! "$PYTHON" arena/python/train_policy.py --data "$DATA" --out "$model" --epochs "$epochs" \
                 --hidden "$hidden" --layers "$layers" --permute-suits all --init-seed "$init" > "$LOG/train-$model.txt" 2>&1; then
@@ -151,7 +151,7 @@ if [ -f "$YARD" ]; then
 fi
 if [ ! -f "$YARD" ]; then
     models=""
-    for m in "${UNPERMUTED[@]}"; do [ -f "$m/policy.pt" ] && models="$models --model $m"; done
+    for m in "${UNPERMUTED[@]}"; do [ -f "$m/model.json" ] && models="$models --model $m"; done
     for entry in "${STUDENTS[@]}"; do IFS='|' read -r variant model hidden layers epochs init <<< "$entry"; models="$models --model $model"; done
     say "  [$(date '+%H:%M:%S')] yardstick on teacher-data-best's held-out deals"
     # shellcheck disable=SC2086 -- $models is deliberately word-split

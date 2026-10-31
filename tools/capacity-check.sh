@@ -89,7 +89,7 @@ say "capacity check started $(date '+%Y-%m-%d %H:%M:%S')   epochs=$EPOCHS boards
 for entry in "${STUDENTS[@]}"; do
     IFS='|' read -r variant model hidden init <<< "$entry"
     [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
-    if [ ! -f "$model/policy.pt" ]; then
+    if [ ! -f "$model/model.json" ]; then
         say "  [$(date '+%H:%M:%S')] train $model: 3 x $hidden, $EPOCHS epochs, init seed $init"
         if ! "$PYTHON" arena/python/train_policy.py --data "$DATA" --out "$model" --epochs "$EPOCHS" \
                 --hidden "$hidden" --init-seed "$init" > "$LOG/train-$model.txt" 2>&1; then
@@ -107,7 +107,7 @@ done
 YARD="$LOG/yardstick$SUFFIX.txt"
 if [ ! -f "$YARD" ]; then
     models=""
-    for m in "${BASE[@]}"; do [ -f "$m/policy.pt" ] && models="$models --model $m"; done
+    for m in "${BASE[@]}"; do [ -f "$m/model.json" ] && models="$models --model $m"; done
     for entry in "${STUDENTS[@]}"; do IFS='|' read -r variant model hidden init <<< "$entry"; models="$models --model $model"; done
     say "  [$(date '+%H:%M:%S')] yardstick on teacher-data-best's held-out deals"
     # shellcheck disable=SC2086 -- $models is deliberately word-split
