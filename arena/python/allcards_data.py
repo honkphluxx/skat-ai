@@ -155,11 +155,20 @@ class Records:
         """Each legal card's share of play-outs won: the value head's target."""
         return self.wins / np.maximum(self.k, 1)[:, None]
 
-    def best(self):
-        """The card the labels rank first, as the exporter ranks it: game value, then wins, then points."""
+    def rank_key(self):
+        """One number a card that orders as the exporter ranks: game value, then wins, then points (-inf off legal)."""
         key = (self.value * 1_000_000 + self.wins * 1_000 + self.points).astype(np.float64)
-        key = np.where(self.legal, key, -np.inf)
-        return key.argmax(axis=1)
+        return np.where(self.legal, key, -np.inf)
+
+    def best(self):
+        """The card the labels rank first; the earliest of a full tie."""
+        return self.rank_key().argmax(axis=1)
+
+    def is_best(self, cards):
+        """Whether each record's card is the labels' best or tied with it in full."""
+        key = self.rank_key()
+        rows = np.arange(self.n)
+        return key[rows, cards] == key.max(axis=1)
 
 
 def run_checks(corpus, limit=None, verbose=True):
@@ -242,9 +251,10 @@ def run_checks(corpus, limit=None, verbose=True):
 def report(r):
     """What the labels say, by trick: how often the main line's top card is the labels' best."""
     best = r.best()
+    played_best = r.is_best(r.chosen)
     print(f"\n  {len(r):,} records, {len(np.unique(r.board)):,} boards; declarer {r.declarer.mean():.1%}, "
           f"main-line card drawn {r.drawn.mean():.1%}")
-    print("  trick  records  legal  mean value  played is best  played's shortfall (game value a play-out)")
+    print("  trick  records  legal  mean value  played is best  played's shortfall (game value a play-out; a tie counts as best)")
     mean = r.mean_value()
     rows = np.arange(len(r))
     for t in range(1, 10):
@@ -254,7 +264,7 @@ def report(r):
         shortfall = mean[rows[s], best[s]] - mean[rows[s], r.chosen[s]]
         print(f"  {t:5d}  {s.sum():7d}  {r.legal[s].sum(axis=1).mean():5.2f}  "
               f"{(mean[s] * r.legal[s]).sum() / r.legal[s].sum():10.2f}  "
-              f"{(best[s] == r.chosen[s]).mean():14.1%}  {shortfall.mean():8.2f}")
+              f"{played_best[s].mean():14.1%}  {shortfall.mean():8.2f}")
 
 
 def main(argv):

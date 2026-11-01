@@ -1766,6 +1766,47 @@ decisions in tricks 1-7, and 55-60% in tricks 8-9 -- on the deal and with the
 noise in, so an upper bound on what is there to learn. The quick run on
 bigbox (2,000 boards at k 16) gives the real speed and the k check.
 
+*The all-cards quick run: k 8 stays (2026-11-01, bigbox, 24 threads).* One
+shard, 2,000 boards of seed 9001 at k 16: 1,749 games (251 boards without a
+suit or grand contract), 40,153 labelled decisions in 15 minutes -- 1.94
+games and 45 decisions a second, 21,400 positions through the net a game,
+2,000 a decision in trick 1 and 27 in trick 9. Every check of the reader
+passes. By trick, in game value a play-out from the decider's side:
+
+| trick | sd within a card | sd between cards | first 8 and last 8 pick the same card |
+|---|---|---|---|
+| 1 | 36.3 | 19.8 | 55.6% |
+| 3 | 32.7 | 20.7 | 64.3% |
+| 5 | 26.8 | 22.6 | 76.4% |
+| 7 | 16.8 | 22.4 | 91.8% |
+| 8 | 10.6 | 20.3 | 97.4% |
+| 9 | 4.5 | 19.6 | 99.6% |
+
+The last column is exactly what two independent labels at k 8 do: in the
+endgame k 8 settles the card; in the opening one k-8 label is a coin flip
+weighted towards the right card. That decides less than it looks. The
+policy target chosen ("raise the expected score") is linear in the labels,
+so their noise is unbiased and averages out over decisions; the play-outs'
+noise on a card's mean falls as 1/k per decision, and the spread of the
+deals as 1/decisions, so for a fixed budget more decisions at a smaller k
+are at least as good. k 8 stays (twice the decisions of 16; the per-deal
+best-card comparison arm, which noise does bias, keeps some precision).
+Two cautions on the other columns. The between-card spread holds the noise
+too: without it about 18 game points in trick 1 (19.8 squared minus 36.3
+squared over 16), so the cards really differ. And the student's "regret"
+on the deal (8.6 game points a play-out in trick 1, 0.75 in trick 9) is
+mostly the noise's own maximum early on (a card's mean is 9 points uncertain
+at k 16 in trick 1), and only late a measure of what is there to learn. The
+"top is best" column counted a full tie as a miss (the ranking takes the
+earlier of equal cards), which is why trick 9 read 67% where the labels are
+exact; fixed to count ties as best, the reader's version of it (the main
+line's card, drawn ones included) reads 36% in trick 1 rising to 64% in
+trick 7, 80% in trick 8 and 92% in trick 9. The script's checks step failed
+on bigbox -- it changed directory before calling a relatively named python;
+it now runs the reader from the repository root, and the dry run uses a
+relative python too. At k 8 the full run should take about 6 hours for
+100,000 boards.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

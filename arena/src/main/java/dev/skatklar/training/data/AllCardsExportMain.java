@@ -542,7 +542,11 @@ public final class AllCardsExportMain {
             positions[t] += l.positions();
             nanos[t] += elapsed;
             int best = TrueDealLabeller.best(l);
-            if (best == topSlot) topIsBest[t]++;
+            // A full tie with the best counts as the best: the ranking's pick between equal cards is arbitrary.
+            if (l.value()[topSlot] == l.value()[best] && l.wins()[topSlot] == l.wins()[best]
+                    && l.points()[topSlot] == l.points()[best]) {
+                topIsBest[t]++;
+            }
             regret[t] += (l.value()[best] - l.value()[topSlot]) / (double) k;
             double[] mean = new double[cards];
             double all = 0;
@@ -617,8 +621,9 @@ public final class AllCardsExportMain {
                         100.0 * topIsBest[t] / decisions[t], regret[t] / decisions[t]);
             }
             System.out.println("  (sd within card / sqrt(k) is the noise on a card's mean; \"halves agree\": the best card "
-                    + "by the first k/2 play-outs is the best by the other k/2. Top is best and its regret are on this "
-                    + "deal, so read them as an upper bound on what the labels can teach.)");
+                    + "by the first k/2 play-outs is the best by the other k/2. \"Top is best\": the student's top card "
+                    + "is the labels' best or tied with it. It and the regret are on this deal, so read them as an upper "
+                    + "bound on what the labels can teach.)");
         }
     }
 

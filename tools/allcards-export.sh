@@ -122,7 +122,8 @@ if [ -f "$checks" ]; then
 else
     [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
     say "  [$(date '+%H:%M:%S')] checks"
-    if (cd arena/python && "$PYTHON" allcards_data.py "../../$OUT") > "$checks.partial" 2>&1; then
+    # From the repository root, where a relative --python resolves; the reader finds its modules beside it.
+    if "$PYTHON" arena/python/allcards_data.py "$OUT" > "$checks.partial" 2>&1; then
         mv "$checks.partial" "$checks"
     else
         mv "$checks.partial" "$LOG/$NAME-checks.failed.txt"
