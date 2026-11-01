@@ -160,6 +160,22 @@ tasks.register<JavaExec>("defenderReplay") {
     forwardProperties()
 }
 
+/**
+ * The all-cards self-play exporter (plan 2.10, route 1): the student in all
+ * three seats, every legal card of every decision played out on the real
+ * cards. See AllCardsExportMain and tools/allcards-export.sh.
+ *
+ * ./gradlew :arena:allCardsExport --args="--model=policy-b600-pa40 --out=allcards-data/r1-k8-s9001 --boards=100000"
+ */
+tasks.register<JavaExec>("allCardsExport") {
+    group = "application"
+    description = "Self-play with every legal card of every decision played out on the real cards"
+    mainClass.set("dev.skatklar.training.data.AllCardsExportMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:play --args="--level=club" */
 tasks.register<JavaExec>("play") {
     group = "application"

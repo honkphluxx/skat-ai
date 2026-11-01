@@ -1696,6 +1696,76 @@ positive -- not clear of zero, so best stays best. At its paired spread
 (about 0.58 a seed) resolving +0.26 would take about twenty seeds. No step 3
 (best did not move), no re-export.
 
+*The all-cards exporter, built (2026-11-01; `tools/allcards-export.sh`,
+`AllCardsExportMain`, `TrueDealLabeller`, `arena/python/allcards_data.py`).*
+Route 1's step 1, with three settings chosen before it was built (Philipp,
+2026-11-01):
+
+- *The main line* takes the policy head's top card, a fifth of the time a
+  card drawn from its softmax (epsilon 0.2). The game only finds the
+  positions; the labels teach. It must never take a card computed from the
+  hidden cards (the labels' best, say): every later position would then
+  come from a player that peeks, and the deal would no longer be a draw from
+  the posterior the honest seats hold -- the property the labels' meaning
+  rests on. The student plays it because its own positions are the ones to
+  label: those it will meet, mistakes included.
+- *k = 8* play-outs a card, to be confirmed by the quick run.
+- *The policy target* (for the trainer, next): "raise the expected score",
+  not "the best card on this deal". The labels are measured on the true
+  cards, which the decider cannot see; the per-deal best card teaches which
+  card is most often best, not which is best on average (a card that wins a
+  little on 60% of deals beats one that wins a lot on 40% by count and loses
+  on expectation). The trainer moves probability towards cards whose game
+  value is above the legal cards' mean, in proportion; that is linear in the
+  labels, so over deals it aims at the expected game value itself. The
+  per-deal best card is trained beside it for comparison.
+
+What it does. The student (policy-b600-pa40) in all three seats at greedy's
+fixed suit and grand contracts, boards of seed 9001 (anything below 1000 is
+refused: 101 is the teacher corpora's, 11-16 and 21 the arena's). At every
+decision with a choice, after the main-line card is chosen from the seat's
+own context and stream, every legal card is played out k times on the
+table's real cards (read through `TableObserver`): every seat by the student
+from its own evidence (perfect memory, the bids heard, the declarer its
+discard), the decider's side by the top card, the other side drawn at
+temperature 1; draw d the same random stream for every card. Each card's
+wins, card points and game value from the decider's side go into a 396-byte
+record (layout in AllCardsExportMain's comment and `allcards-format.json`),
+slots in card-index order; `allcards_data.py` lays them out by card. Shards
+of 2,000 boards, the same bytes at any thread count; resumable; a STOP file
+stops between shards.
+
+Tests (`AllCardsExportTest`, `TrueDealLabellerTest`), on a net of random
+weights: the table handed to the play-outs is the real one (each seat holds
+exactly the cards it goes on to play, the skat is the declarer's discard);
+with the top card everywhere, the play-out of the main line's own card is
+the main line -- every position it feeds the net equals the next main-line
+decision float for float, and it ends on the main line's win, points and
+game value from the decider's side; labelling does not move the main line; a
+shard is the same bytes at one thread and three; a record's slots are its
+legal cards' labels in index order; a card's label is the same alone, among
+others and in reverse order; the opponents are drawn. Thirteen mutants fail
+(two wrong tables, the discard or the bids dropped, the value's sign, the
+points' or the wins' side, the actor's stream shared with the labeller, a
+stream that depends on the thread or on the card, slots reversed, opponents
+not drawn, the main line never drawn). The reader checks every shard against
+the exporter's own totals by card, then the records (legal counts, empty
+slots, bounds, signs, the legal cards in the hand, a whole-board split, labels
+that move with a suit permutation); five reader mutants and a shard with one
+byte changed fail it.
+
+A container smoke on the real student (24 boards, k 8, 2 cores): 0.33 games
+a second at two threads; at k 16 21,500 positions through the net a game,
+thirteen times more a decision in trick 1 than in trick 8. At
+k 16 (20 boards): a card's play-outs spread 27 game points in trick 1, the
+cards' means 15; by trick 8 1.2 against 3.4. The first eight play-outs picked
+the same best card as the other eight in 49% of trick-1 decisions, 68% in
+trick 4, 88% in tricks 5-6, 98% in trick 8: early labels are noisy, late ones
+nearly exact. The student's own top card was the labels' best in 30-45% of
+decisions in tricks 1-7, and 55-60% in tricks 8-9 -- on the deal and with the
+noise in, so an upper bound on what is there to learn. The quick run on
+bigbox (2,000 boards at k 16) gives the real speed and the k check.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

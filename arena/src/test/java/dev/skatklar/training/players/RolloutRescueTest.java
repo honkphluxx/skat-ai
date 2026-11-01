@@ -44,7 +44,7 @@ import org.junit.Test;
  */
 public class RolloutRescueTest {
 
-    static PolicyNet randomNet(long seed) throws IOException {
+    public static PolicyNet randomNet(long seed) throws IOException {
         Random random = new Random(seed);
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         DataOutputStream out = new DataOutputStream(bytes);
