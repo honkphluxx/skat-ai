@@ -1661,6 +1661,41 @@ an arm at 16 threads. Not now: re-exporting best's 600,000 deals; the
 temperature, tie-margin and declaring-audit verdicts stand (the first
 compared arms under the same defect, the other two are declarer-only).
 
+*The discard fix: the answer (2026-11-01, seeds 11-16 and 21).* The defect
+was nearly inert, and best stands. The replay with best against the teacher
+(ten boards of seed 11, 60 games): 179 declarer hand-overs, none moved; 45
+defender hand-overs, 5 moved (11%); 55 games the same card for card, the 5
+others parting exactly at the moved hand-over -- the fix is as narrow as
+built. Against belief-64-shipped, paired by seed:
+
+| arm | against the teacher | paired | per seed 11 12 13 14 15 16 21 |
+|---|---|---|---|
+| best, fixed | +1.30 [+0.78, +1.83] | minus the old best -0.01 [-0.06, +0.04] | -0.12 +0.05 -0.02 0 0 +0.02 0 |
+| best without lost-def | +1.24 [+0.72, +1.76] | lost-def's own share: best minus it **+0.06 [+0.04, +0.09]** | +0.06 +0.07 +0.03 +0.09 +0.02 +0.10 +0.06 |
+| best + tie0-def | +1.40 [+0.18, +2.62] | minus best +0.10 [-1.23, +1.42]; minus the old all +0.54 [-0.13, +1.21] | +2.04 -0.19 -1.56 -1.24 +1.93 -0.64 +0.34 |
+| best + tie0w-def | +1.31 [+0.74, +1.88] | minus best +0.01 [-0.31, +0.32] | -0.23 +0.21 -0.63 +0.42 +0.05 +0.08 +0.17 |
+| best + tie0c-def | +1.56 [+1.03, +2.09] | minus best +0.26 [-0.28, +0.80] | +0.89 -0.29 +0.57 -0.11 +0.63 -0.62 +0.74 |
+
+(per seed: the paired difference.) Three readings. (1) best is unchanged: on
+three seeds of seven the fixed and the old games score identically, on the
+other four by at most an eighth of a point; whatever the declarer's discard
+does to the student's play-outs, it rarely turns the card the play-outs pick
+in a defender's lost position, and turns the game less. Nothing downstream of
+best -- the XSkat and SkatZero pairings, best's exported data, the students
+taught on it -- needs redoing. (2) lost-def is worth +0.06, now measured
+inside best and resolved on every seed: the old single-scope +0.07 was right.
+(3) The defenders' ties are not a loss after all, and not a gain either. With
+the fix, adding tie0-def to best is +0.10 with seeds from -1.6 to +2.0 -- the
+old "the defenders' ties eat what the other two add" (all minus lost-decl
+-0.08) is withdrawn; `all` itself moved +0.54 [-0.13, +1.21], since its
+tie0-def hands over half the defenders' decisions and the defect sat in every
+one of them. Held ties only are exactly nothing (+0.01 [-0.31, +0.32]); the
+ties the cushion leaves give the best pooled player measured, +1.56 against
+the teacher, but only +0.26 [-0.28, +0.80] over best, four seeds of seven
+positive -- not clear of zero, so best stays best. At its paired spread
+(about 0.58 a seed) resolving +0.26 would take about twenty seeds. No step 3
+(best did not move), no re-export.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
