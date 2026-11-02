@@ -1807,6 +1807,47 @@ it now runs the reader from the repository root, and the dry run uses a
 relative python too. At k 8 the full run should take about 6 hours for
 100,000 boards.
 
+*The first all-cards corpus (2026-11-02, bigbox, 24 threads).*
+`allcards-data/r1-k8-s9001`: boards 0-99,999 of seed 9001 at k 8, policy-b600-pa40
+in all three seats -- 87,512 games (12,488 boards without a suit or grand
+contract), 2,010,969 labelled decisions in 6.2 hours (3.93 games and 90
+decisions a second, 10,740 positions through the net a game); every check
+passes. The per-trick table repeats the quick run's at k 8: the first four
+and last four play-outs pick the same card in 56% of trick-1 decisions, 76%
+in trick 5, 92% in trick 7, 97% in trick 8 and 99.5% in trick 9; the
+student's top card is the labels' best or tied in 38% of trick-1 decisions
+rising to 67% in trick 7, 81% in trick 8 and 93% in trick 9.
+
+*The trainer, built (2026-11-02; `arena/python/train_outcomes.py`,
+`tools/outcomes-train.sh`).* From a student's full weights (both heads),
+three losses a step: the policy by --objective -- `expected`, minus the
+policy's expected advantage in U over the legal cards' mean (U = mean game
+value a play-out + 1 x win share + 0.01 x mean card points; the advantage
+divided by 20), or `best`, cross entropy towards the per-deal best card by U,
+ties shared; the value head on each legal card's win share; and the anchor, a
+batch of teacher-data-best-600 a step with the imitation loss on the card
+played (its value term off: the value head now means the self-play outcome).
+Suits permuted on both. AdamW 3e-4, 200 steps' warm-up, cosine to zero, 10
+epochs by default. Held out: a tenth of the all-cards boards, and on the
+anchor the init's own split, the yardstick's deals. Kept: the epoch with the
+highest held-out gain of the top card over the legal mean. The self-test runs
+the objectives on made-up decisions where the answer is known -- a card that
+gains 2 on 60% of deals and loses 1 on the rest against one that gains 6 on
+40%: `expected` must take the second (mean 2.4 against 0.8), `best` the first
+-- plus the masks (an illegal card's logit changes neither loss; when every
+legal card is negative the per-deal target stays on the least bad legal one),
+the gradient's sign, a constant shift, ties, the value mask; six mutants fail
+it. A CPU smoke in the container (the quick shard and three teacher shards,
+two epochs) trained, exported, ran the yardstick and loaded in Java with its
+parity check.
+
+The study (`./tools/outcomes-train.sh`): ev = `expected` and bc = `best`, each
+from policy-b600-pa40 and its two re-draws (init seeds 1-3, draw d paired
+with pa40's draw d); the self-test first; the yardstick on teacher-data-best;
+then student-64 with each against belief-64-shipped, fixed contracts, seeds
+11-16 and 21, 200 boards, pa40's reports reused from the recipe check;
+pooled each minus pa40 and ev minus bc, the draws averaged seed by seed.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
