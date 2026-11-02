@@ -1848,6 +1848,47 @@ then student-64 with each against belief-64-shipped, fixed contracts, seeds
 11-16 and 21, 200 boards, pa40's reports reused from the recipe check;
 pooled each minus pa40 and ev minus bc, the draws averaged seed by seed.
 
+*Route 1, round 1: the answer (2026-11-02).* Six students, each from its
+pa40 draw, 10 epochs on allcards-data/r1-k8-s9001 with the anchor; about 4
+minutes each on the GPU. student-64 against belief-64-shipped, fixed
+contracts, seeds 11-16 and 21, 200 boards, the three draws averaged seed by
+seed and paired with pa40's draws:
+
+| student | against the teacher | minus pa40, paired | per seed 11 12 13 14 15 16 21 |
+|---|---|---|---|
+| pa40 (the start) | -1.41 [-2.73, -0.10] | -- | |
+| ev (raise the expected score) | -0.37 [-2.08, +1.35] | +1.05 [-0.16, +2.26] | +0.06 -1.38 +1.49 +1.15 +2.13 +1.46 +2.43 |
+| bc (the per-deal best card) | -0.68 [-1.99, +0.62] | **+0.73 [+0.15, +1.31]** | -0.36 +0.80 +0.32 +1.06 +1.67 +0.76 +0.86 |
+| ev minus bc | | +0.32 [-0.80, +1.44] | +0.43 -2.18 +1.16 +0.09 +0.46 +0.70 +1.57 |
+
+Learning from the outcome labels pays in games: both objectives gain six
+seeds of seven, the per-deal best card resolved at +0.73, raise-the-expected-
+score larger at +1.05 but not resolved (seed 12 at -1.4 against a run of
++1.1 to +2.4); between the two nothing is resolved. The student on its own
+is now level with the teacher within the noise (ev -0.37 [-2.08, +1.35]),
+where imitation had left it 1.41 behind at 600,000 deals and bending.
+
+On the training's own held-out boards the gain of the top card over the
+legal mean rose from +3.85-3.91 to +4.49-4.52 for ev (tricks 1-3 +0.8, 4-6
++0.7, 7-9 +0.4) and to +4.45-4.47 for bc, which instead puts its card on the
+deal's best more often (58.4% against ev's 57.2%, from 55.6%) -- each
+objective winning on its own measure, as it should. Both flatten by epoch 5
+(ev +4.46 at 5, +4.49 at 10): the data, not the epochs, is what the next
+gain needs. ev kept the imitation where it was (teacher regret 0.563 ->
+0.561, 0.563 -> 0.562, 0.559 -> 0.557); bc moved away from it (0.563 -> 0.593,
+0.597, 0.585). The value head is calibrated within a point at every trick
+(trick 1 0.487 predicted against 0.491 won). The yardstick barely moves for ev
+(0.305 against pa40's 0.297, tricks 7-9 0.229 against 0.221) and worsens for
+bc (0.321): its referee is double-dummy, and these labels come from honest
+play -- a gain in games with a flat yardstick, as the plan allowed. The hoped
+for endgame repair does not show on it; where in the game the +1.05 sits is
+not yet measured.
+
+Round 1 passes its gate (a gain in games, resolved for one objective, the
+larger and unresolved for the other). Next: round 2 -- policy-oc1-ev (draw 1,
+not chosen by its games, which would select on the arena's seeds) exports
+the next 100,000 boards (seed 9002), and the round-2 students train on them.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
