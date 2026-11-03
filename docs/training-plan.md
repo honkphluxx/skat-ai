@@ -1921,6 +1921,46 @@ on round r's corpus, `evu` on every round's so far, `bc` as before; pooled
 each minus its start, minus pa40, and the first arm minus the second. Round 1
 keeps its names and files.
 
+*Route 1, round 2: the answer (2026-11-03).* Six students from the three
+policy-oc1-ev draws, 10 epochs; ev on round 2's corpus, evu on rounds 1 and 2.
+student-64 against belief-64-shipped, seeds 11-16 and 21, 200 boards, the
+draws averaged seed by seed:
+
+| student | against the teacher | minus its start (oc1-ev) | minus pa40 |
+|---|---|---|---|
+| policy-oc1-ev (the start) | -0.37 [-2.08, +1.35] | -- | +1.05 [-0.16, +2.26] |
+| ev (round 2's labels) | **+0.07 [-1.04, +1.18]** | +0.43 [-0.41, +1.28] | **+1.48 [+0.93, +2.03]** |
+| evu (rounds 1 and 2) | -0.17 [-1.47, +1.13] | +0.20 [-0.45, +0.84] | +1.25 [+0.36, +2.13] |
+| ev minus evu | | +0.24 [-0.16, +0.63] | |
+
+Per seed, ev minus its start: +0.96 +1.91 +0.64 +0.53 +0.07 -0.06 -1.03; minus
+pa40: +1.03 +0.53 +2.13 +1.68 +2.21 +1.40 +1.41. Three readings. (1) Two
+rounds of outcome labels put the student, on its own, level with the
+64-world teacher (+0.07, interval -1.0 to +1.2) and +1.48 above where
+imitation left it, every seed positive -- the first network-only player of
+ours at the teacher's strength, a hundredth of a second a game against 14 s.
+(2) Round 2's own step is smaller and not resolved: +0.43, five seeds of seven
+positive, after round 1's +1.05. On its training's held-out boards the gain of
+the top card over the legal mean rose only +0.09 (+4.48 -> +4.57 for ev, and
+alike for evu), against round 1's +0.64: the second round's labels taught a
+seventh of what the first round's did. (3) Fresh labels alone beat the union
+(+0.24 [-0.16, +0.63], five seeds of seven): round 1's labels, made with the
+older student playing on, add nothing once round 2's are there. The
+yardstick stays flat (0.301-0.305; pa40 0.297); teacher regret where it was
+(0.557-0.565); the value head's held-out loss is lower on round 2's labels
+(0.377 against 0.49), as the narrower play-outs predicted.
+
+Why the step shrank is open, and two causes are confounded. Round 1's gain
+flattened by epoch 5, read then as the data's limit; it is equally what a
+policy loss balanced against a fixed imitation anchor does -- an equilibrium
+the anchor sets, whatever the data (teacher regret did not move in either
+round). And round 2's play-outs are narrower (a card's spread down a sixth to
+a quarter): sharper drawn opponents, less to learn from. The anchor question
+is training-only: ev on round 2's corpus at anchor weight 0.25 and 0, from the
+same starts, read on the same held-out gain; the arena only if the gain moves.
+The gate: round 2 does not pass on its own step; one more unresolved round
+ends the loop by the plan's rule, so the cause is looked at before round 3.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
