@@ -3,10 +3,13 @@ Route 1, step 2: the student learns from the all-cards labels (plan 2.10).
 
     python arena/python/train_outcomes.py --data allcards-data/r1-k8-s9001 \\
         --anchor teacher-data-best-600 --init policy-b600-pa40 --out policy-oc1-ev
+    python arena/python/train_outcomes.py --data allcards-data/r1-k8-s9001 allcards-data/r2-k8-s9002 ...
     python arena/python/train_outcomes.py --self-test
 
 Starts from a trained student (--init: its policy.pt, both heads) and trains
-on the all-cards corpus (AllCardsExportMain): for every decision of the
+on one or more all-cards corpora (AllCardsExportMain; --data takes several,
+the boards of each seed held out by that seed's own split, so a corpus's
+held-out boards are the same alone and among others): for every decision of the
 student's self-play, every legal card's mean game value, win share and card
 points over k play-outs on the table's real cards, from the decider's side.
 
@@ -115,6 +118,31 @@ def utility_of(records, win_weight, points_weight):
     k = np.maximum(records.k, 1)[:, None].astype(np.float32)
     u = (records.value / k + win_weight * records.wins / k + points_weight * records.points / k)
     return np.where(records.legal, u, 0.0).astype(np.float32)
+
+
+def held_out(records, fraction, seed):
+    """Indices (train, val) by the board rule on the board index, whatever the board seed.
+
+    A board is held out by its index alone, so a corpus's held-out boards are
+    the same alone and among other corpora -- round 1's held-out numbers stay
+    comparable when round 2 is added. Board 17 of seed 9001 and board 17 of
+    seed 9002 land on the same side; they are different deals, so nothing
+    leaks, and every (seed, board) is whole on one side."""
+    return allcards_split(records.board, fraction, seed=seed)
+
+
+def load_corpora(directories, limit=None):
+    """Several all-cards corpora as one block of records, checked to speak the same encoding."""
+    from allcards_data import Records
+    corpora = [AllCardsCorpus(d) for d in directories]
+    for c in corpora[1:]:
+        if c.fields != corpora[0].fields or c.size != corpora[0].size:
+            raise SystemExit(f"{c.directory} speaks another encoding than {corpora[0].directory}")
+    seeds = [c.seed for c in corpora]
+    if len(set(seeds)) != len(seeds):
+        raise SystemExit(f"two corpora of the same board seed: {seeds}")
+    raw = np.concatenate([c.load(limit=limit).raw for c in corpora])
+    return corpora[0], corpora, Records(raw[:limit] if limit else raw)
 
 
 # ------------------------------------------------------------------ batches
@@ -295,6 +323,23 @@ def self_test():
     check("all legal cards negative: the per-deal target is the least bad legal card",
           abs(float(t[1]) - 1.0) < 1e-6 and float(t[5]) == 0.0 and float(t[3]) == 0.0)
 
+    # The held-out boards: whole (seed, board) pairs, a seed's split the same alone and among others.
+    class Fake:
+        pass
+    a, b = Fake(), Fake()
+    a.board = np.tile(np.repeat(np.arange(250), 4), 2)        # four decisions a board, as a game has many
+    a.seed = np.repeat([9001, 9002], 1000)
+    b.board, b.seed = a.board[:1000], a.seed[:1000]
+    tr, va = held_out(a, 0.1, 1)
+    alone_tr, alone_va = held_out(b, 0.1, 1)
+    whole = not (set(zip(a.seed[tr], a.board[tr])) & set(zip(a.seed[va], a.board[va])))
+    check("held-out boards are whole (seed, board) pairs", whole and len(va) > 0)
+    check("a seed's held-out boards are the same alone and among others",
+          set(va[a.seed[va] == 9001]) == set(alone_va))
+    _, round1 = allcards_split(b.board, 0.1, seed=1)
+    check("and are round 1's: the board rule on the index, the split seed as given",
+          set(alone_va) == set(round1))
+
     # Ties share the per-deal target.
     tie = torch.zeros(1, CARDS)
     tie[0, 0], tie[0, 1] = 1.0, 1.0
@@ -326,7 +371,7 @@ def load_init(directory, device):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--self-test", action="store_true", help="the objectives on made-up decisions, then exit")
-    parser.add_argument("--data", help="the all-cards corpus")
+    parser.add_argument("--data", nargs="+", help="one or more all-cards corpora")
     parser.add_argument("--anchor", help="the teacher corpus for the imitation anchor")
     parser.add_argument("--init", help="the student to start from (policy.pt, model.json)")
     parser.add_argument("--out")
@@ -363,11 +408,11 @@ def main():
     model, descriptor = load_init(args.init, device)
     print(f"init {args.init}: {descriptor['layers']} x {descriptor['hidden']}, trained on {descriptor.get('trained_on')}")
 
-    corpus = AllCardsCorpus(args.data)
-    records = corpus.load(limit=args.limit or None)
-    train, val = allcards_split(records.board, args.val_fraction, seed=args.split_seed)
-    print(f"{args.data}: {len(records):,} records, k {corpus.k}; {len(train):,} training, {len(val):,} held out "
-          f"({len(np.unique(records.board[val])):,} whole boards)")
+    corpus, corpora, records = load_corpora(args.data, limit=args.limit or None)
+    train, val = held_out(records, args.val_fraction, args.split_seed)
+    print(f"{' + '.join(args.data)}: {len(records):,} records (k {', '.join(str(c.k) for c in corpora)}; "
+          f"seeds {', '.join(str(c.seed) for c in corpora)}); {len(train):,} training, {len(val):,} held out "
+          f"({len(set(zip(records.seed[val], records.board[val]))):,} whole boards)")
 
     anchor = TeacherCorpus(args.anchor)
     anchor_records = anchor.load(limit=args.anchor_limit or None)
@@ -462,7 +507,7 @@ def main():
         "lr": args.lr,
         "init_from": pathlib.Path(args.init).resolve().name,
         "init_seed": args.init_seed,
-        "trained_on": pathlib.Path(args.data).resolve().name,
+        "trained_on": " + ".join(pathlib.Path(d).resolve().name for d in args.data),
         "anchor": pathlib.Path(args.anchor).resolve().name,
         "objective": args.objective,
         "adv_scale": args.adv_scale,

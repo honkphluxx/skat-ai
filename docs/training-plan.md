@@ -1889,6 +1889,38 @@ larger and unresolved for the other). Next: round 2 -- policy-oc1-ev (draw 1,
 not chosen by its games, which would select on the arena's seeds) exports
 the next 100,000 boards (seed 9002), and the round-2 students train on them.
 
+*Round 2's corpus, and the trainer by round (2026-11-03).*
+`allcards-data/r2-k8-s9002`: boards 0-99,999 of seed 9002 at k 8, labelled by
+policy-oc1-ev (draw 1) in all three seats and its play-outs -- 87,649 games,
+2,004,211 decisions in 6.1 hours, every check passed. Against round 1's
+table (the measured and the measuring student both changed, so this is the
+new student judged by its own play, not a like-for-like):
+
+| trick | sd within a card r1 / r2 | halves agree r1 / r2 | top is best r1 / r2 | top's regret r1 / r2 |
+|---|---|---|---|---|
+| 1 | 35.9 / 30.4 | 56.0% / 62.9% | 38.1% / 39.0% | 10.06 / 9.26 |
+| 4 | 30.0 / 24.7 | 68.7% / 75.9% | 43.0% / 44.6% | 8.73 / 7.93 |
+| 7 | 17.5 / 13.3 | 91.5% / 94.0% | 66.8% / 70.2% | 4.36 / 3.61 |
+| 8 | 11.4 / 8.4 | 96.8% / 97.9% | 80.5% / 83.6% | 2.57 / 1.91 |
+| 9 | 5.1 / 3.9 | 99.5% / 99.6% | 92.6% / 94.6% | 0.93 / 0.58 |
+
+The student finds its own labels' best card more often and gives up less
+against it at every trick, most in the endgame (trick 8 -26%, trick 9 -38%
+regret). One thing to watch: the spread of a card's play-outs fell by a
+sixth to a quarter at every trick. The play-outs' opponents are drawn from
+the student's softmax, and a sharper student draws less varied replies --
+the variety that made the drawn defences pay (+0.93 against the top card's
++0.28) could thin out round by round.
+
+`train_outcomes.py --data` takes several corpora; a board is held out by its
+index alone (self-test: whole boards, and a corpus's held-out boards are
+round 1's alone and among others; two mutants fail it), two corpora of the
+same seed are refused. `tools/outcomes-train.sh --round=r` trains round r
+from round r-1's `--from` arm (default ev), each draw from the same draw: `ev`
+on round r's corpus, `evu` on every round's so far, `bc` as before; pooled
+each minus its start, minus pa40, and the first arm minus the second. Round 1
+keeps its names and files.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
