@@ -6,6 +6,8 @@
 #   ./tools/outcomes-train.sh --round=2            round 2: ev and evu from round 1's ev
 #   ./tools/outcomes-train.sh --round=2 --no-arena training and the yardstick only
 #   ./tools/outcomes-train.sh --round=3 --from=evu --arms="ev evu" --epochs=10 --threads=16 --python=...
+#   ./tools/outcomes-train.sh --round=2 --arms=ev --anchors="1 0.25 0" --no-arena
+#                                                  the anchor test: does the imitation anchor cap the gain?
 #
 # Round r trains on the all-cards corpus allcards-data/r<r>-k8-s<9000+r>
 # (tools/allcards-export.sh, its labels made by round r-1's student) and starts
@@ -22,6 +24,11 @@
 #                                   per-deal best card (the biased comparison)
 #
 # --arms picks them; round 1 runs ev and bc, later rounds ev and evu.
+# --anchors gives the imitation anchor's weights to train each arm at (default
+# 1); a weight w other than 1 is its own student, -a<w> in the name with the
+# point dropped (policy-oc2-ev-a025, policy-oc2-ev-a0). The training summary
+# lists, per arm and weight, the draws' held-out gain of the top card over the
+# legal mean at the start and at the kept epoch, and the teacher regret.
 # both with the value head on each card's win share, the teacher-data-best-600
 # imitation loss as the anchor, suits permuted. The trainer's self-test runs
 # first (the objectives on made-up decisions; it stops the script if it fails).
@@ -31,8 +38,8 @@
 # fixed contracts, seeds 11-16 and 21, 200 boards. Reports already on disk
 # are reused (pa40's from arena-logs/recipe-check/, earlier rounds' from
 # arena-logs/outcomes/). Pooled, the draws averaged seed by seed: each arm,
-# minus its start, minus pa40 (from round 2), and the first arm minus the
-# second.
+# minus its start, minus pa40 (from round 2), and every later student set
+# minus the first.
 #
 # Each step is skipped when its output exists (a student counts as trained by
 # its model.json); arena reports are written as .partial and renamed; touch
@@ -53,7 +60,7 @@ cd "$(dirname "$OT_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
 QUICK=false; ARENA=true; THREADS=16; BOARDS=200; SEEDS="11 12 13 14 15 16 21"
-ROUND=1; FROM=ev; ARMS=""; ANCHOR=teacher-data-best-600; EPOCHS=10; PYTHON=${SKATKLAR_PYTHON:-}
+ROUND=1; FROM=ev; ARMS=""; ANCHORS="1"; ANCHOR=teacher-data-best-600; EPOCHS=10; PYTHON=${SKATKLAR_PYTHON:-}
 for arg in "$@"; do
     case "$arg" in
         --quick)      QUICK=true ;;
@@ -63,10 +70,11 @@ for arg in "$@"; do
         --round=*)    ROUND="${arg#*=}" ;;
         --from=*)     FROM="${arg#*=}" ;;
         --arms=*)     ARMS="${arg#*=}" ;;
+        --anchors=*)  ANCHORS="${arg#*=}" ;;
         --anchor=*)   ANCHOR="${arg#*=}" ;;
         --epochs=*)   EPOCHS="${arg#*=}" ;;
         --python=*)   PYTHON="${arg#*=}" ;;
-        -h|--help)    sed -n '2,44p' "$OT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)    sed -n '2,51p' "$OT_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)            echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -97,6 +105,14 @@ if $QUICK; then
 fi
 objective_of() { case "$1" in ev|evu) echo expected ;; bc) echo best ;; *) return 1 ;; esac; }
 for arm in $ARMS; do objective_of "$arm" > /dev/null || { echo "unknown arm: $arm (ev, evu, bc)" >&2; exit 2; }; done
+for w in $ANCHORS; do
+    case "$w" in ''|*[!0-9.]*|*.*.*) echo "an anchor weight is a number, not $w" >&2; exit 2 ;; esac
+done
+anchor_suffix() { [ "$1" = 1 ] && echo "" || echo "-a${1//./}"; }
+VARIANTS=""; for arm in $ARMS; do for w in $ANCHORS; do VARIANTS="$VARIANTS $arm:$w"; done; done
+VARIANTS="${VARIANTS# }"
+if $QUICK; then VARIANTS="${VARIANTS%% *}"; fi
+vname() { echo "${1%%:*}$(anchor_suffix "${1#*:}")"; }   # ev:0.25 -> ev-a025
 data_for() {  # arm -> the corpora it trains on
     if [ "$1" = evu ]; then local out="" r; for ((r = 1; r <= ROUND; r++)); do out="$out $(data_of $r)"; done; echo "${out# }"
     else data_of "$ROUND"; fi
@@ -118,7 +134,7 @@ $QUICK && SUMMARY="$SUMMARY-quick"
 SUMMARY="$SUMMARY.txt"
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
-say "outcomes round $ROUND started $(date '+%Y-%m-%d %H:%M:%S')   from=$(init_of 1) anchor=$ANCHOR epochs=$EPOCHS arms=$ARMS draws=$DRAWS boards=$BOARDS seeds=$SEEDS"
+say "outcomes round $ROUND started $(date '+%Y-%m-%d %H:%M:%S')   from=$(init_of 1) anchor=$ANCHOR epochs=$EPOCHS students=$VARIANTS draws=$DRAWS boards=$BOARDS seeds=$SEEDS"
 
 # --- the trainer's self-test -------------------------------------------------
 if ! "$PYTHON" arena/python/train_outcomes.py --self-test > "$LOG/self-test.txt" 2>&1; then
@@ -128,15 +144,16 @@ fi
 say "  self-test passed"
 
 # --- train and export ----------------------------------------------------------
-for arm in $ARMS; do
+for v in $VARIANTS; do
+    arm=${v%%:*}; w=${v#*:}
     for d in $DRAWS; do
         [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
-        model=$(model_of "$arm" "$d")
+        model=$(model_of "$(vname "$v")" "$d")
         if [ ! -f "$model/model.json" ]; then
-            say "  [$(date '+%H:%M:%S')] train $model from $(init_of "$d"), objective $(objective_of "$arm"), init seed $d, on $(data_for "$arm")"
+            say "  [$(date '+%H:%M:%S')] train $model from $(init_of "$d"), objective $(objective_of "$arm"), anchor weight $w, init seed $d, on $(data_for "$arm")"
             # shellcheck disable=SC2086 -- TRAIN_EXTRA and the corpora are deliberately word-split
             if ! "$PYTHON" arena/python/train_outcomes.py --data $(data_for "$arm") --anchor "$ANCHOR" --init "$(init_of "$d")" \
-                    --out "$model" --objective "$(objective_of "$arm")" --epochs "$EPOCHS" --init-seed "$d" \
+                    --out "$model" --objective "$(objective_of "$arm")" --epochs "$EPOCHS" --init-seed "$d" --anchor-weight "$w" \
                     $TRAIN_EXTRA > "$LOG/train-$model.txt" 2>&1; then
                 tail -8 "$LOG/train-$model.txt" | sed 's/^/      /' | tee -a "$SUMMARY"
                 say "  TRAINING FAILED -- see $LOG/train-$model.txt"; exit 1
@@ -150,12 +167,30 @@ for arm in $ARMS; do
     done
 done
 
+# --- what the training did, per student set ---------------------------------------
+say "--- training: held-out gain of the top card over the legal mean (game value a play-out), the draws' mean ---"
+for v in $VARIANTS; do
+    files=""; for d in $DRAWS; do files="$files $LOG/train-$(model_of "$(vname "$v")" "$d").txt"; done
+    # shellcheck disable=SC2086 -- the file list is deliberately word-split
+    awk -v name="$(vname "$v") (anchor ${v#*:})" '
+        /^kept epoch/ { epochs = epochs " " $3 }
+        /held-out gain over the legal mean/ {
+            line = $0
+            sub(/.*legal mean: /, "", line); split(line, a, " ")
+            g0 += a[1]; g1 += a[6]
+            sub(/.*teacher regret /, "", line); split(line, t, " ")
+            r0 += t[1]; r1 += t[3]; n++
+        }
+        END { if (n) printf "  %-24s gain %+.3f -> %+.3f (%+.3f)   teacher regret %.3f -> %.3f   kept epochs%s\n", name, g0 / n, g1 / n, (g1 - g0) / n, r0 / n, r1 / n, epochs }
+    ' $files | tee -a "$SUMMARY"
+done
+
 # --- the yardstick ---------------------------------------------------------------
 YARD="$LOG/yardstick-oc$ROUND$SUFFIX.txt"
 STUDENTS=""
 for d in $DRAWS; do STUDENTS="$STUDENTS $(pa40_of "$d")"; done
 [ "$ROUND" = 1 ] || for d in $DRAWS; do STUDENTS="$STUDENTS $(init_of "$d")"; done
-for arm in $ARMS; do for d in $DRAWS; do STUDENTS="$STUDENTS $(model_of "$arm" "$d")"; done; done
+for v in $VARIANTS; do for d in $DRAWS; do STUDENTS="$STUDENTS $(model_of "$(vname "$v")" "$d")"; done; done
 if [ -f "$YARD" ]; then
     for m in $STUDENTS; do
         grep -qE "^ +student $m +[0-9]" "$YARD" || { say "  the yardstick lacks $m -- rerunning it"; mv "$YARD" "$YARD.old"; break; }
@@ -195,8 +230,8 @@ play() {  # model seed
 }
 for SEED in $SEEDS; do for d in $DRAWS; do play "$(pa40_of "$d")" "$SEED"; done; done
 [ "$ROUND" = 1 ] || for SEED in $SEEDS; do for d in $DRAWS; do play "$(init_of "$d")" "$SEED"; done; done
-for arm in $ARMS; do
-    for SEED in $SEEDS; do for d in $DRAWS; do play "$(model_of "$arm" "$d")" "$SEED"; done; done
+for v in $VARIANTS; do
+    for SEED in $SEEDS; do for d in $DRAWS; do play "$(model_of "$(vname "$v")" "$d")" "$SEED"; done; done
 done
 
 diff_of() { [ -n "$1" ] && [ -f "$1" ] && grep -E " = .*game pts/game" "$1" | sed -E 's/.* = ([-+0-9.]+) game pts.*/\1/'; }
@@ -239,21 +274,21 @@ say "--- pooled: student-64 against $T, the draws averaged seed by seed ---"
 [ "$ROUND" = 1 ] || series $PA40 | pool "pa40" | tee -a "$SUMMARY"
 # shellcheck disable=SC2086
 series $START | pool "$start_name (the start)" | tee -a "$SUMMARY"
-lists=()
-for arm in $ARMS; do
-    list=""; for d in $DRAWS; do list="$list $(model_of "$arm" "$d")"; done
-    lists+=("$list")
+lists=(); names=()
+for v in $VARIANTS; do
+    arm=${v%%:*}; name=$(vname "$v")
+    list=""; for d in $DRAWS; do list="$list $(model_of "$name" "$d")"; done
+    lists+=("$list"); names+=("$name")
     # shellcheck disable=SC2086
-    series $list | pool "$arm ($(objective_of "$arm"), on $(data_for "$arm" | sed 's|allcards-data/||g'))" | tee -a "$SUMMARY"
+    series $list | pool "$name ($(objective_of "$arm"), anchor ${v#*:}, on $(data_for "$arm" | sed 's|allcards-data/||g'))" | tee -a "$SUMMARY"
     if [ "$ROUND" = 1 ]; then
-        paired "$list" "$START" | pool "    $arm minus pa40, same seeds and draws" | tee -a "$SUMMARY"
+        paired "$list" "$START" | pool "    $name minus pa40, same seeds and draws" | tee -a "$SUMMARY"
     else
-        paired "$list" "$START" | pool "    $arm minus its start, same seeds and draws" | tee -a "$SUMMARY"
-        paired "$list" "$PA40" | pool "    $arm minus pa40, same seeds and draws" | tee -a "$SUMMARY"
+        paired "$list" "$START" | pool "    $name minus its start, same seeds and draws" | tee -a "$SUMMARY"
+        paired "$list" "$PA40" | pool "    $name minus pa40, same seeds and draws" | tee -a "$SUMMARY"
     fi
 done
-set -- $ARMS
-if [ $# -ge 2 ]; then
-    paired "${lists[0]}" "${lists[1]}" | pool "$1 minus $2, same seeds and draws" | tee -a "$SUMMARY"
-fi
+for ((i = 1; i < ${#lists[@]}; i++)); do
+    paired "${lists[$i]}" "${lists[0]}" | pool "${names[$i]} minus ${names[0]}, same seeds and draws" | tee -a "$SUMMARY"
+done
 say "outcomes finished $(date '+%Y-%m-%d %H:%M:%S')"

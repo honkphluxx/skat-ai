@@ -1961,6 +1961,21 @@ same starts, read on the same held-out gain; the arena only if the gain moves.
 The gate: round 2 does not pass on its own step; one more unresolved round
 ends the loop by the plan's rule, so the cause is looked at before round 3.
 
+*The anchor test, prepared (2026-11-03; `tools/outcomes-train.sh --anchors`).*
+Each weight in `--anchors` trains its own students (a weight other than 1
+named `-a<w>` without the point: policy-oc2-ev-a025, policy-oc2-ev-a0); the
+summary gains a training table -- per student set, the draws' held-out gain
+of the top card over the legal mean at the start and at the kept epoch, the
+teacher regret, the kept epochs -- and every later set is paired with the
+first in the arena. `./tools/outcomes-train.sh --round=2 --arms=ev
+--anchors="1 0.25 0" --no-arena` reuses round 2's ev (weight 1) and trains
+ev at 0.25 and 0 from the same policy-oc1-ev draws on round 2's corpus. What
+it decides: if the gain at the kept epoch climbs well past round 2's +0.09
+as the weight falls (and the teacher regret rises with it), the anchor was
+setting an equilibrium, and the arena follows (the same command without
+--no-arena); if it stays near +0.09 at weight 0, the anchor was not the cap
+and the labels themselves have run thin.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
