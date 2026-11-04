@@ -1998,6 +1998,34 @@ the teacher can learn to exploit without getting better against anyone
 else. The arena decides: ev at 0.25 and 0 against belief-64-shipped, seeds
 11-16 and 21, paired with ev at 1 (on disk), about 11 hours.
 
+*The anchor test in games: the answer (2026-11-04).* student-64 against
+belief-64-shipped, seeds 11-16 and 21, three draws a weight, paired with ev at
+weight 1:
+
+| anchor weight | against the teacher | minus its start | minus ev at 1 | per seed, minus ev at 1 |
+|---|---|---|---|---|
+| 1 | +0.07 [-1.04, +1.18] | +0.43 [-0.41, +1.28] | -- | |
+| 0.25 | +0.11 [-0.62, +0.84] | +0.48 [-0.89, +1.85] | +0.05 [-0.73, +0.82] | +0.19 +0.11 -0.44 +1.54 +0.46 -0.42 -1.12 |
+| 0 | -0.09 [-1.18, +1.00] | +0.27 [-0.57, +1.12] | -0.16 [-0.66, +0.34] | -0.89 -0.67 -0.03 +0.42 +0.37 +0.26 -0.56 |
+
+Two and a half to four times the label gain bought nothing in games: 0.25
+level with 1, 0 a little behind, neither resolved. So the anchor was capping
+the gain on the labels, not the student's strength. What the freed net
+learned is what its own self-play rewards -- the labels are the student
+against itself, and the extra fits that opponent and the labels' noise, not
+the teacher across the table -- and what it gave up (the opening, by the
+yardstick) cost about as much as it gained. Weight 1 stays.
+
+Where that leaves the loop. Round 2's own step is +0.43 (unresolved) at
+every weight, after round 1's +1.05; the second round's labels hold less, and
+taking them more literally does not help. The plan's rule ends the loop
+after one more unresolved round, so round 3 should change what the labels
+are made of rather than repeat round 2: the student playing against copies of
+itself is the likely limit, as round 2's narrower play-outs already showed.
+Phase P's rule is the lever -- opponents partly from earlier nets and fixed
+outsiders, in the main line and in the play-outs, so a card is valued against
+more than one way of defending and declaring.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
