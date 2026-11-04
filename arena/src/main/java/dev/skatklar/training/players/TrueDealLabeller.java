@@ -27,8 +27,15 @@ import java.util.function.Consumer;
  * the same luck. Everything is counted from the deciding seat's side: its wins,
  * its card points, the game value signed for it.
  *
+ * <p>With a seat net for every seat ({@link #label(SkatAi.DecisionContext, List,
+ * List, Map, List, Collection, long, PolicyNet[])}), every card of a play-out is
+ * played by the net of the seat that plays it -- the main line's seating, so
+ * a card is valued against the opponents actually at the table. Without, the
+ * labeller's own net plays every seat.
+ *
  * <p>The play-outs of a decision run in lockstep, each step's waiting positions
- * through one batched forward pass ({@link PolicyNet#logits(float[][])}).
+ * through one batched forward pass a net ({@link PolicyNet#logits(float[][])},
+ * bit for bit the single pass, so the grouping changes no answer).
  *
  * <p>Thread-safe if the net is: nothing is kept between calls.
  */
@@ -81,7 +88,7 @@ public final class TrueDealLabeller {
                          long positions) {}
 
     /** One position a play-out handed the net, for tests: whose card, which draw, the input. */
-    public record Fed(int candidate, int draw, SkatAi.Seat seat, float[] input) {}
+    public record Fed(int candidate, int draw, SkatAi.Seat seat, float[] input, PolicyNet net) {}
 
     /** Tests only: hears every position fed to the net. */
     private Consumer<Fed> tap;
@@ -100,6 +107,14 @@ public final class TrueDealLabeller {
     public Labels label(SkatAi.DecisionContext at, List<List<Card>> hands, List<Card> skat,
                         Map<SkatAi.Seat, Integer> bids, List<Card> declarersDiscard, Collection<Card> candidates,
                         long streamSeed) {
+        return label(at, hands, skat, bids, declarersDiscard, candidates, streamSeed, new PolicyNet[] {net, net, net});
+    }
+
+    /** As above, each seat's cards played by {@code bySeat[seat.ordinal()]}. */
+    public Labels label(SkatAi.DecisionContext at, List<List<Card>> hands, List<Card> skat,
+                        Map<SkatAi.Seat, Integer> bids, List<Card> declarersDiscard, Collection<Card> candidates,
+                        long streamSeed, PolicyNet[] bySeat) {
+        if (bySeat.length != 3) throw new IllegalArgumentException("a net for each of the three seats");
         record Flight(int candidate, int draw, Playout playout, SplittableRandom random) {}
         List<Card> cards = new ArrayList<>(candidates);
         List<Flight> flights = new ArrayList<>(cards.size() * k);
@@ -129,9 +144,12 @@ public final class TrueDealLabeller {
                 SkatAi.DecisionContext p = contexts.get(i);
                 inputs[i] = PolicyNet.features(SelfPlayExportMain.perfectMemory(p, bids,
                         p.mySeat == p.game.declarer ? declarersDiscard : null));
-                if (tap != null) tap.accept(new Fed(waiting.get(i).candidate, waiting.get(i).draw, p.mySeat, inputs[i]));
+                if (tap != null) {
+                    tap.accept(new Fed(waiting.get(i).candidate, waiting.get(i).draw, p.mySeat, inputs[i],
+                            bySeat[p.mySeat.ordinal()]));
+                }
             }
-            float[][] scores = net.logits(inputs);
+            float[][] scores = byNet(inputs, contexts, bySeat);
             positions += inputs.length;
             for (int i = 0; i < inputs.length; i++) {
                 SkatAi.DecisionContext p = contexts.get(i);
@@ -155,6 +173,26 @@ public final class TrueDealLabeller {
             byDraw[f.candidate][f.draw] = signed;
         }
         return new Labels(List.copyOf(cards), wins, points, value, byDraw, positions);
+    }
+
+    /** Each input through the net of the seat to move: one batch a distinct net, the answers back in order. */
+    private static float[][] byNet(float[][] inputs, List<SkatAi.DecisionContext> contexts, PolicyNet[] bySeat) {
+        if (bySeat[0] == bySeat[1] && bySeat[1] == bySeat[2]) return bySeat[0].logits(inputs);
+        float[][] out = new float[inputs.length][];
+        for (int s = 0; s < 3; s++) {
+            PolicyNet net = bySeat[s];
+            boolean seen = false;
+            for (int t = 0; t < s; t++) seen |= bySeat[t] == net;
+            if (seen) continue;
+            List<Integer> rows = new ArrayList<>();
+            for (int i = 0; i < inputs.length; i++) if (bySeat[contexts.get(i).mySeat.ordinal()] == net) rows.add(i);
+            if (rows.isEmpty()) continue;
+            float[][] batch = new float[rows.size()][];
+            for (int i = 0; i < batch.length; i++) batch[i] = inputs[rows.get(i)];
+            float[][] answers = net.logits(batch);
+            for (int i = 0; i < batch.length; i++) out[rows.get(i)] = answers[i];
+        }
+        return out;
     }
 
     static SplittableRandom stream(long streamSeed, int draw) {

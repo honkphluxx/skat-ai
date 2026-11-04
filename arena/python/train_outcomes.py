@@ -141,7 +141,11 @@ def load_corpora(directories, limit=None):
     seeds = [c.seed for c in corpora]
     if len(set(seeds)) != len(seeds):
         raise SystemExit(f"two corpora of the same board seed: {seeds}")
-    raw = np.concatenate([c.load(limit=limit).raw for c in corpora])
+    # Format 2 adds four bytes at the end (who sat where); the trainer reads
+    # only the fields both formats share, so mixed rounds are cut to those.
+    blocks = [c.load(limit=limit).raw for c in corpora]
+    width = min(block.shape[1] for block in blocks)
+    raw = np.concatenate([block[:, :width] for block in blocks])
     return corpora[0], corpora, Records(raw[:limit] if limit else raw)
 
 

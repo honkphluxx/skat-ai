@@ -5,6 +5,8 @@
 #   ./tools/allcards-export.sh                100,000 boards at k 8 (50 shards), then the checks
 #   ./tools/allcards-export.sh --boards=300000 --k=8 --seed=9001 --threads=24 --model=policy-b600-pa40
 #   ./tools/allcards-export.sh --python=/c/Python312/python.exe
+#   ./tools/allcards-export.sh --model=policy-oc2-ev --pool=policy-b600-pa40,policy-oc1-ev --seed=9003 \
+#                              --out=allcards-data/r3-k8-s9003      round 3: opponents from earlier nets
 #
 # The student (--model) plays all three seats at greedy's fixed suit and grand
 # contracts, boards of --seed (never below 1000: 101 is the teacher corpora's,
@@ -15,7 +17,11 @@
 # student from its own evidence, the decider's side by the top card, the
 # other side drawn (temperature 1); the decision is written with each card's
 # wins, card points and game value from the decider's side
-# (AllCardsExportMain). Then arena/python/allcards_data.py checks every shard
+# (AllCardsExportMain). With --pool (other students' folders, comma-separated)
+# the student takes one, two or three seats a board (--mix, the weights, default
+# 40,40,20) and the other seats are pool nets, in the main line and in the
+# play-outs; only the student's decisions are labelled (Phase P's rule).
+# Then arena/python/allcards_data.py checks every shard
 # against the exporter's own totals and the records as a whole.
 #
 # The Java side prints, by trick, the cost and the noise that decide k: the
@@ -42,7 +48,7 @@ fi
 cd "$(dirname "$AC_ORIGINAL")/.." || exit 1
 
 QUICK=false; BOARDS=100000; K=8; SEED=9001; EPSILON=0.2; THREADS=24; MODEL=policy-b600-pa40; OUT=""
-SHARD=2000; PYTHON=${SKATKLAR_PYTHON:-}
+SHARD=2000; PYTHON=${SKATKLAR_PYTHON:-}; POOL=""; MIX=40,40,20
 for arg in "$@"; do
     case "$arg" in
         --quick)       QUICK=true ;;
@@ -53,8 +59,10 @@ for arg in "$@"; do
         --threads=*)   THREADS="${arg#*=}" ;;
         --model=*)     MODEL="${arg#*=}" ;;
         --out=*)       OUT="${arg#*=}" ;;
+        --pool=*)      POOL="${arg#*=}" ;;
+        --mix=*)       MIX="${arg#*=}" ;;
         --python=*)    PYTHON="${arg#*=}" ;;
-        -h|--help)     sed -n '2,34p' "$AC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)     sed -n '2,40p' "$AC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -63,9 +71,13 @@ for n in "$BOARDS" "$K" "$SEED" "$THREADS"; do
     case "$n" in ''|*[!0-9]*) echo "not a whole number: $n" >&2; exit 2 ;; esac
 done
 [ "$SEED" -ge 1000 ] || { echo "seed $SEED is below 1000: those boards are the teacher's and the arena's" >&2; exit 2; }
-for f in model.json policy.bin policy-parity.bin; do
-    [ -f "$MODEL/$f" ] || { echo "$MODEL/$f is missing: not a trained, exported student" >&2; exit 2; }
+for m in $MODEL ${POOL//,/ }; do
+    for f in model.json policy.bin policy-parity.bin; do
+        [ -f "$m/$f" ] || { echo "$m/$f is missing: not a trained, exported student" >&2; exit 2; }
+    done
 done
+[[ "$MIX" =~ ^[0-9]+,[0-9]+,[0-9]+$ ]] || { echo "--mix is three weights, for 1, 2 and 3 student seats: $MIX" >&2; exit 2; }
+POOL_ARGS=""; [ -n "$POOL" ] && POOL_ARGS="--pool=$POOL --mix=$MIX"
 if [ -z "$OUT" ]; then
     if $QUICK; then OUT=allcards-data/quick-k$K; else OUT=allcards-data/r1-k$K-s$SEED; fi
 fi
@@ -84,7 +96,7 @@ SUMMARY=arena-logs/summary-allcards.txt
 $QUICK && SUMMARY=arena-logs/summary-allcards-quick.txt
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
-say "all-cards export started $(date '+%Y-%m-%d %H:%M:%S')   $OUT: model=$MODEL boards=$BOARDS k=$K seed=$SEED epsilon=$EPSILON threads=$THREADS"
+say "all-cards export started $(date '+%Y-%m-%d %H:%M:%S')   $OUT: model=$MODEL boards=$BOARDS k=$K seed=$SEED epsilon=$EPSILON threads=$THREADS${POOL:+ pool=$POOL mix=$MIX}"
 
 SHARDS=$(( (BOARDS + SHARD - 1) / SHARD ))
 have=$(ls "$OUT"/allcards-s"$SEED"-*.bin 2>/dev/null | wc -l)
@@ -103,7 +115,7 @@ else
     say "  [$(date '+%H:%M:%S')] export: $(( SHARDS - have )) shard(s) to go, about $(( need_kb / 1024 )) MB"
     start=$(date +%s)
     ./gradlew --console=plain -q --no-daemon :arena:allCardsExport \
-        --args="--model=$MODEL --out=$OUT --boards=$BOARDS --shard-size=$SHARD --k=$K --seed=$SEED --epsilon=$EPSILON --threads=$THREADS" \
+        --args="--model=$MODEL --out=$OUT --boards=$BOARDS --shard-size=$SHARD --k=$K --seed=$SEED --epsilon=$EPSILON --threads=$THREADS $POOL_ARGS" \
         > "$export_log.partial" 2>&1 || { mv "$export_log.partial" "$LOG/$NAME-export.failed.txt"; say "      FAILED -- see $LOG/$NAME-export.failed.txt"; exit 1; }
     mv "$export_log.partial" "$export_log"
     say "      took $(( ($(date +%s) - start) / 60 )) min"
@@ -114,7 +126,7 @@ else
         exit 0
     fi
 fi
-grep -E "games/s|^k [0-9]+\.|^  trick|^  +[0-9]+  +[0-9]+ |^  \(sd" "$export_log" | sed 's/^/    /' | tee -a "$SUMMARY"
+grep -E "games/s|^  pool |^k [0-9]+\.|^  trick|^  +[0-9]+  +[0-9]+ |^  \(sd" "$export_log" | sed 's/^/    /' | tee -a "$SUMMARY"
 
 checks="$LOG/$NAME-checks.txt"
 if [ -f "$checks" ]; then
@@ -132,5 +144,5 @@ else
         exit 1
     fi
 fi
-grep -E "all checks passed|records, .* boards|^  trick|^  +[0-9]+  +[0-9]+  " "$checks" | sed 's/^/    /' | tee -a "$SUMMARY"
+grep -E "all checks passed|records, .* boards|seats at the table|^  trick|^  +[0-9]+  +[0-9]+  " "$checks" | sed 's/^/    /' | tee -a "$SUMMARY"
 say "all-cards export finished $(date '+%Y-%m-%d %H:%M:%S')"

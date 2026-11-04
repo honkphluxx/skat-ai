@@ -2026,6 +2026,33 @@ Phase P's rule is the lever -- opponents partly from earlier nets and fixed
 outsiders, in the main line and in the play-outs, so a card is valued against
 more than one way of defending and declaring.
 
+*Opponents from earlier nets, built (2026-11-04; `--pool`, `--mix`).* Phase P's
+rule in the all-cards exporter: `--pool` names other students; per board the
+student takes one, two or three seats in the proportion `--mix` (default 40 :
+40 : 20; seats at random, each other seat a pool net drawn uniformly, one
+stream a board of its own). Pool seats play the main line by the same rule
+(top card, a fifth drawn); only the student's decisions are labelled; and in
+the play-outs every card is played by the net of the seat that plays it --
+the decider's own side at the top card, the other side drawn -- so a card is
+valued against the opponents actually at the table (TrueDealLabeller, one
+batched pass a distinct net, bit for bit the single pass). Records are format
+2: four bytes more, who sat after and before the decider (0 the student, i
+the pool's i-th net) and the student's seat count; the reader reads both
+formats and the trainer mixes them. Without a pool the exporter writes format
+1's records byte for byte plus `0 0 3 0` (209 of 209 records compared against
+the code before the change). Tests: with a pool every play-out position goes
+to its seat's net, only the student's decisions are labelled, and the play-out
+of the main line's card is the main line at the student's positions and in
+its result; the role bytes; the seating follows the mix (6,000 boards within
+two points) and is the same for the same board; seven mutants fail. The
+reader checks the roles against the seat count; two mutants fail it. A pool
+holding the student itself is refused.
+
+Round 3, prepared: policy-oc2-ev in the student's seats, policy-b600-pa40
+(imitation of best) and policy-oc1-ev (round 1) in the pool, seed 9003 --
+labels for the student against the net it was a round ago and against the
+imitation net it started from, beside its own copies a fifth of the boards.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

@@ -61,6 +61,16 @@ import java.util.concurrent.atomic.AtomicInteger;
  * card is chosen; the choice uses the seat's own context and its own random
  * stream (AllCardsExportTest holds the games with and without labels equal).
  *
+ * <p>With a pool ({@code --pool}: other students' folders), the student no
+ * longer plays every seat: per board it takes one, two or three seats in the
+ * proportion {@code --mix} (default 40 : 40 : 20), chosen at random, and each
+ * other seat is a pool net drawn uniformly (Phase P's rule: opponents partly
+ * from earlier nets). The pool seats play the main line by the same rule
+ * (their top card, epsilon drawn); only the student's decisions are labelled;
+ * and in the play-outs every seat is played by its own net, so a card is
+ * valued against the opponents at the table. Without a pool every seat is the
+ * student and the records are those of format 1 with four zero bytes added.
+ *
  * <p>Every random stream is a function of the seed and the board, so a shard
  * is the same bytes at any thread count. Boards go into shards of
  * {@code shard-size}, written as {@code .partial} and renamed when complete; a
@@ -89,11 +99,14 @@ import java.util.concurrent.atomic.AtomicInteger;
  *   348   40  game value per slot, summed over k, signed for the decider (i32)
  *   388    4  board index (u32)
  *   392    4  board seed (u32)
+ *   396    4  roles: who played the seat after the decider and the seat before it
+ *              (0 the student, i the pool's i-th net), how many seats the student
+ *              played, 0
  * </pre>
  */
 public final class AllCardsExportMain {
 
-    static final int FORMAT = 1;
+    static final int FORMAT = 2;
     static final int SLOTS = 10;
     static final int ENCODING = 0;
     static final int LEGAL = BeliefEncoding.SIZE;
@@ -110,7 +123,8 @@ public final class AllCardsExportMain {
     static final int VALUE = POINTS + 2 * SLOTS;
     static final int BOARD = VALUE + 4 * SLOTS;
     static final int SEED = BOARD + 4;
-    static final int RECORD_BYTES = SEED + 4;
+    static final int ROLES = SEED + 4;
+    static final int RECORD_BYTES = ROLES + 4;
 
     static final int DRAWN = 1;
     static final int DECLARER = 2;
@@ -119,7 +133,11 @@ public final class AllCardsExportMain {
 
     /** Everything that decides the bytes of a shard. */
     record Settings(Path model, String modelSha256, long seed, int k, double temperature, double epsilon,
-                    int shardSize) {
+                    int shardSize, List<Path> pool, List<String> poolSha256, int[] mix) {
+        Settings(Path model, String modelSha256, long seed, int k, double temperature, double epsilon, int shardSize) {
+            this(model, modelSha256, seed, k, temperature, epsilon, shardSize, List.of(), List.of(), new int[] {0, 0, 1});
+        }
+
         String json() {
             return "{\n"
                     + "  \"format\": " + FORMAT + ",\n"
@@ -131,7 +149,7 @@ public final class AllCardsExportMain {
                     + "  \"fields\": {\"encoding\": [" + ENCODING + ", " + BeliefEncoding.SIZE + "], "
                     + "\"legal\": [" + LEGAL + ", 4], \"chosen\": [" + CHOSEN + ", 1], \"flags\": [" + FLAGS + ", 1], "
                     + "\"trick\": [" + TRICK + ", 1], \"contract\": [" + CONTRACT + ", 1], \"k\": [" + K + ", 1], "
-                    + "\"place\": [" + PLACE + ", 1], \"main_won\": [" + MAIN_WON + ", 1], "
+                    + "\"place\": [" + PLACE + ", 1], \"main_won\": [" + MAIN_WON + ", 1], \"roles\": [" + ROLES + ", 4], "
                     + "\"main_points\": [" + MAIN_POINTS + ", 1], \"wins\": [" + WINS + ", " + SLOTS + "], "
                     + "\"points\": [" + POINTS + ", " + (2 * SLOTS) + "], \"value\": [" + VALUE + ", " + (4 * SLOTS)
                     + "], \"board\": [" + BOARD + ", 4], \"seed\": [" + SEED + ", 4]},\n"
@@ -142,8 +160,23 @@ public final class AllCardsExportMain {
                     + "  \"k\": " + k + ",\n"
                     + String.format(Locale.ROOT, "  \"temperature\": %s,%n", temperature)
                     + String.format(Locale.ROOT, "  \"epsilon\": %s,%n", epsilon)
-                    + "  \"shard_size\": " + shardSize + "\n"
+                    + "  \"shard_size\": " + shardSize + ",\n"
+                    + "  \"pool\": " + names(pool) + ",\n"
+                    + "  \"pool_sha256\": " + quoted(poolSha256) + ",\n"
+                    + "  \"mix\": [" + mix[0] + ", " + mix[1] + ", " + mix[2] + "]\n"
                     + "}\n";
+        }
+
+        private static String names(List<Path> paths) {
+            List<String> out = new ArrayList<>();
+            for (Path p : paths) out.add(p.toString().replace('\\', '/'));
+            return quoted(out);
+        }
+
+        private static String quoted(List<String> values) {
+            StringBuilder b = new StringBuilder("[");
+            for (int i = 0; i < values.size(); i++) b.append(i == 0 ? "" : ", ").append('"').append(values.get(i)).append('"');
+            return b.append(']').toString();
         }
     }
 
@@ -166,13 +199,25 @@ public final class AllCardsExportMain {
         long seed = Long.parseLong(options.getOrDefault("seed", "9001"));
         int threads = Integer.parseInt(options.getOrDefault("threads",
                 String.valueOf(Runtime.getRuntime().availableProcessors())));
+        List<Path> poolDirs = new ArrayList<>();
+        for (String dir : options.getOrDefault("pool", "").split(",")) if (!dir.isBlank()) poolDirs.add(Path.of(dir.trim()));
+        int[] mix = parseMix(options.getOrDefault("mix", "40,40,20"));
         checkSeed(seed);
         if (!(epsilon >= 0 && epsilon <= 1)) throw new IllegalArgumentException("epsilon is 0 to 1, not " + epsilon);
         if (first % shardSize != 0) throw new IllegalArgumentException("--first-board is a multiple of --shard-size");
 
         PolicyNet net = load(model);
+        List<PolicyNet> pool = new ArrayList<>();
+        List<String> poolSha = new ArrayList<>();
+        for (Path dir : poolDirs) {
+            pool.add(load(dir));
+            poolSha.add(sha256(dir.resolve("policy.bin")));
+        }
+        if (poolSha.contains(sha256(model.resolve("policy.bin")))) {
+            throw new IllegalArgumentException("the pool holds the student itself; it plays the seats the pool does not");
+        }
         Settings settings = new Settings(model, sha256(model.resolve("policy.bin")), seed, k, temperature, epsilon,
-                shardSize);
+                shardSize, List.copyOf(poolDirs), List.copyOf(poolSha), pool.isEmpty() ? new int[] {0, 0, 1} : mix);
         Files.createDirectories(out);
         Path format = out.resolve("allcards-format.json");
         if (Files.exists(format)) {
@@ -193,6 +238,10 @@ public final class AllCardsExportMain {
         System.out.printf(Locale.ROOT, "all-cards export: %s, k %d, temperature %s, epsilon %s, seed %d, boards %,d-%,d "
                         + "in shards of %,d, %d threads -> %s%n", model, k, temperature, epsilon, seed, first,
                 first + boards - 1, shardSize, threads, out);
+        if (!pool.isEmpty()) {
+            System.out.printf(Locale.ROOT, "  pool %s; the student takes 1, 2 or 3 seats in the proportion %d : %d : %d%n",
+                    poolDirs, settings.mix[0], settings.mix[1], settings.mix[2]);
+        }
 
         Stats total = new Stats();
         long started = System.nanoTime();
@@ -208,7 +257,7 @@ public final class AllCardsExportMain {
                 break;
             }
             long shardStart = System.nanoTime();
-            Shard result = playShard(net, labeller, greedy, contracts, settings, from, to, threads);
+            Shard result = playShard(net, pool, labeller, greedy, contracts, settings, from, to, threads);
             Path partial = out.resolve(shard.getFileName() + ".partial");
             try (OutputStream sink = Files.newOutputStream(partial)) {
                 for (byte[] record : result.records) sink.write(record);
@@ -226,6 +275,41 @@ public final class AllCardsExportMain {
         total.print(seconds, threads, k);
     }
 
+    static int[] parseMix(String text) {
+        String[] parts = text.split(",");
+        if (parts.length != 3) throw new IllegalArgumentException("--mix is three weights, for 1, 2 and 3 student seats");
+        int[] mix = new int[3];
+        for (int i = 0; i < 3; i++) {
+            mix[i] = Integer.parseInt(parts[i].trim());
+            if (mix[i] < 0) throw new IllegalArgumentException("a weight is not negative");
+        }
+        if (mix[0] + mix[1] + mix[2] == 0) throw new IllegalArgumentException("--mix weighs nothing");
+        return mix;
+    }
+
+    /**
+     * Who plays each seat of a board, by seat ordinal: 0 the student, i the
+     * pool's i-th net. The student's seat count is drawn by the mix, the seats
+     * at random, each other seat's net uniformly; one stream a board, its own.
+     */
+    static int[] seating(long seed, long board, int poolSize, int[] mix) {
+        int[] roles = new int[3];
+        if (poolSize == 0) return roles;
+        SplittableRandom random = new SplittableRandom(Seeds.mix(seed, board, 0x5EA7L));
+        int total = mix[0] + mix[1] + mix[2];
+        int pick = random.nextInt(total);
+        int count = pick < mix[0] ? 1 : pick < mix[0] + mix[1] ? 2 : 3;
+        int[] order = {0, 1, 2};
+        for (int i = 2; i > 0; i--) {
+            int j = random.nextInt(i + 1);
+            int t = order[i];
+            order[i] = order[j];
+            order[j] = t;
+        }
+        for (int i = count; i < 3; i++) roles[order[i]] = 1 + random.nextInt(poolSize);
+        return roles;
+    }
+
     static void checkSeed(long seed) {
         // 101 is the teacher corpora's (the yardstick's held-out deals); 11-16
         // and 21 are the arena's. Nothing below 1000 is ours to train on.
@@ -240,6 +324,12 @@ public final class AllCardsExportMain {
 
     static Shard playShard(PolicyNet net, TrueDealLabeller labeller, Contestant greedy, ContractSource contracts,
                            Settings settings, long from, long to, int threads) throws InterruptedException {
+        return playShard(net, List.of(), labeller, greedy, contracts, settings, from, to, threads);
+    }
+
+    static Shard playShard(PolicyNet net, List<PolicyNet> poolNets, TrueDealLabeller labeller, Contestant greedy,
+                           ContractSource contracts, Settings settings, long from, long to, int threads)
+            throws InterruptedException {
         int n = (int) (to - from);
         @SuppressWarnings("unchecked")
         List<byte[]>[] byBoard = new List[n];
@@ -251,8 +341,8 @@ public final class AllCardsExportMain {
             Stats own = stats[t] = new Stats();
             pool[t] = new Thread(() -> {
                 for (int i = next.getAndIncrement(); i < n; i = next.getAndIncrement()) {
-                    byBoard[i] = playBoard(net, labeller, greedy, contracts, settings, Board.of(settings.seed, from + i),
-                            settings.epsilon, own, null);
+                    byBoard[i] = playBoard(net, poolNets, labeller, greedy, contracts, settings,
+                            Board.of(settings.seed, from + i), settings.epsilon, own, null);
                 }
             }, "allcards-" + t);
             pool[t].setUncaughtExceptionHandler((th, e) -> failure[0] = e);
@@ -277,6 +367,8 @@ public final class AllCardsExportMain {
     /** Tests only: one game's decisions, every card played in order, and the outcome. */
     static final class Watch {
         final List<Watched> decisions = new ArrayList<>();
+        int[] roles;
+        PolicyNet[] bySeat;
         final List<SkatAi.PlayedCard> plays = new ArrayList<>();
         GameOutcome outcome;
     }
@@ -292,19 +384,33 @@ public final class AllCardsExportMain {
     static List<byte[]> playBoard(PolicyNet net, TrueDealLabeller labeller, Contestant greedy,
                                   ContractSource contracts, Settings settings, Board board, double epsilon,
                                   Stats stats, Watch watch) {
+        return playBoard(net, List.of(), labeller, greedy, contracts, settings, board, epsilon, stats, watch);
+    }
+
+    static List<byte[]> playBoard(PolicyNet net, List<PolicyNet> poolNets, TrueDealLabeller labeller,
+                                  Contestant greedy, ContractSource contracts, Settings settings, Board board,
+                                  double epsilon, Stats stats, Watch watch) {
+        long seed = settings.seed;
+        int[] roles = seating(seed, board.index(), poolNets.size(), settings.mix);
+        PolicyNet[] bySeat = new PolicyNet[3];
+        for (int s = 0; s < 3; s++) bySeat[s] = roles[s] == 0 ? net : poolNets.get(roles[s] - 1);
         ContractSource.FixedContract contract = contracts.contractFor(board);
-        if (contract == null || contract.contract().isNull() || contract.contract().isRamsch()
-                || !net.covers(contract.contract())) {
+        boolean covered = contract != null;
+        for (int s = 0; covered && s < 3; s++) covered = bySeat[s].covers(contract.contract());
+        if (contract == null || contract.contract().isNull() || contract.contract().isRamsch() || !covered) {
             stats.skipped++;
             return List.of();
         }
-        long seed = settings.seed;
-        Game game = new Game(board.index(), seed, labeller, stats, watch);
+        if (watch != null) {
+            watch.roles = roles.clone();
+            watch.bySeat = bySeat.clone();
+        }
+        Game game = new Game(board.index(), seed, labeller, stats, watch, bySeat, roles);
         Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
         for (SkatAi.Seat seat : SkatAi.Seat.values()) {
-            seating.put(seat, new Actor(net, greedy.newProvider(Seeds.mix(seed, board.index(), seat.ordinal())),
-                    epsilon, new SplittableRandom(Seeds.mix(seed, board.index(), seat.ordinal(), 0xAC7L)), game,
-                    seat == SkatAi.Seat.HUMAN));
+            seating.put(seat, new Actor(bySeat[seat.ordinal()], greedy.newProvider(Seeds.mix(seed, board.index(),
+                    seat.ordinal())), epsilon, new SplittableRandom(Seeds.mix(seed, board.index(), seat.ordinal(),
+                    0xAC7L)), game, seat == SkatAi.Seat.HUMAN, roles[seat.ordinal()] == 0));
         }
         GameOutcome outcome = GameRunner.playFixed(board, seating, contract, Seeds.mix(seed, board.index(), 0xE1E1E1L));
         if (watch != null) watch.outcome = outcome;
@@ -315,14 +421,14 @@ public final class AllCardsExportMain {
             boolean won = declarer == outcome.declarerWon();
             int points = declarer ? outcome.declarerPoints() : 120 - outcome.declarerPoints();
             records.add(record(d, declarer, outcome.contract().ordinal(), labeller.k(), won, points, board.index(),
-                    seed));
+                    seed, roles));
         }
         stats.games++;
         return records;
     }
 
     static byte[] record(Pending d, boolean declarer, int contract, int k, boolean won, int points, long board,
-                         long seed) {
+                         long seed, int[] roles) {
         ByteBuffer r = ByteBuffer.allocate(RECORD_BYTES).order(ByteOrder.LITTLE_ENDIAN);
         r.put(d.encoding);
         r.putInt(d.legal);
@@ -342,6 +448,13 @@ public final class AllCardsExportMain {
         for (int s = 0; s < SLOTS; s++) r.putInt(s < slots ? Math.toIntExact(l.value()[s]) : 0);
         r.putInt((int) board);
         r.putInt((int) seed);
+        SkatAi.Seat after = d.seat.next();
+        int students = 0;
+        for (int role : roles) if (role == 0) students++;
+        r.put((byte) roles[after.ordinal()]);
+        r.put((byte) roles[after.next().ordinal()]);
+        r.put((byte) students);
+        r.put((byte) 0);
         return r.array();
     }
 
@@ -357,11 +470,16 @@ public final class AllCardsExportMain {
         final Stats stats;
         final Watch watch;
         final List<Pending> pending = new ArrayList<>(30);
+        final PolicyNet[] bySeat;
+        final int[] roles;
         GameEngine engine;
         List<Card> discard;
         int decisions;
 
-        Game(long board, long seed, TrueDealLabeller labeller, Stats stats, Watch watch) {
+        Game(long board, long seed, TrueDealLabeller labeller, Stats stats, Watch watch, PolicyNet[] bySeat,
+             int[] roles) {
+            this.bySeat = bySeat;
+            this.roles = roles;
             this.board = board;
             this.seed = seed;
             this.labeller = labeller;
@@ -385,7 +503,7 @@ public final class AllCardsExportMain {
                 skat = List.copyOf(table.skat);
                 long started = System.nanoTime();
                 labels = labeller.label(context, hands, skat, bids, discard, legal,
-                        Seeds.mix(seed, board, number, 0x1ABE1L));
+                        Seeds.mix(seed, board, number, 0x1ABE1L), bySeat);
                 stats.decided(trick, labels, legal.indexOf(top), System.nanoTime() - started);
             }
             pending.add(new Pending(context.mySeat, encoding, mask, BeliefEncoding.index(card), drawn, trick, place,
@@ -412,12 +530,15 @@ public final class AllCardsExportMain {
         private final Game game;
         /** The one seat that writes the game's cards down for a watching test. */
         private final boolean recorder;
+        /** The student's seat: its decisions are labelled. A pool seat only plays. */
+        private final boolean labelled;
         private final Map<SkatAi.Seat, Integer> highestBids = new EnumMap<>(SkatAi.Seat.class);
         private List<Card> buried;
 
         Actor(PolicyNet net, SkatAiProvider greedy, double epsilon, SplittableRandom random, Game game,
-              boolean recorder) {
+              boolean recorder, boolean labelled) {
             this.recorder = recorder;
+            this.labelled = labelled;
             this.net = net;
             this.greedy = greedy;
             this.epsilon = epsilon;
@@ -477,7 +598,7 @@ public final class AllCardsExportMain {
             Card card = drawn ? TrueDealLabeller.drawCard(scores, legal, 1.0, random) : top;
             int mask = 0;
             for (Card c : legal) mask |= 1 << BeliefEncoding.index(c);
-            game.label(context, legal, Map.copyOf(highestBids), encoding, mask, card, drawn, top);
+            if (labelled) game.label(context, legal, Map.copyOf(highestBids), encoding, mask, card, drawn, top);
             return card;
         }
     }

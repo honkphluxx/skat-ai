@@ -230,6 +230,139 @@ public class AllCardsExportTest {
         assertTrue("records: " + records, records > 80);
     }
 
+    // ------------------------------------------------------------------ with a pool
+
+    static AllCardsExportMain.Settings pooled(long seed, int k, double epsilon) {
+        return new AllCardsExportMain.Settings(Path.of("random-net"), "-", seed, k, 1.0, epsilon, 4,
+                List.of(Path.of("a"), Path.of("b")), List.of("-", "-"), new int[] {40, 40, 20});
+    }
+
+    /** Watched games with a pool of two nets beside the student, boards with a pool seat only. */
+    static List<AllCardsExportMain.Watch> watchedWithPool(PolicyNet net, List<PolicyNet> pool,
+                                                          TrueDealLabeller labeller, long seed, int games,
+                                                          double epsilon) {
+        ContractSource contracts = new AuctionContractSource(GREEDY, seed);
+        List<AllCardsExportMain.Watch> out = new ArrayList<>();
+        for (int i = 0; out.size() < games && i < 80; i++) {
+            AllCardsExportMain.Watch watch = new AllCardsExportMain.Watch();
+            List<byte[]> records = AllCardsExportMain.playBoard(net, pool, labeller, GREEDY, contracts,
+                    pooled(seed, labeller.k(), epsilon), Board.of(seed, i), epsilon, new AllCardsExportMain.Stats(),
+                    watch);
+            if (watch.outcome == null) continue;
+            assertEquals("a record a labelled decision", watch.decisions.size(), records.size());
+            int students = 0;
+            for (int role : watch.roles) if (role == 0) students++;
+            if (students == 3) continue;
+            out.add(watch);
+        }
+        assertEquals(games, out.size());
+        return out;
+    }
+
+    @Test public void withAPoolEverySeatIsPlayedByItsOwnNet() throws Exception {
+        PolicyNet net = RolloutRescueTest.randomNet(50);
+        List<PolicyNet> pool = List.of(RolloutRescueTest.randomNet(51), RolloutRescueTest.randomNet(52));
+        List<TrueDealLabeller.Fed> fed = new ArrayList<>();
+        TrueDealLabeller labeller = TrueDealLabeller.topOnly(net, 1).withTap(fed::add);
+        List<AllCardsExportMain.Watch> games = watchedWithPool(net, pool, labeller, SEED + 6, 6, 0.0);
+        List<AllCardsExportMain.Watched> everyDecision = new ArrayList<>();
+        for (AllCardsExportMain.Watch game : games) everyDecision.addAll(game.decisions);
+        List<List<TrueDealLabeller.Fed>> feeds = split(fed, everyDecision);
+        int offset = 0;
+        int decisions = 0;
+        int poolPositions = 0;
+        Set<PolicyNet> poolSeen = new HashSet<>();
+        for (AllCardsExportMain.Watch game : games) {
+            List<AllCardsExportMain.Watched> ds = game.decisions;
+            List<List<TrueDealLabeller.Fed>> perDecision = feeds.subList(offset, offset + ds.size());
+            offset += ds.size();
+            for (int j = 0; j < ds.size(); j++) {
+                AllCardsExportMain.Watched w = ds.get(j);
+                assertEquals("only the student's decisions are labelled", 0, game.roles[w.context().mySeat.ordinal()]);
+                int slot = w.labels().cards().indexOf(w.played());
+                List<float[]> studentInputs = new ArrayList<>();
+                for (TrueDealLabeller.Fed f : perDecision.get(j)) {
+                    assertTrue("every play-out position goes to its seat's net",
+                            f.net() == game.bySeat[f.seat().ordinal()]);
+                    if (game.roles[f.seat().ordinal()] != 0) {
+                        poolPositions++;
+                        poolSeen.add(f.net());
+                    }
+                    if (f.candidate() == slot && game.roles[f.seat().ordinal()] == 0) studentInputs.add(f.input());
+                }
+                assertEquals("decision " + j + ": one student position for every later labelled decision",
+                        ds.size() - j - 1, studentInputs.size());
+                for (int i = 0; i < studentInputs.size(); i++) {
+                    assertArrayEquals("the play-out's student position is the main line's",
+                            BeliefEncoding.dequantise(ds.get(j + 1 + i).encoding()), studentInputs.get(i), 0f);
+                }
+                boolean declares = w.context().mySeat == game.outcome.declarer();
+                int value = declares ? game.outcome.gameValue() : -game.outcome.gameValue();
+                int points = declares ? game.outcome.declarerPoints() : 120 - game.outcome.declarerPoints();
+                assertEquals("decision " + j + ": the main line's points from the decider's side", points,
+                        w.labels().points()[slot]);
+                assertEquals("decision " + j + ": the main line's game value", value, w.labels().value()[slot]);
+                decisions++;
+            }
+        }
+        assertTrue("decisions: " + decisions, decisions > 30);
+        assertTrue("pool seats played in the play-outs: " + poolPositions, poolPositions > 100);
+        assertEquals("both pool nets sat at a table", 2, poolSeen.size());
+    }
+
+    @Test public void aRecordSaysWhoSatBesideTheDecider() throws Exception {
+        PolicyNet net = RolloutRescueTest.randomNet(53);
+        List<PolicyNet> pool = List.of(RolloutRescueTest.randomNet(54), RolloutRescueTest.randomNet(55));
+        ContractSource contracts = new AuctionContractSource(GREEDY, SEED + 7);
+        int checked = 0;
+        Set<String> seen = new HashSet<>();
+        for (int i = 0; i < 30; i++) {
+            AllCardsExportMain.Watch watch = new AllCardsExportMain.Watch();
+            List<byte[]> bytes = AllCardsExportMain.playBoard(net, pool, new TrueDealLabeller(net, 1, 1.0), GREEDY,
+                    contracts, pooled(SEED + 7, 1, 0.2), Board.of(SEED + 7, i), 0.2, new AllCardsExportMain.Stats(),
+                    watch);
+            for (int r = 0; r < bytes.size(); r++) {
+                SkatAi.Seat me = watch.decisions.get(r).context().mySeat;
+                int students = 0;
+                for (int role : watch.roles) if (role == 0) students++;
+                byte[] b = bytes.get(r);
+                assertEquals("the seat after the decider", watch.roles[me.next().ordinal()], b[AllCardsExportMain.ROLES]);
+                assertEquals("the seat before it", watch.roles[me.next().next().ordinal()],
+                        b[AllCardsExportMain.ROLES + 1]);
+                assertEquals("the student's seats", students, b[AllCardsExportMain.ROLES + 2]);
+                seen.add(b[AllCardsExportMain.ROLES] + "/" + b[AllCardsExportMain.ROLES + 1]);
+                checked++;
+            }
+        }
+        assertTrue("records: " + checked, checked > 100);
+        assertTrue("several seatings: " + seen, seen.size() >= 4);
+    }
+
+    @Test public void theSeatingFollowsTheMix() {
+        int[] mix = {40, 40, 20};
+        int[] count = new int[4];
+        int[] byNet = new int[3];
+        for (int b = 0; b < 6000; b++) {
+            int[] roles = AllCardsExportMain.seating(9003, b, 2, mix);
+            assertArrayEquals("the same board, the same seating", roles, AllCardsExportMain.seating(9003, b, 2, mix));
+            int students = 0;
+            for (int role : roles) {
+                if (role == 0) students++;
+                byNet[role]++;
+            }
+            count[students]++;
+        }
+        assertEquals("the student always sits", 0, count[0]);
+        assertEquals("one seat", 0.40, count[1] / 6000.0, 0.02);
+        assertEquals("two seats", 0.40, count[2] / 6000.0, 0.02);
+        assertEquals("three seats", 0.20, count[3] / 6000.0, 0.02);
+        assertEquals("the pool nets alike", 1.0, byNet[1] / (double) byNet[2], 0.08);
+        int[] firstSeat = new int[3];
+        for (int b = 0; b < 3000; b++) if (AllCardsExportMain.seating(9003, b, 2, mix)[0] == 0) firstSeat[0]++;
+        assertEquals("each seat is the student's about as often", (0.4 + 0.8 + 0.6) / 3, firstSeat[0] / 3000.0, 0.03);
+        assertArrayEquals("no pool, the student everywhere", new int[3], AllCardsExportMain.seating(9003, 7, 0, mix));
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void theTeachersAndTheArenasSeedsAreRefused() {
         AllCardsExportMain.checkSeed(101);

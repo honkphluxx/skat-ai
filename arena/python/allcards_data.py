@@ -33,8 +33,10 @@ from belief_data import Corpus
 
 CARDS = 32
 SLOTS = 10
-FORMAT = 1
-RECORD_BYTES = 396
+#: Format 2 adds who sat beside the decider (a pool of other nets, Phase P);
+#: every field of format 1 keeps its offset, so one reader serves both.
+RECORD_BYTES_BY_FORMAT = {1: 396, 2: 400}
+ROLES = (396, 4)
 #: The record layout this reader was written against.
 EXPECTED = {
     "encoding": (0, 306), "legal": (306, 4), "chosen": (310, 1), "flags": (311, 1), "trick": (312, 1),
@@ -60,14 +62,20 @@ class AllCardsCorpus:
         if not layout_file.exists():
             raise FileNotFoundError(f"no allcards-format.json in {self.directory}")
         self.layout = json.loads(layout_file.read_text())
-        if self.layout["format"] != FORMAT or self.layout["record_bytes"] != RECORD_BYTES:
-            raise ValueError(f"format {self.layout['format']} of {self.layout['record_bytes']} bytes, this reader "
-                             f"reads format {FORMAT} of {RECORD_BYTES}")
-        for name, (offset, width) in EXPECTED.items():
+        self.format = self.layout["format"]
+        if RECORD_BYTES_BY_FORMAT.get(self.format) != self.layout["record_bytes"]:
+            raise ValueError(f"format {self.format} of {self.layout['record_bytes']} bytes, this reader reads "
+                             f"{RECORD_BYTES_BY_FORMAT}")
+        self.record_bytes = self.layout["record_bytes"]
+        expected = dict(EXPECTED)
+        if self.format >= 2:
+            expected["roles"] = ROLES
+        for name, (offset, width) in expected.items():
             got = tuple(self.layout["fields"][name][:2])
             if got != (offset, width):
                 raise ValueError(f"field {name} at {got}, this reader expects {(offset, width)}")
         self.k = int(self.layout["k"])
+        self.pool = list(self.layout.get("pool", []))
         self.seed = int(self.layout["seed"])
 
         specs = sorted(self.directory.glob("encoding-v*.json"))
@@ -90,9 +98,9 @@ class AllCardsCorpus:
 
     def raw(self, shard):
         data = np.fromfile(shard, dtype=np.uint8)
-        if len(data) % RECORD_BYTES:
+        if len(data) % self.record_bytes:
             raise ValueError(f"{shard.name} is not a whole number of records")
-        return data.reshape(-1, RECORD_BYTES)
+        return data.reshape(-1, self.record_bytes)
 
     def load(self, limit=None):
         """Every shard, or the first ``limit`` records, as :class:`Records`."""
@@ -140,6 +148,18 @@ class Records:
         self.value_slots = np.ascontiguousarray(raw[:, 348:388]).view("<i4").astype(np.int64)
         self.board = np.ascontiguousarray(raw[:, 388:392]).view("<u4")[:, 0].astype(np.int64)
         self.seed = np.ascontiguousarray(raw[:, 392:396]).view("<u4")[:, 0].astype(np.int64)
+        # Who sat beside the decider: 0 the student, i the pool's i-th net. A
+        # format-1 record is the student at every seat.
+        if raw.shape[1] >= ROLES[0] + ROLES[1]:
+            self.after = raw[:, 396].astype(np.int64)
+            self.before = raw[:, 397].astype(np.int64)
+            self.students = raw[:, 398].astype(np.int64)
+            self.roles_spare = raw[:, 399].astype(np.int64)
+        else:
+            self.after = np.zeros(self.n, dtype=np.int64)
+            self.before = np.zeros(self.n, dtype=np.int64)
+            self.students = np.full(self.n, 3, dtype=np.int64)
+            self.roles_spare = np.zeros(self.n, dtype=np.int64)
         self.wins = by_card(self.wins_slots, self.legal)
         self.points = by_card(self.points_slots, self.legal)
         self.value = by_card(self.value_slots, self.legal)
@@ -218,6 +238,13 @@ def run_checks(corpus, limit=None, verbose=True):
           ((r.trick >= 1) & (r.trick <= 9)).all() and ((r.place >= 0) & (r.place <= 2)).all()
           and (r.contract < TRUMP_GAMES).all())
     check("the board seed is the format's", (r.seed == corpus.seed).all(), f"seed {corpus.seed}")
+    pool = len(corpus.pool)
+    seats_ok = ((r.after >= 0) & (r.after <= pool) & (r.before >= 0) & (r.before <= pool)
+                & (r.students >= 1) & (r.students <= 3) & (r.roles_spare == 0)).all()
+    # The student's seat count agrees with the two neighbours: each neighbour that is the student is one more.
+    agrees = (r.students == 1 + (r.after == 0) + (r.before == 0)).all()
+    check("who sat beside the decider: the student or a pool net, and the seat count agrees", seats_ok and agrees,
+          f"pool {corpus.pool}" if pool else "no pool: the student at every seat")
     hand_offset, _ = corpus.fields["my_hand"]
     hand = r.features[:, hand_offset:hand_offset + CARDS] > 0
     check("the legal cards are in the decider's hand", (hand | ~r.legal).all())
@@ -254,6 +281,9 @@ def report(r):
     played_best = r.is_best(r.chosen)
     print(f"\n  {len(r):,} records, {len(np.unique(r.board)):,} boards; declarer {r.declarer.mean():.1%}, "
           f"main-line card drawn {r.drawn.mean():.1%}")
+    if r.students.min() < 3:
+        print("  by the student's seats at the table:  " + "   ".join(
+            f"{c}: {(r.students == c).mean():.1%}" for c in (1, 2, 3)))
     print("  trick  records  legal  mean value  played is best  played's shortfall (game value a play-out; a tie counts as best)")
     mean = r.mean_value()
     rows = np.arange(len(r))
