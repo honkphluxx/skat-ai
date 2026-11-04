@@ -1989,8 +1989,8 @@ The anchor was setting an equilibrium: the gain on the held-out labels
 grows as its weight falls, two and a half times at 0.25 and four times at
 0. Even with no anchor at all it levels off (+0.39 by epoch 6-9), so the
 labels' own reach is modest too. What the anchor holds back is mostly the
-opening: without it the yardstick's tricks 1-3 go from 0.30 to 0.50 (an
-8-world search plays them at about 0.73, a 16-world one at 0.33) and the
+opening: without it the yardstick's tricks 1-3 go from 0.30 to 0.50 (what
+an 8-world search scores over a whole game; a 16-world one 0.33) and the
 teacher's card is followed far less, while tricks 7-9 move only 0.22 -> 0.26.
 Neither measure is the judge: the yardstick's referee is double-dummy, and
 the labels are this student's play against itself, which a net freed from
