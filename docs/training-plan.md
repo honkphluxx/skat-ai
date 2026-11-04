@@ -1976,6 +1976,28 @@ setting an equilibrium, and the arena follows (the same command without
 --no-arena); if it stays near +0.09 at weight 0, the anchor was not the cap
 and the labels themselves have run thin.
 
+*The anchor test: the answer (2026-11-04, training only).* Round 2's ev from
+the same policy-oc1-ev draws, three draws a weight, the draws' means:
+
+| anchor weight | held-out gain, start -> kept | teacher regret (worlds of 64) | yardstick all / tricks 1-3 / 7-9 |
+|---|---|---|---|
+| 1 (round 2's ev) | +4.482 -> +4.575 (+0.09) | 0.560 -> 0.564 | 0.303 / 0.301 / 0.224 |
+| 0.25 | +4.482 -> +4.721 (+0.24) | 0.560 -> 0.585 | 0.321 / 0.318 / 0.237 |
+| 0 | +4.482 -> +4.871 (+0.39) | 0.560 -> 0.789 | 0.430 / 0.499 / 0.264 |
+
+The anchor was setting an equilibrium: the gain on the held-out labels
+grows as its weight falls, two and a half times at 0.25 and four times at
+0. Even with no anchor at all it levels off (+0.39 by epoch 6-9), so the
+labels' own reach is modest too. What the anchor holds back is mostly the
+opening: without it the yardstick's tricks 1-3 go from 0.30 to 0.50 (an
+8-world search plays them at about 0.73, a 16-world one at 0.33) and the
+teacher's card is followed far less, while tricks 7-9 move only 0.22 -> 0.26.
+Neither measure is the judge: the yardstick's referee is double-dummy, and
+the labels are this student's play against itself, which a net freed from
+the teacher can learn to exploit without getting better against anyone
+else. The arena decides: ev at 0.25 and 0 against belief-64-shipped, seeds
+11-16 and 21, paired with ev at 1 (on disk), about 11 hours.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
