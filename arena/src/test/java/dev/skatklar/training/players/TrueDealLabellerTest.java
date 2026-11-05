@@ -1,6 +1,8 @@
 package dev.skatklar.training.players;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 import dev.skatklar.demo.Card;
@@ -8,7 +10,9 @@ import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.belief.PolicyNet;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.Test;
@@ -196,5 +200,99 @@ public class TrueDealLabellerTest {
             checked++;
         }
         assertTrue("drawn opponents change the labels (" + differ + " of " + checked + ")", differ > checked / 3);
+    }
+
+    /** Each play-out's positions before trick {@code before}, by candidate and draw, in order. */
+    private static Map<String, List<float[]>> before(List<TrueDealLabeller.Fed> fed, int before) {
+        Map<String, List<float[]>> out = new HashMap<>();
+        for (TrueDealLabeller.Fed f : fed) {
+            if (f.trick() < before) out.computeIfAbsent(f.candidate() + "/" + f.draw(), x -> new ArrayList<>()).add(f.input());
+        }
+        return out;
+    }
+
+    /** Each play-out's first position of trick {@code trick}, by candidate and draw. */
+    private static Map<String, float[]> first(List<TrueDealLabeller.Fed> fed, int trick) {
+        Map<String, float[]> out = new HashMap<>();
+        for (TrueDealLabeller.Fed f : fed) if (f.trick() == trick) out.putIfAbsent(f.candidate() + "/" + f.draw(), f.input());
+        return out;
+    }
+
+    @Test public void theReseedSharesThePlayOutsUpToItsTrickAndPartsAfter() throws IOException {
+        // The search's control: the same play-outs as the plain labeller up to
+        // trick 6, other luck from there, so other labels.
+        PolicyNet net = RolloutRescueTest.randomNet(47);
+        List<TrueDealLabeller.Fed> plainFed = new ArrayList<>();
+        List<TrueDealLabeller.Fed> reseedFed = new ArrayList<>();
+        TrueDealLabeller plain = new TrueDealLabeller(net, 3, 1.0).withTap(plainFed::add);
+        TrueDealLabeller reseeded = new TrueDealLabeller(net, 3, 1.0).withTap(reseedFed::add).withReseed(6);
+        int checked = 0;
+        int labelsDiffer = 0;
+        int partedAfter = 0;
+        int reachedSeventh = 0;
+        for (PlayoutTest.Step step : RolloutRescueTest.steps(103, 3)) {
+            SkatAi.DecisionContext at = step.context();
+            if (at.legalCards.size() < 2 || at.history.completedTricks.size() > 3) continue;
+            plainFed.clear();
+            reseedFed.clear();
+            List<Card> cards = new ArrayList<>(at.legalCards);
+            TrueDealLabeller.Labels a = plain.label(at, step.hands(), step.skat(), Map.of(), step.skat(), cards, 13);
+            TrueDealLabeller.Labels b = reseeded.label(at, step.hands(), step.skat(), Map.of(), step.skat(), cards, 13);
+            Map<String, List<float[]>> early = before(plainFed, 6);
+            Map<String, List<float[]>> earlyReseeded = before(reseedFed, 6);
+            assertEquals("the same play-outs reach trick 6", early.keySet(), earlyReseeded.keySet());
+            for (String key : early.keySet()) {
+                List<float[]> x = early.get(key);
+                List<float[]> y = earlyReseeded.get(key);
+                assertEquals("positions before trick 6, " + key, x.size(), y.size());
+                for (int i = 0; i < x.size(); i++) assertArrayEquals("position " + i + " of " + key, x.get(i), y.get(i), 0f);
+            }
+            // Trick 6 itself is played on the fresh luck: the first position of
+            // trick 7 already differs in many play-outs.
+            Map<String, float[]> seventh = first(plainFed, 7);
+            Map<String, float[]> seventhReseeded = first(reseedFed, 7);
+            for (String key : seventh.keySet()) {
+                reachedSeventh++;
+                if (!Arrays.equals(seventh.get(key), seventhReseeded.get(key))) partedAfter++;
+            }
+            if (!Arrays.equals(a.value(), b.value()) || !Arrays.equals(a.wins(), b.wins())) labelsDiffer++;
+            checked++;
+        }
+        assertTrue("decisions checked: " + checked, checked > 10);
+        assertTrue("trick 7 opens differently: " + partedAfter + " of " + reachedSeventh + " play-outs",
+                reachedSeventh > 100 && partedAfter > reachedSeventh / 5);
+        assertTrue("other labels: " + labelsDiffer + " of " + checked, labelsDiffer > checked / 2);
+    }
+
+    @Test public void withTheReseedACardsLabelIsStillTheSameAloneAndAmongOthers() throws IOException {
+        // The fresh luck is drawn from the draw's own stream, so the candidates
+        // still share it.
+        PolicyNet net = RolloutRescueTest.randomNet(48);
+        TrueDealLabeller labeller = new TrueDealLabeller(net, 3, 1.0).withReseed(5);
+        int checked = 0;
+        for (PlayoutTest.Step step : RolloutRescueTest.steps(107, 3)) {
+            SkatAi.DecisionContext at = step.context();
+            if (at.legalCards.size() < 3 || at.history.completedTricks.size() > 5) continue;
+            List<Card> all = new ArrayList<>(at.legalCards);
+            TrueDealLabeller.Labels together = labeller.label(at, step.hands(), step.skat(), Map.of(), step.skat(), all, 21);
+            for (int c = 0; c < all.size(); c++) {
+                TrueDealLabeller.Labels alone = labeller.label(at, step.hands(), step.skat(), Map.of(), step.skat(),
+                        List.of(all.get(c)), 21);
+                assertEquals("value alone and together", alone.value()[0], together.value()[c]);
+                assertEquals("wins alone and together", alone.wins()[0], together.wins()[c]);
+            }
+            checked++;
+        }
+        assertTrue("decisions checked: " + checked, checked > 10);
+    }
+
+    @Test public void theReseedIsTheSearchsControlNotItsCompanion() throws IOException {
+        PolicyNet net = RolloutRescueTest.randomNet(49);
+        TrueDealLabeller labeller = new TrueDealLabeller(net, 2, 1.0);
+        assertThrows(IllegalArgumentException.class, () -> labeller.withSearch(7, 3).withReseed(7));
+        assertThrows(IllegalArgumentException.class, () -> labeller.withReseed(7).withSearch(7, 3));
+        assertThrows(IllegalArgumentException.class, () -> labeller.withReseed(0));
+        assertEquals(7, labeller.withReseed(7).withTap(f -> { }).reseedFrom());
+        assertEquals(11, labeller.reseedFrom());
     }
 }

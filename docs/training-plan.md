@@ -2166,6 +2166,36 @@ trick-1 decision; within a card the play-outs' spread from trick 7 on is
 nearly nil -- the search's finish is close to deterministic, the draws' variety
 is in the tricks before.
 
+*The search's labels against the student's, on the same decisions
+(2026-11-05; `arena/python/label_diff.py`, `--reseed-from`).* Quick exports
+(2,000 boards, k 16, seed 9004) of policy-oc3-ev, once with the search from
+trick 7 and once without. On bigbox the search costs about 6% of a trick-1
+decision (719 searches at 0.09 ms of 1,155 ms): 1.94 games/s against 2.08.
+Read alone, its summary showed nothing new -- the student's top card the
+labels' best 73.4% / 86.4% in tricks 7 / 8 against round 3's 66.9% / 82.5% --
+but that compared another student, seed and noise level (the search's
+play-outs vary less: sd within a card 12.0 against 13.1 in trick 7), so it is
+not read. The main line draws from its own stream, so the two corpora hold the
+same decisions record for record (checked), and a decision's play-outs share
+their luck until trick 7. label_diff on the 31,649 undrawn decisions: the best
+card moves in 22% of decisions in tricks 1-6 (agree 77-78%), and by the
+search's labels the student-finished best gives up 1.3-1.7 a decision there,
+1.10 [0.99, 1.21] over all tricks; the label shape changes by 0.18-0.34 of its
+variance. The student's own top card does not look worse by the search: its
+regret by the search minus by itself -0.22 [-0.40, -0.04] (declarer +0.01,
+defender -0.34). So the search reshuffles the other cards more than it
+convicts the student's. How much of the reshuffle is the luck parting after
+trick 7 is open: a rough count (sd about 13 a play-out from trick 7, 16
+play-outs) puts a noise-only "misleads" near 1. The control that answers it,
+built: `--reseed-from=T` -- the student still finishes, every play-out on
+fresh luck from trick T (drawn from the draw's own stream, so the candidates
+still share it), the labels sharing everything with the plain ones before T
+and nothing after, as the search's do. Tests: the play-outs before trick 6
+the same position for position, trick 7 opening otherwise in more than a
+fifth of them; a card's label the same alone and among others; the exporter's
+records the same bytes but for the label slots; not together with the search;
+the settings name it only when on. Seven mutants fail.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

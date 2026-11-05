@@ -2,7 +2,12 @@
 Two label sets on the same decisions: what does finishing the play-outs another way change? (route 1)
 
     python arena/python/label_diff.py allcards-data/quick-r4-nosearch allcards-data/quick-r4
+    python arena/python/label_diff.py allcards-data/quick-r4-nosearch allcards-data/quick-r4-control
     python arena/python/label_diff.py --self-test
+
+The second line is the control: B made with --reseed-from instead of
+--search-from, the student still finishing the play-outs on fresh luck from
+that trick, so every column shows what play-out noise alone gives.
 
 A and B are two all-cards exports of the same student, the same seed and the
 same boards that differ only in how the play-outs are finished (A: the student

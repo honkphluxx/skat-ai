@@ -65,37 +65,62 @@ public final class TrueDealLabeller {
     /** The first trick (1-10) the search plays; 11 for never. */
     private final int searchFrom;
     private final int searchWorlds;
+    /** A diagnostic: from this trick (1-10) on a play-out's random stream is replaced by a fresh one; 11 for never. */
+    private final int reseedFrom;
 
     public TrueDealLabeller(PolicyNet net, int k, double temperature) {
-        this(net, k, temperature, true, 11, 0);
+        this(net, k, temperature, true, 11, 0, 11);
     }
 
     TrueDealLabeller(PolicyNet net, int k, double temperature, boolean drawOpponents) {
-        this(net, k, temperature, drawOpponents, 11, 0);
+        this(net, k, temperature, drawOpponents, 11, 0, 11);
     }
 
     private TrueDealLabeller(PolicyNet net, int k, double temperature, boolean drawOpponents, int searchFrom,
-                             int searchWorlds) {
+                             int searchWorlds, int reseedFrom) {
         if (k < 1 || k > 255) throw new IllegalArgumentException("k is 1 to 255, not " + k);
         if (!(temperature > 0) || Double.isInfinite(temperature)) {
             throw new IllegalArgumentException("the temperature is a positive number, not " + temperature);
         }
         if (searchFrom < 1 || searchFrom > 11) throw new IllegalArgumentException("the search's trick is 1-10, or 11 for none");
         if (searchFrom <= 10 && searchWorlds < 1) throw new IllegalArgumentException("a search needs worlds");
+        if (reseedFrom < 1 || reseedFrom > 11) throw new IllegalArgumentException("the reseed's trick is 1-10, or 11 for none");
+        if (searchFrom <= 10 && reseedFrom <= 10) {
+            throw new IllegalArgumentException("the search or the reseed, not both: the reseed is the search's control");
+        }
         this.net = net;
         this.k = k;
         this.temperature = temperature;
         this.drawOpponents = drawOpponents;
         this.searchFrom = searchFrom;
         this.searchWorlds = searchWorlds;
+        this.reseedFrom = reseedFrom;
     }
 
     /** This labeller, the play-outs' positions from trick {@code fromTrick} on played by a {@code worlds}-world search. */
     public TrueDealLabeller withSearch(int fromTrick, int worlds) {
-        TrueDealLabeller searched = new TrueDealLabeller(net, k, temperature, drawOpponents, fromTrick, worlds);
+        TrueDealLabeller searched = new TrueDealLabeller(net, k, temperature, drawOpponents, fromTrick, worlds,
+                reseedFrom);
         searched.tap = tap;
         return searched;
     }
+
+    /**
+     * A diagnostic, the search's control: this labeller, each play-out from
+     * trick {@code fromTrick} on drawing from a fresh random stream (still the
+     * same for every candidate of a draw), the student still playing. Against
+     * the plain labeller it shares every play-out up to that trick and parts
+     * from it after, as the search does, so the two show what play-out noise
+     * alone does to the labels.
+     */
+    public TrueDealLabeller withReseed(int fromTrick) {
+        TrueDealLabeller reseeded = new TrueDealLabeller(net, k, temperature, drawOpponents, searchFrom, searchWorlds,
+                fromTrick);
+        reseeded.tap = tap;
+        return reseeded;
+    }
+
+    public int reseedFrom() { return reseedFrom; }
 
     public int searchFrom() { return searchFrom; }
 
@@ -113,7 +138,8 @@ public final class TrueDealLabeller {
 
     /** Tests only: this labeller, telling {@code tap} every position it feeds the net. */
     public TrueDealLabeller withTap(Consumer<Fed> tap) {
-        TrueDealLabeller tapped = new TrueDealLabeller(net, k, temperature, drawOpponents, searchFrom, searchWorlds);
+        TrueDealLabeller tapped = new TrueDealLabeller(net, k, temperature, drawOpponents, searchFrom, searchWorlds,
+                reseedFrom);
         tapped.tap = tap;
         return tapped;
     }
@@ -155,7 +181,20 @@ public final class TrueDealLabeller {
                         Map<SkatAi.Seat, Integer> bids, List<Card> declarersDiscard, Collection<Card> candidates,
                         long streamSeed, PolicyNet[] bySeat) {
         if (bySeat.length != 3) throw new IllegalArgumentException("a net for each of the three seats");
-        record Flight(int candidate, int draw, Playout playout, SplittableRandom random) {}
+        final class Flight {
+            final int candidate;
+            final int draw;
+            final Playout playout;
+            SplittableRandom random;
+            boolean reseeded;
+
+            Flight(int candidate, int draw, Playout playout, SplittableRandom random) {
+                this.candidate = candidate;
+                this.draw = draw;
+                this.playout = playout;
+                this.random = random;
+            }
+        }
         List<Card> cards = new ArrayList<>(candidates);
         List<Flight> flights = new ArrayList<>(cards.size() * k);
         for (int c = 0; c < cards.size(); c++) {
@@ -197,6 +236,13 @@ public final class TrueDealLabeller {
                 SkatAi.DecisionContext p = contexts.get(i);
                 List<Card> legal = new ArrayList<>(p.legalCards);
                 Card card;
+                Flight flight = waiting.get(i);
+                if (!flight.reseeded && p.history.completedTricks.size() + 1 >= reseedFrom) {
+                    // Drawn from the stream itself, so every candidate of a draw that got
+                    // here on the same luck goes on with the same fresh luck.
+                    flight.random = new SplittableRandom(Seeds.mix(flight.random.nextLong(), 0x5EED5EEDL));
+                    flight.reseeded = true;
+                }
                 if (searches(p)) {
                     long started = System.nanoTime();
                     card = searchCard(p, knownDiscard(p, declarersDiscard), searchWorlds,

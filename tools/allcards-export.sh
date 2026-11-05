@@ -26,6 +26,8 @@
 # --search-from=T every play-out position from trick T on is played by a small
 # search (--search-worlds, default 8) from that seat's own evidence, every seat
 # alike: a fixed, competent finish instead of the student's own.
+# --reseed-from=T is that search's control: the student finishes, but every
+# play-out draws fresh luck from trick T on (compare with label_diff.py).
 # Then arena/python/allcards_data.py checks every shard
 # against the exporter's own totals and the records as a whole.
 #
@@ -53,7 +55,7 @@ fi
 cd "$(dirname "$AC_ORIGINAL")/.." || exit 1
 
 QUICK=false; BOARDS=100000; K=8; SEED=9001; EPSILON=0.2; THREADS=24; MODEL=policy-b600-pa40; OUT=""
-SHARD=2000; PYTHON=${SKATKLAR_PYTHON:-}; POOL=""; MIX=40,40,20; SEARCH_FROM=11; SEARCH_WORLDS=8
+SHARD=2000; PYTHON=${SKATKLAR_PYTHON:-}; POOL=""; MIX=40,40,20; SEARCH_FROM=11; SEARCH_WORLDS=8; RESEED_FROM=11
 for arg in "$@"; do
     case "$arg" in
         --quick)       QUICK=true ;;
@@ -68,6 +70,7 @@ for arg in "$@"; do
         --mix=*)       MIX="${arg#*=}" ;;
         --search-from=*)   SEARCH_FROM="${arg#*=}" ;;
         --search-worlds=*) SEARCH_WORLDS="${arg#*=}" ;;
+        --reseed-from=*)   RESEED_FROM="${arg#*=}" ;;
         --python=*)    PYTHON="${arg#*=}" ;;
         -h|--help)     sed -n '2,45p' "$AC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             echo "unknown option: $arg" >&2; exit 2 ;;
@@ -89,6 +92,10 @@ case "$SEARCH_FROM$SEARCH_WORLDS" in ''|*[!0-9]*) echo "--search-from and --sear
 { [ "$SEARCH_FROM" -ge 1 ] && [ "$SEARCH_FROM" -le 11 ] && [ "$SEARCH_WORLDS" -ge 1 ]; } \
     || { echo "--search-from is a trick 1-10 (11: no search), --search-worlds at least 1" >&2; exit 2; }
 [ "$SEARCH_FROM" -le 10 ] && POOL_ARGS="$POOL_ARGS --search-from=$SEARCH_FROM --search-worlds=$SEARCH_WORLDS"
+case "$RESEED_FROM" in ''|*[!0-9]*) echo "--reseed-from is a whole number" >&2; exit 2 ;; esac
+{ [ "$RESEED_FROM" -ge 1 ] && [ "$RESEED_FROM" -le 11 ]; } || { echo "--reseed-from is a trick 1-10" >&2; exit 2; }
+{ [ "$RESEED_FROM" -le 10 ] && [ "$SEARCH_FROM" -le 10 ]; } && { echo "--reseed-from or --search-from, not both" >&2; exit 2; }
+[ "$RESEED_FROM" -le 10 ] && POOL_ARGS="$POOL_ARGS --reseed-from=$RESEED_FROM"
 if [ -z "$OUT" ]; then
     if $QUICK; then OUT=allcards-data/quick-k$K; else OUT=allcards-data/r1-k$K-s$SEED; fi
 fi
@@ -107,7 +114,7 @@ SUMMARY=arena-logs/summary-allcards.txt
 $QUICK && SUMMARY=arena-logs/summary-allcards-quick.txt
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
-say "all-cards export started $(date '+%Y-%m-%d %H:%M:%S')   $OUT: model=$MODEL boards=$BOARDS k=$K seed=$SEED epsilon=$EPSILON threads=$THREADS${POOL:+ pool=$POOL mix=$MIX}$([ "$SEARCH_FROM" -le 10 ] && echo " search from trick $SEARCH_FROM, $SEARCH_WORLDS worlds")"
+say "all-cards export started $(date '+%Y-%m-%d %H:%M:%S')   $OUT: model=$MODEL boards=$BOARDS k=$K seed=$SEED epsilon=$EPSILON threads=$THREADS${POOL:+ pool=$POOL mix=$MIX}$([ "$SEARCH_FROM" -le 10 ] && echo " search from trick $SEARCH_FROM, $SEARCH_WORLDS worlds")$([ "$RESEED_FROM" -le 10 ] && echo " control: fresh luck from trick $RESEED_FROM")"
 
 SHARDS=$(( (BOARDS + SHARD - 1) / SHARD ))
 have=$(ls "$OUT"/allcards-s"$SEED"-*.bin 2>/dev/null | wc -l)

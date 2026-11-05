@@ -77,6 +77,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * a fixed, competent finish, so a label no longer depends on the student's own
  * endgame. Off by default (T = 11); the records keep their layout.
  *
+ * <p>{@code --reseed-from=T} is the search's control, a diagnostic: the student
+ * still finishes every play-out, but from trick T on each draws from a fresh
+ * random stream (TrueDealLabeller.withReseed). Its labels share every play-out
+ * with the plain ones up to trick T and part after, as the search's do, so
+ * comparing the two (arena/python/label_diff.py) shows what play-out noise
+ * alone does. Not with --search-from; off by default.
+ *
  * <p>Every random stream is a function of the seed and the board, so a shard
  * is the same bytes at any thread count. Boards go into shards of
  * {@code shard-size}, written as {@code .partial} and renamed when complete; a
@@ -140,7 +147,13 @@ public final class AllCardsExportMain {
     /** Everything that decides the bytes of a shard. */
     record Settings(Path model, String modelSha256, long seed, int k, double temperature, double epsilon,
                     int shardSize, List<Path> pool, List<String> poolSha256, int[] mix, int searchFrom,
-                    int searchWorlds) {
+                    int searchWorlds, int reseedFrom) {
+        Settings(Path model, String modelSha256, long seed, int k, double temperature, double epsilon, int shardSize,
+                 List<Path> pool, List<String> poolSha256, int[] mix, int searchFrom, int searchWorlds) {
+            this(model, modelSha256, seed, k, temperature, epsilon, shardSize, pool, poolSha256, mix, searchFrom,
+                    searchWorlds, 11);
+        }
+
         Settings(Path model, String modelSha256, long seed, int k, double temperature, double epsilon, int shardSize) {
             this(model, modelSha256, seed, k, temperature, epsilon, shardSize, List.of(), List.of(), new int[] {0, 0, 1});
         }
@@ -177,7 +190,8 @@ public final class AllCardsExportMain {
                     + "  \"pool_sha256\": " + quoted(poolSha256) + ",\n"
                     + "  \"mix\": [" + mix[0] + ", " + mix[1] + ", " + mix[2] + "],\n"
                     + "  \"search_from\": " + searchFrom + ",\n"
-                    + "  \"search_worlds\": " + searchWorlds + "\n"
+                    + "  \"search_worlds\": " + searchWorlds
+                    + (reseedFrom <= 10 ? ",\n  \"reseed_from\": " + reseedFrom : "") + "\n"
                     + "}\n";
         }
 
@@ -218,6 +232,9 @@ public final class AllCardsExportMain {
         int[] mix = parseMix(options.getOrDefault("mix", "40,40,20"));
         int searchFrom = Integer.parseInt(options.getOrDefault("search-from", "11"));
         int searchWorlds = searchFrom <= 10 ? Integer.parseInt(options.getOrDefault("search-worlds", "8")) : 0;
+        int reseedFrom = Integer.parseInt(options.getOrDefault("reseed-from", "11"));
+        if (reseedFrom < 1 || reseedFrom > 11) throw new IllegalArgumentException("--reseed-from is a trick 1-10");
+        if (reseedFrom <= 10 && searchFrom <= 10) throw new IllegalArgumentException("--reseed-from or --search-from, not both");
         checkSeed(seed);
         if (!(epsilon >= 0 && epsilon <= 1)) throw new IllegalArgumentException("epsilon is 0 to 1, not " + epsilon);
         if (first % shardSize != 0) throw new IllegalArgumentException("--first-board is a multiple of --shard-size");
@@ -234,7 +251,7 @@ public final class AllCardsExportMain {
         }
         Settings settings = new Settings(model, sha256(model.resolve("policy.bin")), seed, k, temperature, epsilon,
                 shardSize, List.copyOf(poolDirs), List.copyOf(poolSha), pool.isEmpty() ? new int[] {0, 0, 1} : mix,
-                searchFrom, searchWorlds);
+                searchFrom, searchWorlds, reseedFrom);
         Files.createDirectories(out);
         Path format = out.resolve("allcards-format.json");
         if (Files.exists(format)) {
@@ -253,12 +270,17 @@ public final class AllCardsExportMain {
         ContractSource contracts = new AuctionContractSource(greedy, seed);
         TrueDealLabeller labeller = new TrueDealLabeller(net, k, temperature);
         if (searchFrom <= 10) labeller = labeller.withSearch(searchFrom, searchWorlds);
+        if (reseedFrom <= 10) labeller = labeller.withReseed(reseedFrom);
         System.out.printf(Locale.ROOT, "all-cards export: %s, k %d, temperature %s, epsilon %s, seed %d, boards %,d-%,d "
                         + "in shards of %,d, %d threads -> %s%n", model, k, temperature, epsilon, seed, first,
                 first + boards - 1, shardSize, threads, out);
         if (searchFrom <= 10) {
             System.out.printf(Locale.ROOT, "  the play-outs from trick %d on by a %d-world search, every seat%n",
                     searchFrom, searchWorlds);
+        }
+        if (reseedFrom <= 10) {
+            System.out.printf(Locale.ROOT, "  the search's control: the play-outs from trick %d on on fresh random streams, "
+                    + "the student still playing%n", reseedFrom);
         }
         if (!pool.isEmpty()) {
             System.out.printf(Locale.ROOT, "  pool %s; the student takes 1, 2 or 3 seats in the proportion %d : %d : %d%n",

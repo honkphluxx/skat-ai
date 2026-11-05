@@ -217,6 +217,41 @@ public class AllCardsExportTest {
         assertTrue("searches counted: " + searches, searches > 0);
     }
 
+    @Test public void theReseedKeepsTheDecisionsAndChangesOnlyTheLabels() throws Exception {
+        // The control's corpus pairs with the plain one record for record
+        // (label_diff.py relies on it): the same position, card, trick and
+        // board; only the label slots differ.
+        PolicyNet net = RolloutRescueTest.randomNet(37);
+        ContractSource contracts = new AuctionContractSource(GREEDY, SEED + 9);
+        AllCardsExportMain.Shard plain = AllCardsExportMain.playShard(net, new TrueDealLabeller(net, 2, 1.0), GREEDY,
+                contracts, settings(SEED + 9, 2, 0.2), 0, 4, 1);
+        AllCardsExportMain.Shard control = AllCardsExportMain.playShard(net,
+                new TrueDealLabeller(net, 2, 1.0).withReseed(7), GREEDY, contracts, settings(SEED + 9, 2, 0.2), 0, 4, 2);
+        assertTrue("records: " + plain.records().size(), plain.records().size() > 20);
+        assertEquals(plain.records().size(), control.records().size());
+        int labelsDiffer = 0;
+        for (int i = 0; i < plain.records().size(); i++) {
+            byte[] a = plain.records().get(i);
+            byte[] b = control.records().get(i);
+            assertArrayEquals("record " + i + " before its labels", java.util.Arrays.copyOfRange(a, 0, AllCardsExportMain.WINS),
+                    java.util.Arrays.copyOfRange(b, 0, AllCardsExportMain.WINS));
+            assertArrayEquals("record " + i + " after its labels", java.util.Arrays.copyOfRange(a, AllCardsExportMain.BOARD, a.length),
+                    java.util.Arrays.copyOfRange(b, AllCardsExportMain.BOARD, b.length));
+            if (!java.util.Arrays.equals(a, b)) labelsDiffer++;
+        }
+        assertTrue("labels changed: " + labelsDiffer, labelsDiffer > plain.records().size() / 3);
+    }
+
+    @Test public void theSettingsNameTheReseedOnlyWhenOn() {
+        AllCardsExportMain.Settings off = new AllCardsExportMain.Settings(Path.of("m"), "-", SEED, 8, 1.0, 0.2, 4,
+                List.of(), List.of(), new int[] {0, 0, 1}, 11, 0);
+        AllCardsExportMain.Settings on = new AllCardsExportMain.Settings(Path.of("m"), "-", SEED, 8, 1.0, 0.2, 4,
+                List.of(), List.of(), new int[] {0, 0, 1}, 11, 0, 7);
+        assertTrue("an earlier corpus's settings unchanged", !off.json().contains("reseed"));
+        assertTrue(off.json().endsWith("\"search_worlds\": 0\n}\n"));
+        assertTrue(on.json().endsWith("\"search_worlds\": 0,\n  \"reseed_from\": 7\n}\n"));
+    }
+
     @Test public void aRecordsSlotsAreItsLegalCardsInIndexOrder() throws Exception {
         PolicyNet net = RolloutRescueTest.randomNet(35);
         ContractSource contracts = new AuctionContractSource(GREEDY, SEED + 5);
