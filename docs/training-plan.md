@@ -2091,6 +2091,46 @@ changing the opponents moved games. A stronger label needs a stronger
 continuation than the student (the search in the play-outs' later tricks, say),
 or a different signal.
 
+*Where the gain sits (2026-11-05; `arena/python/where_gain.py`).* On the
+held-out boards of the three label corpora (about 200,000 decisions each,
+never trained on), every student picks its top card and the corpus's labels
+say what it is worth: U, game value a play-out from the decider's side with
+the tiebreaks, as trained. policy-oc2-ev against policy-b600-pa40, the three
+draw pairs averaged record by record, the interval clustered by board:
+
+| group (share of decisions) | cards differ | gain a decision, r1 / r2 / r3 labels | share of the total (r1) |
+|---|---|---|---|
+| all | 14% | +0.57 / +0.58 / +0.53 (+-0.05) | 100% |
+| declarer, tricks 1-3 (10%) | 31-33% | **+1.25 / +1.08 / +0.91** | 23% |
+| declarer, tricks 4-6 (11%) | 21-24% | +0.61 / +0.37 / +0.52 | 12% |
+| declarer, tricks 7-9 (12%) | 9% | **+0.12 / +0.25 / +0.27** | 2% |
+| defender, tricks 1-3 (23%) | 10-11% | +0.51 / +0.58 / +0.54 | 21% |
+| defender, tricks 4-6 (22%) | 12% | +0.57 / +0.55 / +0.54 | 22% |
+| defender, tricks 7-9 (22%) | 10% | +0.50 / +0.65 / +0.48 | 19% |
+| grand (8%) | 19-20% | +1.17 / +1.24 / +1.17 | 16% |
+
+The three label sets agree, though r1's labels are pa40's own play and r3's
+the new student's against a pool -- so the change is a better card, not one
+fitted to its own continuation. Two thirds of it is defence, spread evenly
+over the whole game (+0.5 a decision in every third, leading and following
+alike); a fifth to a quarter is the declarer's first three tricks, where a third of the
+cards changed (the lead most: +0.82 a decision leading, +0.46 following); the
+declarer's endgame, the target route 1 was planned for, gained almost
+nothing (+0.1 to +0.3, 9% of cards changed). Grand gains twice the rate of a
+suit game.
+
+By round (pairs of consecutive students, r1 / r3 labels): round 1, pa40 ->
+oc1-ev, +0.62 / +0.47 -- the whole robust change; round 2, oc1-ev -> oc2-ev,
+**-0.06 / +0.06**, worse by the old student's play and better by the new
+one's: round 2 learned cards that pay when the newer student plays on --
+co-adaptation to its own continuation, the self-reference the plateau note
+suspected; round 3, oc2-ev -> oc3-ev, +0.03 / +0.04. So route 1's lasting
+gain is round 1's, and a label finished by the student it trains stops being
+informative after one turn. A next signal needs a continuation the student
+does not shape: a fixed one, and stronger than the student where the student
+is weakest (the declarer's endgame) -- the search in the play-outs' later
+tricks is the candidate.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
