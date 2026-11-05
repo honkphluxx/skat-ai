@@ -2053,6 +2053,44 @@ Round 3, prepared: policy-oc2-ev in the student's seats, policy-b600-pa40
 labels for the student against the net it was a round ago and against the
 imitation net it started from, beside its own copies a fifth of the boards.
 
+*Route 1, round 3, and the end of the loop (2026-11-05).* The corpus,
+`allcards-data/r3-k8-s9003`: policy-oc2-ev in the student's seats,
+policy-b600-pa40 and policy-oc1-ev in the pool, 170,000 boards of seed 9003 --
+148,508 games, 2,038,750 labelled decisions in 5.9 hours (7.0 games a second:
+the pool seats only play), every check passed; the student held one, two and
+three seats in 22 / 45 / 33% of the records, as the mix gives. Against its own
+labels it plays as in round 2 (top is best 39% in trick 1, 71% in trick 7,
+95% in trick 9; regret 9.1, 3.5, 0.5).
+
+The students (from the three policy-oc2-ev draws, anchor 1): held-out gain
++4.51 -> +4.55 (+0.04, after round 2's +0.09 and round 1's +0.64); teacher
+regret unchanged; yardstick 0.301 (pa40 0.297). student-64 against
+belief-64-shipped, seeds 11-16 and 21:
+
+| student | against the teacher | minus its start | minus pa40 |
+|---|---|---|---|
+| policy-oc2-ev (the start) | +0.07 [-1.04, +1.18] | -- | +1.48 [+0.93, +2.03] |
+| policy-oc3-ev | +0.09 [-1.02, +1.20] | **+0.03 [-0.34, +0.39]** | +1.51 [+0.72, +2.29] |
+
+Round 3's own step is nothing (per seed -0.65 -0.13 -0.06 +0.38 +0.31 -0.17
++0.49). With round 2's unresolved +0.43 that is the second failed gate, and
+the loop ends by the plan's rule. Opponents from earlier nets did not revive
+it: the labels against them taught less still.
+
+What route 1 leaves. Outcome labels on the true deal, every card compared on
+the same deal, moved the network-only student +1.5 game points over where
+imitation stopped (resolved; +1.05 in the first round, +0.43 in the second,
+nothing in the third), from 1.41 behind the 64-world teacher to level with it
+-- a hundredth of a second a game. The yardstick never moved: the gain is of
+the kind only games see. What stops it is the labels' own reach: the play-outs
+are finished by the student itself, so a label says how good a card is if
+this student plays on, and once the student plays its own labels' best card
+about as well as a 3 x 512 net can, the next round has little to say -- the
+held-out gain fell 0.64, 0.09, 0.04, and neither loosening the anchor nor
+changing the opponents moved games. A stronger label needs a stronger
+continuation than the student (the search in the play-outs' later tricks, say),
+or a different signal.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
