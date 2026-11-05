@@ -71,6 +71,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * valued against the opponents at the table. Without a pool every seat is the
  * student and the records are those of format 1 with four zero bytes added.
  *
+ * <p>With {@code --search-from=T} (and {@code --search-worlds=W}, default 8)
+ * every play-out position from trick T on is played by a small W-world search
+ * from that seat's own evidence instead of a net (TrueDealLabeller.withSearch):
+ * a fixed, competent finish, so a label no longer depends on the student's own
+ * endgame. Off by default (T = 11); the records keep their layout.
+ *
  * <p>Every random stream is a function of the seed and the board, so a shard
  * is the same bytes at any thread count. Boards go into shards of
  * {@code shard-size}, written as {@code .partial} and renamed when complete; a
@@ -133,9 +139,15 @@ public final class AllCardsExportMain {
 
     /** Everything that decides the bytes of a shard. */
     record Settings(Path model, String modelSha256, long seed, int k, double temperature, double epsilon,
-                    int shardSize, List<Path> pool, List<String> poolSha256, int[] mix) {
+                    int shardSize, List<Path> pool, List<String> poolSha256, int[] mix, int searchFrom,
+                    int searchWorlds) {
         Settings(Path model, String modelSha256, long seed, int k, double temperature, double epsilon, int shardSize) {
             this(model, modelSha256, seed, k, temperature, epsilon, shardSize, List.of(), List.of(), new int[] {0, 0, 1});
+        }
+
+        Settings(Path model, String modelSha256, long seed, int k, double temperature, double epsilon, int shardSize,
+                 List<Path> pool, List<String> poolSha256, int[] mix) {
+            this(model, modelSha256, seed, k, temperature, epsilon, shardSize, pool, poolSha256, mix, 11, 0);
         }
 
         String json() {
@@ -163,7 +175,9 @@ public final class AllCardsExportMain {
                     + "  \"shard_size\": " + shardSize + ",\n"
                     + "  \"pool\": " + names(pool) + ",\n"
                     + "  \"pool_sha256\": " + quoted(poolSha256) + ",\n"
-                    + "  \"mix\": [" + mix[0] + ", " + mix[1] + ", " + mix[2] + "]\n"
+                    + "  \"mix\": [" + mix[0] + ", " + mix[1] + ", " + mix[2] + "],\n"
+                    + "  \"search_from\": " + searchFrom + ",\n"
+                    + "  \"search_worlds\": " + searchWorlds + "\n"
                     + "}\n";
         }
 
@@ -202,6 +216,8 @@ public final class AllCardsExportMain {
         List<Path> poolDirs = new ArrayList<>();
         for (String dir : options.getOrDefault("pool", "").split(",")) if (!dir.isBlank()) poolDirs.add(Path.of(dir.trim()));
         int[] mix = parseMix(options.getOrDefault("mix", "40,40,20"));
+        int searchFrom = Integer.parseInt(options.getOrDefault("search-from", "11"));
+        int searchWorlds = searchFrom <= 10 ? Integer.parseInt(options.getOrDefault("search-worlds", "8")) : 0;
         checkSeed(seed);
         if (!(epsilon >= 0 && epsilon <= 1)) throw new IllegalArgumentException("epsilon is 0 to 1, not " + epsilon);
         if (first % shardSize != 0) throw new IllegalArgumentException("--first-board is a multiple of --shard-size");
@@ -217,7 +233,8 @@ public final class AllCardsExportMain {
             throw new IllegalArgumentException("the pool holds the student itself; it plays the seats the pool does not");
         }
         Settings settings = new Settings(model, sha256(model.resolve("policy.bin")), seed, k, temperature, epsilon,
-                shardSize, List.copyOf(poolDirs), List.copyOf(poolSha), pool.isEmpty() ? new int[] {0, 0, 1} : mix);
+                shardSize, List.copyOf(poolDirs), List.copyOf(poolSha), pool.isEmpty() ? new int[] {0, 0, 1} : mix,
+                searchFrom, searchWorlds);
         Files.createDirectories(out);
         Path format = out.resolve("allcards-format.json");
         if (Files.exists(format)) {
@@ -235,9 +252,14 @@ public final class AllCardsExportMain {
         Contestant greedy = registry.resolve("greedy");
         ContractSource contracts = new AuctionContractSource(greedy, seed);
         TrueDealLabeller labeller = new TrueDealLabeller(net, k, temperature);
+        if (searchFrom <= 10) labeller = labeller.withSearch(searchFrom, searchWorlds);
         System.out.printf(Locale.ROOT, "all-cards export: %s, k %d, temperature %s, epsilon %s, seed %d, boards %,d-%,d "
                         + "in shards of %,d, %d threads -> %s%n", model, k, temperature, epsilon, seed, first,
                 first + boards - 1, shardSize, threads, out);
+        if (searchFrom <= 10) {
+            System.out.printf(Locale.ROOT, "  the play-outs from trick %d on by a %d-world search, every seat%n",
+                    searchFrom, searchWorlds);
+        }
         if (!pool.isEmpty()) {
             System.out.printf(Locale.ROOT, "  pool %s; the student takes 1, 2 or 3 seats in the proportion %d : %d : %d%n",
                     poolDirs, settings.mix[0], settings.mix[1], settings.mix[2]);
@@ -646,6 +668,8 @@ public final class AllCardsExportMain {
         final long[] decisions = new long[10];
         final long[] positions = new long[10];
         final long[] nanos = new long[10];
+        final long[] searches = new long[10];
+        final long[] searchNanos = new long[10];
         final long[] topIsBest = new long[10];
         final double[] regret = new double[10];
         final long[] halves = new long[10];
@@ -662,6 +686,8 @@ public final class AllCardsExportMain {
             decisions[t]++;
             positions[t] += l.positions();
             nanos[t] += elapsed;
+            searches[t] += l.searches();
+            searchNanos[t] += l.searchNanos();
             int best = TrueDealLabeller.best(l);
             // A full tie with the best counts as the best: the ranking's pick between equal cards is arbitrary.
             if (l.value()[topSlot] == l.value()[best] && l.wins()[topSlot] == l.wins()[best]
@@ -706,6 +732,8 @@ public final class AllCardsExportMain {
                 decisions[t] += o.decisions[t];
                 positions[t] += o.positions[t];
                 nanos[t] += o.nanos[t];
+                searches[t] += o.searches[t];
+                searchNanos[t] += o.searchNanos[t];
                 topIsBest[t] += o.topIsBest[t];
                 regret[t] += o.regret[t];
                 halves[t] += o.halves[t];
@@ -732,6 +760,18 @@ public final class AllCardsExportMain {
                     + "from the decider's side):%n", k);
             System.out.println("  trick  decisions  positions/dec  ms/dec(thread)  sd within card  sd between cards"
                     + "  halves agree  top is best  top's regret");
+            long allSearches = 0;
+            for (long n : searches) allSearches += n;
+            if (allSearches > 0) {
+                System.out.println("  the search's share of the cost, by trick: searches a decision, ms a search (thread):");
+                StringBuilder line = new StringBuilder("   ");
+                for (int t = 0; t < 10; t++) {
+                    if (decisions[t] == 0) continue;
+                    line.append(String.format(Locale.ROOT, "  %d: %.0f / %.2f", t + 1, searches[t] / (double) decisions[t],
+                            searches[t] == 0 ? 0.0 : searchNanos[t] / 1e6 / searches[t]));
+                }
+                System.out.println(line);
+            }
             for (int t = 0; t < 10; t++) {
                 if (decisions[t] == 0) continue;
                 System.out.printf(Locale.ROOT, "  %5d  %9d  %13.0f  %14.1f  %14.2f  %16.2f  %12s  %10.1f%%  %12.2f%n",

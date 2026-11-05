@@ -197,6 +197,26 @@ public class AllCardsExportTest {
         assertNotEquals("another seed, other boards", one.totals().json(0, 6), other.totals().json(0, 6));
     }
 
+    @Test public void withTheSearchAShardIsStillTheSameBytesAtAnyThreadCount() throws Exception {
+        PolicyNet net = RolloutRescueTest.randomNet(36);
+        TrueDealLabeller labeller = new TrueDealLabeller(net, 2, 1.0).withSearch(7, 3);
+        ContractSource contracts = new AuctionContractSource(GREEDY, SEED + 8);
+        AllCardsExportMain.Shard one = AllCardsExportMain.playShard(net, labeller, GREEDY, contracts,
+                settings(SEED + 8, 2, 0.2), 0, 4, 1);
+        AllCardsExportMain.Shard three = AllCardsExportMain.playShard(net, labeller, GREEDY, contracts,
+                settings(SEED + 8, 2, 0.2), 0, 4, 3);
+        AllCardsExportMain.Shard plain = AllCardsExportMain.playShard(net, new TrueDealLabeller(net, 2, 1.0), GREEDY,
+                contracts, settings(SEED + 8, 2, 0.2), 0, 4, 1);
+        assertTrue("records: " + one.records().size(), one.records().size() > 20);
+        for (int i = 0; i < one.records().size(); i++) {
+            assertArrayEquals("record " + i, one.records().get(i), three.records().get(i));
+        }
+        assertNotEquals("the search changes the labels", plain.totals().json(0, 4), one.totals().json(0, 4));
+        long searches = 0;
+        for (long n : one.stats().searches) searches += n;
+        assertTrue("searches counted: " + searches, searches > 0);
+    }
+
     @Test public void aRecordsSlotsAreItsLegalCardsInIndexOrder() throws Exception {
         PolicyNet net = RolloutRescueTest.randomNet(35);
         ContractSource contracts = new AuctionContractSource(GREEDY, SEED + 5);

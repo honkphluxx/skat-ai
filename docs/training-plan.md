@@ -2131,6 +2131,41 @@ does not shape: a fixed one, and stronger than the student where the student
 is weakest (the declarer's endgame) -- the search in the play-outs' later
 tricks is the candidate.
 
+*A search finishes the play-outs, built (2026-11-05; `--search-from`,
+`--search-worlds`).* Option 2 after the loop: the labels' continuation stops
+being the student it trains. With `--search-from=T` every play-out position
+from trick T on, every seat alike, is played by a small search instead of a
+net (TrueDealLabeller.searchCard): W worlds sampled from that seat's own
+evidence -- its hand, the cards seen, the voids shown, the declarer its
+discard, never the table's hands -- each legal card asked of the double-dummy
+solver whether the declarer reaches 61 less what it has banked with that
+world's skat, the most votes for the seat's side played, ties to the seat's
+net's preference: the shipped search's vote at risk 0, without its belief,
+cushion or ladder. Each draw samples its own worlds, so the play-outs keep
+their variety. The choice of trick 7 and 8 worlds: on the yardstick (October)
+even a 4-world search loses less than the student in tricks 7, 8 and 9 (0.42 /
+0.22 / 0.08 against 0.61 / 0.55 / 0.32) and more in trick 6 (0.64 against
+0.59). The student still plays the play-outs' tricks before T (round-on-round
+co-adaptation is left there; it was +-0.06).
+
+Tests: the search takes over at exactly its trick and the labels count its
+calls; its card is an independent tally of the solver's verdicts over the
+same sampled worlds, the net's preference breaking ties (from trick 4 on in
+ten recorded games, the votes overruling the net in ten positions or more,
+defenders among them); a seat knows the skat only as its own discard; a
+declarer whose game is won whatever it plays gets the net's card; a shard with
+the search is the same bytes at one thread and three and differs from one
+without. Five mutants fail (the world's skat left out of the target, the
+defender's side of the vote, the tiebreak, the trick threshold, a defender
+told the discard); a sixth -- dropping the declarer's vote in a world already
+won -- is equivalent, since such a world adds the same to every card, and the
+branch now just skips it. Without the search the records are byte for byte
+as before. A container smoke (12 boards, k 8, Java solver): a search cost
+0.01-0.11 ms (four or fewer cards a hand by trick 7), about 400 searches a
+trick-1 decision; within a card the play-outs' spread from trick 7 on is
+nearly nil -- the search's finish is close to deterministic, the draws' variety
+is in the tricks before.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

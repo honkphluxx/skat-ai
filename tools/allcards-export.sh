@@ -7,6 +7,8 @@
 #   ./tools/allcards-export.sh --python=/c/Python312/python.exe
 #   ./tools/allcards-export.sh --model=policy-oc2-ev --pool=policy-b600-pa40,policy-oc1-ev --seed=9003 \
 #                              --out=allcards-data/r3-k8-s9003      round 3: opponents from earlier nets
+#   ./tools/allcards-export.sh --model=policy-oc3-ev --search-from=7 --search-worlds=8 --seed=9004 \
+#                              --out=allcards-data/r4-k8-s9004      round 4: a search finishes the play-outs
 #
 # The student (--model) plays all three seats at greedy's fixed suit and grand
 # contracts, boards of --seed (never below 1000: 101 is the teacher corpora's,
@@ -20,7 +22,10 @@
 # (AllCardsExportMain). With --pool (other students' folders, comma-separated)
 # the student takes one, two or three seats a board (--mix, the weights, default
 # 40,40,20) and the other seats are pool nets, in the main line and in the
-# play-outs; only the student's decisions are labelled (Phase P's rule).
+# play-outs; only the student's decisions are labelled (Phase P's rule). With
+# --search-from=T every play-out position from trick T on is played by a small
+# search (--search-worlds, default 8) from that seat's own evidence, every seat
+# alike: a fixed, competent finish instead of the student's own.
 # Then arena/python/allcards_data.py checks every shard
 # against the exporter's own totals and the records as a whole.
 #
@@ -48,7 +53,7 @@ fi
 cd "$(dirname "$AC_ORIGINAL")/.." || exit 1
 
 QUICK=false; BOARDS=100000; K=8; SEED=9001; EPSILON=0.2; THREADS=24; MODEL=policy-b600-pa40; OUT=""
-SHARD=2000; PYTHON=${SKATKLAR_PYTHON:-}; POOL=""; MIX=40,40,20
+SHARD=2000; PYTHON=${SKATKLAR_PYTHON:-}; POOL=""; MIX=40,40,20; SEARCH_FROM=11; SEARCH_WORLDS=8
 for arg in "$@"; do
     case "$arg" in
         --quick)       QUICK=true ;;
@@ -61,8 +66,10 @@ for arg in "$@"; do
         --out=*)       OUT="${arg#*=}" ;;
         --pool=*)      POOL="${arg#*=}" ;;
         --mix=*)       MIX="${arg#*=}" ;;
+        --search-from=*)   SEARCH_FROM="${arg#*=}" ;;
+        --search-worlds=*) SEARCH_WORLDS="${arg#*=}" ;;
         --python=*)    PYTHON="${arg#*=}" ;;
-        -h|--help)     sed -n '2,40p' "$AC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)     sed -n '2,45p' "$AC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -78,6 +85,10 @@ for m in $MODEL ${POOL//,/ }; do
 done
 [[ "$MIX" =~ ^[0-9]+,[0-9]+,[0-9]+$ ]] || { echo "--mix is three weights, for 1, 2 and 3 student seats: $MIX" >&2; exit 2; }
 POOL_ARGS=""; [ -n "$POOL" ] && POOL_ARGS="--pool=$POOL --mix=$MIX"
+case "$SEARCH_FROM$SEARCH_WORLDS" in ''|*[!0-9]*) echo "--search-from and --search-worlds are whole numbers" >&2; exit 2 ;; esac
+{ [ "$SEARCH_FROM" -ge 1 ] && [ "$SEARCH_FROM" -le 11 ] && [ "$SEARCH_WORLDS" -ge 1 ]; } \
+    || { echo "--search-from is a trick 1-10 (11: no search), --search-worlds at least 1" >&2; exit 2; }
+[ "$SEARCH_FROM" -le 10 ] && POOL_ARGS="$POOL_ARGS --search-from=$SEARCH_FROM --search-worlds=$SEARCH_WORLDS"
 if [ -z "$OUT" ]; then
     if $QUICK; then OUT=allcards-data/quick-k$K; else OUT=allcards-data/r1-k$K-s$SEED; fi
 fi
@@ -96,7 +107,7 @@ SUMMARY=arena-logs/summary-allcards.txt
 $QUICK && SUMMARY=arena-logs/summary-allcards-quick.txt
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
-say "all-cards export started $(date '+%Y-%m-%d %H:%M:%S')   $OUT: model=$MODEL boards=$BOARDS k=$K seed=$SEED epsilon=$EPSILON threads=$THREADS${POOL:+ pool=$POOL mix=$MIX}"
+say "all-cards export started $(date '+%Y-%m-%d %H:%M:%S')   $OUT: model=$MODEL boards=$BOARDS k=$K seed=$SEED epsilon=$EPSILON threads=$THREADS${POOL:+ pool=$POOL mix=$MIX}$([ "$SEARCH_FROM" -le 10 ] && echo " search from trick $SEARCH_FROM, $SEARCH_WORLDS worlds")"
 
 SHARDS=$(( (BOARDS + SHARD - 1) / SHARD ))
 have=$(ls "$OUT"/allcards-s"$SEED"-*.bin 2>/dev/null | wc -l)
@@ -126,7 +137,7 @@ else
         exit 0
     fi
 fi
-grep -E "games/s|^  pool |^k [0-9]+\.|^  trick|^  +[0-9]+  +[0-9]+ |^  \(sd" "$export_log" | sed 's/^/    /' | tee -a "$SUMMARY"
+grep -E "games/s|^  pool |^  the play-outs from|^  the search.s share|^     1: |^k [0-9]+\.|^  trick|^  +[0-9]+  +[0-9]+ |^  \(sd" "$export_log" | sed 's/^/    /' | tee -a "$SUMMARY"
 
 checks="$LOG/$NAME-checks.txt"
 if [ -f "$checks" ]; then
