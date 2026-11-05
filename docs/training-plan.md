@@ -2196,6 +2196,25 @@ fifth of them; a card's label the same alone and among others; the exporter's
 records the same bytes but for the label slots; not together with the search;
 the settings name it only when on. Seven mutants fail.
 
+*The control: the search's change is real (2026-11-05).* The same quick
+export with `--reseed-from=7` (the student finishing on fresh luck from trick
+7) against the plain one gives what noise alone does, column by column.
+Tricks 1-6, noise against the search: agree 83-87% against 77-78%; "A
+misleads" 0.33-0.60 against 1.26-1.70; signal 0.04-0.05 against 0.18-0.34.
+By role, the declarer's labels are the noisy ones (misleads 0.6-1.2 from noise
+alone in tricks 1-6 against the search's 1.25-1.90), the defender's clean
+(0.20-0.40 against 1.0-1.7). Over all tricks: misleads 0.38 [0.35, 0.41]
+against 1.10 [0.99, 1.21], signal 0.04 against 0.23. The control's B-A is
+-0.00 [-0.05, +0.05], as it must be; the search's -0.22 [-0.40, -0.04] stays:
+by the search's labels the student's own top card is no worse, slightly
+better, than by its own. So the search changes which of the other cards
+ranks first, and the shape of the labels four to six times beyond noise, most
+of all for the defender, without convicting the student's choices. Whether
+that makes a stronger student is the arena's to say -- with the caveat that
+the labels value a card as followed by the search's endgame, while in a game
+the student plays its own. Round 4 goes ahead: the full export (100,000
+boards, k 8, seed 9004, no pool) and ev from the three policy-oc3-ev draws.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
