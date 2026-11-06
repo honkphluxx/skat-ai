@@ -2254,6 +2254,15 @@ Read: each minus its start, w1024 minus w512, and the gains' difference
 Dry-run with a fake python and gradlew (quick, stage 1, stage 2 reusing both;
 the pooled lines match the fake's known differences); three mutants (the
 gains' sign, a net's start, the pairing) caught.
+The first run ran out of memory before training: the full Records of the
+three corpora (6,053,930 decisions; raw bytes, the features again, wins,
+points and value by card as int64) peak near twelve gigabytes, and the
+anchor's 7,968,234 records did not fit beside them. train_outcomes.py now
+loads the corpora shard by shard into LeanRecords -- only what training
+reads, U and the win share computed per shard in the same elementwise
+arithmetic -- about 3.7 GB. Its self-test checks the lean load against the
+full Records on fake corpora (one corpus, two of both formats, a limit inside
+a shard and across corpora): the same bytes in every field; six mutants fail.
 
 **Phase I -- imitation.**
 

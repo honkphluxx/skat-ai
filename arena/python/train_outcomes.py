@@ -115,6 +115,8 @@ def value_loss(value_logits, legal, win_share):
 
 def utility_of(records, win_weight, points_weight):
     """U per card (n, 32): mean game value a play-out, plus the win share and card points as tiebreaks."""
+    if isinstance(records, LeanRecords):
+        return records.utility_for(win_weight, points_weight)
     k = np.maximum(records.k, 1)[:, None].astype(np.float32)
     u = (records.value / k + win_weight * records.wins / k + points_weight * records.points / k)
     return np.where(records.legal, u, 0.0).astype(np.float32)
@@ -131,8 +133,60 @@ def held_out(records, fraction, seed):
     return allcards_split(records.board, fraction, seed=seed)
 
 
-def load_corpora(directories, limit=None):
-    """Several all-cards corpora as one block of records, checked to speak the same encoding."""
+class LeanRecords:
+    """What training reads of all-cards records, and nothing else: built shard by shard.
+
+    The full :class:`allcards_data.Records` of six million decisions holds the
+    raw bytes, the features again, and wins, points and value by card as int64
+    -- about twelve gigabytes at its peak. Training needs the features, the
+    legal cards, contract, trick, board, seed, k, U by card and the win share;
+    the last two are computed per shard, in the same elementwise arithmetic as
+    on the whole, so the numbers are the same bytes. About 3.7 GB for six
+    million."""
+
+    def __init__(self, n, win_weight, points_weight):
+        self.n = n
+        self.weights = (win_weight, points_weight)
+        self.features = np.empty((n, 306), dtype=np.uint8)
+        self.legal = np.empty((n, CARDS), dtype=bool)
+        self.contract = np.empty(n, dtype=np.int64)
+        self.trick = np.empty(n, dtype=np.int64)
+        self.board = np.empty(n, dtype=np.int64)
+        self.seed = np.empty(n, dtype=np.int64)
+        self.k = np.empty(n, dtype=np.int64)
+        self.utility = np.empty((n, CARDS), dtype=np.float32)
+        self.share = np.empty((n, CARDS), dtype=np.float32)
+
+    def put(self, at, r):
+        """Records ``r`` into rows at, at + len(r)."""
+        rows = slice(at, at + len(r))
+        self.features[rows] = r.features
+        self.legal[rows] = r.legal
+        self.contract[rows] = r.contract
+        self.trick[rows] = r.trick
+        self.board[rows] = r.board
+        self.seed[rows] = r.seed
+        self.k[rows] = r.k
+        self.utility[rows] = utility_of(r, *self.weights)
+        self.share[rows] = r.win_share().astype(np.float32)
+
+    def __len__(self):
+        return self.n
+
+    def utility_for(self, win_weight, points_weight):
+        if (win_weight, points_weight) != self.weights:
+            raise ValueError(f"U was computed for the weights {self.weights}, not {(win_weight, points_weight)}")
+        return self.utility
+
+    def win_share(self):
+        return self.share
+
+
+def load_corpora(directories, limit=None, win_weight=1.0, points_weight=0.01):
+    """Several all-cards corpora as one :class:`LeanRecords`, checked to speak the same encoding.
+
+    The first ``limit`` records in corpus order (the same rows as before:
+    each corpus's first ``limit``, concatenated and cut to ``limit``)."""
     from allcards_data import Records
     corpora = [AllCardsCorpus(d) for d in directories]
     for c in corpora[1:]:
@@ -143,10 +197,22 @@ def load_corpora(directories, limit=None):
         raise SystemExit(f"two corpora of the same board seed: {seeds}")
     # Format 2 adds four bytes at the end (who sat where); the trainer reads
     # only the fields both formats share, so mixed rounds are cut to those.
-    blocks = [c.load(limit=limit).raw for c in corpora]
-    width = min(block.shape[1] for block in blocks)
-    raw = np.concatenate([block[:, :width] for block in blocks])
-    return corpora[0], corpora, Records(raw[:limit] if limit else raw)
+    width = min(c.record_bytes for c in corpora)
+    shards = [(c, shard, shard.stat().st_size // c.record_bytes) for c in corpora for shard in c.shards]
+    total = sum(count for _, _, count in shards)
+    if limit is not None:
+        total = min(total, limit)
+    out = LeanRecords(total, win_weight, points_weight)
+    at = 0
+    for c, shard, count in shards:
+        if at >= total:
+            break
+        raw = c.raw(shard)[:total - at, :width]
+        out.put(at, Records(np.ascontiguousarray(raw)))
+        at += len(raw)
+    if at != total:
+        raise SystemExit(f"read {at:,} records, expected {total:,}")
+    return corpora[0], corpora, out
 
 
 # ------------------------------------------------------------------ batches
@@ -356,6 +422,49 @@ def self_test():
     value_loss(v, L[:1], share).backward()
     check("the value loss touches the legal cards only", float(v.grad[0, 5]) == 0.0 and float(v.grad[0, 0]) != 0.0)
 
+    # The lean load: the same rows and the same numbers as the full Records --
+    # one corpus, two of both formats, and cut at a limit inside a shard and
+    # across corpora.
+    import tempfile
+    from allcards_data import EXPECTED, Records
+    with tempfile.TemporaryDirectory() as tmp:
+        dirs = []
+        for i, (fmt, seed, counts) in enumerate(((1, 9001, (70, 50)), (2, 9002, (40,)))):
+            d = pathlib.Path(tmp) / f"c{i}"
+            d.mkdir()
+            fields = {name: [o, w] for name, (o, w) in EXPECTED.items()}
+            if fmt == 2:
+                fields["roles"] = [396, 4]
+            width = 396 if fmt == 1 else 400
+            (d / "allcards-format.json").write_text(json.dumps({"format": fmt, "record_bytes": width, "k": 8,
+                                                                "seed": seed, "encoding_version": 2,
+                                                                "fields": fields}))
+            (d / "encoding-v2.json").write_text(json.dumps({"version": 2, "size": 306, "scale": 255, "fields": [
+                {"name": "all", "offset": 0, "width": 306}]}))
+            for j, count in enumerate(counts):
+                block = np.random.default_rng(seed + j).integers(0, 256, (count, width), dtype=np.uint8)
+                block.tofile(d / f"allcards-s{seed}-{j:07d}.bin")
+            dirs.append(str(d))
+
+        def full(chosen, limit):
+            raw = np.concatenate([AllCardsCorpus(d).load().raw[:, :396] for d in chosen])
+            return Records(raw[:limit] if limit else raw)
+
+        for chosen, limit in ((dirs[:1], None), (dirs, None), (dirs, 100), (dirs, 130)):
+            _, _, lean = load_corpora(chosen, limit=limit, win_weight=1.0, points_weight=0.01)
+            ref = full(chosen, limit)
+            same = len(lean) == len(ref) and all(np.array_equal(getattr(lean, f), getattr(ref, f)) for f in (
+                "features", "legal", "contract", "trick", "board", "seed", "k"))
+            same = same and np.array_equal(lean.utility, utility_of(ref, 1.0, 0.01)) \
+                and np.array_equal(lean.win_share(), ref.win_share().astype(np.float32))
+            check(f"the lean load is the full one ({len(chosen)} corpora, limit {limit}, {len(ref)} rows)", same)
+        _, _, lean = load_corpora(dirs, win_weight=1.0, points_weight=0.01)
+        try:
+            utility_of(lean, 0.5, 0.01)
+            check("the lean load refuses U for other weights", False)
+        except ValueError:
+            check("the lean load refuses U for other weights", True)
+
     print("self-test passed" if not failures else f"SELF-TEST FAILED: {failures}")
     return 0 if not failures else 1
 
@@ -412,7 +521,8 @@ def main():
     model, descriptor = load_init(args.init, device)
     print(f"init {args.init}: {descriptor['layers']} x {descriptor['hidden']}, trained on {descriptor.get('trained_on')}")
 
-    corpus, corpora, records = load_corpora(args.data, limit=args.limit or None)
+    corpus, corpora, records = load_corpora(args.data, limit=args.limit or None, win_weight=args.win_weight,
+                                            points_weight=args.points_weight)
     train, val = held_out(records, args.val_fraction, args.split_seed)
     print(f"{' + '.join(args.data)}: {len(records):,} records (k {', '.join(str(c.k) for c in corpora)}; "
           f"seeds {', '.join(str(c.seed) for c in corpora)}); {len(train):,} training, {len(val):,} held out "
