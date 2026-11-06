@@ -2215,6 +2215,26 @@ the labels value a card as followed by the search's endgame, while in a game
 the student plays its own. Round 4 goes ahead: the full export (100,000
 boards, k 8, seed 9004, no pool) and ev from the three policy-oc3-ev draws.
 
+*Route 1, round 4 -- the search's labels: no gain (2026-11-06).* The export:
+100,000 boards, 87,256 games, 1,994,734 decisions in 6.0 h (4.06 games/s;
+the search 359 calls at 0.08 ms in a trick-1 decision of 548 ms); all checks
+passed. Training ev from the three policy-oc3-ev draws moved little: held-out
+gain on the new labels +4.402 -> +4.441 (+0.039), best or tied 59.7% -> 59.8%,
+teacher regret 0.563 -> 0.565; the yardstick unchanged within its noise
+(0.302-0.305 against 0.300-0.303). The arena, student-64 against
+belief-64-shipped, 7 seeds of 200 boards, draws averaged: ev -0.18 [-1.33,
++0.97]; **minus its start -0.28 [-0.76, +0.21]** (five seeds of seven below
+zero); minus pa40 +1.23 [+0.56, +1.91] (round 3's student: +1.51). So the
+search's labels, though they differ from the student's beyond noise, do not
+make a stronger student: the gate fails a third time. Consistent with the
+control: the search reorders the cards the student does not play (its top
+card no worse by the search, -0.22), and the expected objective moves a card
+in proportion to its probability, so a reshuffle among unlikely cards teaches
+next to nothing; what little moved may follow the caveat (a card valued as
+followed by the search's endgame, played before the student's own). Option 2
+is closed; policy-oc3-ev stays route 1's best student, +1.51 over pa40 and
+level with belief-64-shipped (+0.09 [-1.02, +1.20]).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
