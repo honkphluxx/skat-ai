@@ -2264,6 +2264,22 @@ arithmetic -- about 3.7 GB. Its self-test checks the lean load against the
 full Records on fake corpora (one corpus, two of both formats, a limit inside
 a shard and across corpora): the same bytes in every field; six mutants fail.
 
+*The size test under outcomes: stage 1, the gate fails (2026-11-06).* Both
+nets trained in about 10 minutes a draw on the 6,053,930 decisions (605,650
+held out, 32,382 boards), kept at epoch 9-10. Held-out gain of the top card
+over the legal mean, the draws' mean: w512 +3.953 -> +4.568 (+0.616), w1024
++4.014 -> +4.652 (+0.638); the draws agree within about 0.01. The wider net
+ends 0.084 higher, but 0.061 of that is its start; what the outcomes add to
+it beyond the narrower is +0.022. The yardstick keeps imitation's order: w1024
+0.276-0.279 against w512's 0.303-0.304 (each a few thousandths above its
+start, as outcome training always cost). For scale, round 1's 0.64 of label
+gain was +1.05 in games, so +0.02 is a few hundredths of a game point, far
+inside what seven seeds resolve (+-0.4 paired); the arena (stage 2, ten
+hours) is not run. Width is closed for route 1 as for imitation: the wider net
+learns from the outcomes what the narrower does, and keeps the head start
+imitation gave it (+0.15 [-0.53, +0.83] in games). On one pass over the union,
+w512 gains as much (+0.62) as round 1 did on r1 alone (+0.64).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
