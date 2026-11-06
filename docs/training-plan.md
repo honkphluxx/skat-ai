@@ -2235,6 +2235,26 @@ followed by the search's endgame, played before the student's own). Option 2
 is closed; policy-oc3-ev stays route 1's best student, +1.51 over pa40 and
 level with belief-64-shipped (+0.09 [-1.02, +1.20]).
 
+*Route 1, the size test under outcomes (2026-11-06, planned;
+`tools/outcomes-size.sh`).* Under imitation width did not pay in games (3 x
+1024 at 600,000 deals +0.15 [-0.53, +0.83] over pa40, the size test of
+2026-10-31); whether a wider net learns more from the outcome labels -- a
+label on every legal card, about 6 million decisions in rounds 1-3 -- is a
+separate question. Two nets on one recipe (expected, anchor 1, 10 epochs, the
+epoch kept by held-out gain) on the union of the student-finished corpora
+r1-r3 (round 4's search labels left out): w512 from policy-b600-pa40 and
+w1024 (3 x 1024, 2.5 million weights) from policy-b600-h1024-pa80, three
+draws each (policy-ocu3-w512, policy-ocu3-w1024). The held-out decisions are
+the corpora's board split, the same for both, so the gains compare directly.
+Stage 1, `--no-arena`: training and the yardstick, the gate being w1024's
+held-out gain clearly above w512's. Stage 2: student-64 against
+belief-64-shipped, seven seeds; the starts' and oc3-ev's reports reused.
+Read: each minus its start, w1024 minus w512, and the gains' difference
+((w1024 - its start) - (w512 - its start)), which takes the starts' gap out.
+Dry-run with a fake python and gradlew (quick, stage 1, stage 2 reusing both;
+the pooled lines match the fake's known differences); three mutants (the
+gains' sign, a net's start, the pairing) caught.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
