@@ -2387,6 +2387,34 @@ worth's order, the bid filter, the chance). The report's self-test: the
 honest differences, the searched reference found by its pair, older files
 without it; three more mutants fail.
 
+*The searched re-chooser: the answer (2026-11-07; seed 9101, 2,000 boards,
+16 worlds, 41 minutes on bigbox, the search 1,925 of the 2,500 s).* Honest,
+by the labels: **searched minus shipped +5.26 [+3.49, +7.04] a declared game,
++4.60 [+3.05, +6.15] a game**; searched minus fixed +4.73 [+2.87, +6.59];
+shipped minus fixed -0.53. The re-chooser announces another contract than the
+shipped player on 47.0% of the declared boards. Where it comes from (the
+per-board differences, grouped by what changed):
+
+| change | boards | searched - shipped | share of the total |
+| --- | --- | --- | --- |
+| the same contract (another discard at most) | 926 | +0.07 (se 0.79) | 1% |
+| suit to another suit | 562 | +1.98 (se 1.94) | 12% |
+| **a suit to Grand** | **224** | **+33.07 (se 1.98)** | **81%** |
+| Grand to a suit | 35 | +17.3 (se 17.6) | 7% |
+
+Grand goes from 250 declared to 439. The labels' win share is the same for
+both choices (0.637), the game value is not (-7.23 against -1.95 a play-out):
+the gain is games won at Grand's value instead of a suit's. The shipped player
+prices only the two likeliest trump games on its ten at the deal
+(HandEvaluator.plausibleTrumpGames(hand, 2)) and never looks again, so a
+Grand the skat makes -- or one it never priced -- is not announced. (The
+re-chooser's formula also prefers the cheapest game when its chance is below
+two thirds, which is why it picks Diamonds 602 times; that part moves little,
++2 a board, unresolved.) Caveats: the play-outs are the student on both sides
+with drawn defenders, not the shipped search, and the bid is greedy's; a
+Grand that only the student's defence lets through would show here and not at
+a table. The table is the next measurement.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
