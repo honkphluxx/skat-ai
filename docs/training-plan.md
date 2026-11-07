@@ -2345,6 +2345,48 @@ in-sample maximum is inflated): six mutants fail. A container smoke (pa40,
 search-4 as shipped, 12 boards): 47 options a board, about 45 play-outs a
 second a thread.
 
+*The declarer-choice labels: the first run (2026-11-07; seed 9101, 2,000
+boards, k 8, policy-oc3-ev playing out).* 1,747 declared boards (253 passed
+in), 45.2 options a board, 631,304 play-outs in 9.6 minutes on bigbox. The
+honest comparison -- two choices made without the deal, scored on the same
+labels: **shipped minus fixed -0.53 [-1.96, +0.90] a declared game**; the
+shipped player announces another contract than greedy's auction on 34.1% of
+boards and gains nothing by it. What choosing by the labels is worth,
+cross-fitted on halves (an upper bound: the labels see the deal), against
+shipped: contract and discard +19.2 [+17.3, +21.1] a declared game (+16.8 a
+game), the contract alone with the heuristic's discard +13.4 [+11.8, +15.0],
+the discard alone +6.2 [+5.0, +7.5] (Phase D's omniscient discard ceiling was
+the same six points); against fixed nearly the same. The labels' best is
+another contract on 61-68% of suit boards and 3.6% of Grand boards. The halves
+remove the noise of the defenders' draws, not the hindsight of the layout --
+which trump suit splits well is exactly what the labels know and a declarer
+does not -- so these are ceilings, and what an honest declarer can take of
+them is the open question. (A first attempt at this run reused the quick
+run's 40 boards: the script named the label file by LINES, which bash resets
+to the terminal height after every external command; fixed, 2c44623.)
+
+*Two additions, built (2026-11-07).* A third reference, **searched**: an
+honest re-chooser after the skat (DeclarerChoiceMain.searchedChoice) -- for
+every contract covering the bid, DiscardSearch over 16 worlds dealt from the
+twenty unseen cards picks the pair and gives the make chance against
+double-dummy defence; the contract kept maximises value x p - 2 value (1 - p),
+the bidder's own reckoning. It reads only the declarer's twelve. The report
+now leads with the honest differences (shipped - fixed, searched - shipped,
+searched - fixed). And what the declarer could see is written beside each
+board -- its ten, the skat, its place, the auction by place -- so a learned
+declarer can be trained on these labels and scored on boards it never saw.
+The search costs about 160 full-game solves a contract (Phase D's ten seconds
+a discard), so `--search-worlds=0` leaves it out for a large corpus. Lines
+are written as boards finish (board order), so a long run that dies keeps
+its .partial. Tests: the re-chooser covers the bid, is an option, gives the
+same pick for the same twelve, re-chooses somewhere; on four jacks and seven
+clubs it keeps Grand (guaranteed 120 against Clubs' 60), the only game above
+a bid of 60, nothing above 120; the JSON carries the searched choice, the ten,
+the skat, the place and every auction event. Three more mutants fail (the
+worth's order, the bid filter, the chance). The report's self-test: the
+honest differences, the searched reference found by its pair, older files
+without it; three more mutants fail.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

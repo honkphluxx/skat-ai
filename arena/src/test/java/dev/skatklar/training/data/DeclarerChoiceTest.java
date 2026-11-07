@@ -176,6 +176,61 @@ public class DeclarerChoiceTest {
         assertTrue("draws that differ: " + varied + " of " + checked, varied >= checked / 2);
     }
 
+    @Test public void theSearchedReChooserCoversTheBidIsAnOptionAndReadsOnlyItsOwnCards() throws Exception {
+        PolicyNet net = RolloutRescueTest.randomNet(66);
+        int checked = 0;
+        int otherThanFixed = 0;
+        for (Object[] b : declared(10)) {
+            Board board = (Board) b[0];
+            ContractSource.FixedContract fixed = (ContractSource.FixedContract) b[1];
+            List<Card> twelve = twelve(board, fixed);
+            DeclarerChoiceMain.Searched found = DeclarerChoiceMain.searchedChoice(twelve, fixed.bidValue(),
+                    fixed.declarer(), board.round().forehand, net, 4, 77);
+            assertNotNull("some contract covers the bid", found);
+            assertTrue("it covers the bid",
+                    SkatRules.guaranteedValue(found.choice().contract(), twelve) >= fixed.bidValue());
+            assertTrue("a chance", found.chance() >= 0 && found.chance() <= 1);
+            assertTrue("two of the twelve", twelve.containsAll(found.choice().discard()));
+            List<DeclarerChoiceMain.Option> options = DeclarerChoiceMain.options(twelve, fixed.bidValue(), net,
+                    List.of(found.choice()));
+            assertTrue("an option", DeclarerChoiceMain.indexOf(options, found.choice()) >= 0);
+            DeclarerChoiceMain.Searched again = DeclarerChoiceMain.searchedChoice(new ArrayList<>(twelve),
+                    fixed.bidValue(), fixed.declarer(), board.round().forehand, net, 4, 77);
+            assertEquals("the same twelve, the same pick", found, again);
+            if (found.choice().contract() != fixed.contract()) otherThanFixed++;
+            checked++;
+        }
+        assertTrue("boards: " + checked, checked == 10);
+        assertTrue("it re-chooses somewhere: " + otherThanFixed, otherThanFixed > 0);
+    }
+
+    @Test public void theSearchedReChooserTakesTheGameAStrongHandMakes() throws Exception {
+        // Four jacks and seven clubs, the ace of hearts: every game makes, and
+        // Grand is worth most (guaranteed 120; Clubs 60, Diamonds 45 by
+        // SkatRules.guaranteedValue), so it is kept -- and above 60 it is the
+        // only game that covers the bid.
+        PolicyNet net = RolloutRescueTest.randomNet(67);
+        List<Card> twelve = new ArrayList<>();
+        for (Card.Suit suit : Card.Suit.values()) twelve.add(new Card(suit, Card.Rank.JACK));
+        for (Card.Rank rank : new Card.Rank[] {Card.Rank.ACE, Card.Rank.TEN, Card.Rank.KING, Card.Rank.QUEEN,
+                Card.Rank.NINE, Card.Rank.EIGHT, Card.Rank.SEVEN}) {
+            twelve.add(new Card(Card.Suit.CLUBS, rank));
+        }
+        twelve.add(new Card(Card.Suit.HEARTS, Card.Rank.ACE));
+        assertTrue("the values as the comment says", SkatRules.guaranteedValue(Contract.GRAND, twelve) == 120
+                && SkatRules.guaranteedValue(Contract.CLUBS, twelve) == 60);
+        DeclarerChoiceMain.Searched found = DeclarerChoiceMain.searchedChoice(twelve, 18, SkatAi.Seat.HUMAN,
+                SkatAi.Seat.HUMAN, net, 4, 5);
+        assertNotNull(found);
+        assertEquals("the most valuable game that makes", Contract.GRAND, found.choice().contract());
+        assertEquals("it makes everywhere", 1.0, found.chance(), 0.0);
+        DeclarerChoiceMain.Searched high = DeclarerChoiceMain.searchedChoice(twelve, 61, SkatAi.Seat.HUMAN,
+                SkatAi.Seat.HUMAN, net, 4, 5);
+        assertEquals("only Grand covers a bid of 61", Contract.GRAND, high.choice().contract());
+        assertEquals("nothing covers 121", null, DeclarerChoiceMain.searchedChoice(twelve, 121, SkatAi.Seat.HUMAN,
+                SkatAi.Seat.HUMAN, net, 4, 5));
+    }
+
     @Test public void aBoardIsTheSameRunTwiceAndAnOptionTheSameAloneAndAmongOthers() throws Exception {
         PolicyNet net = RolloutRescueTest.randomNet(65);
         ContractSource contracts = new AuctionContractSource(GREEDY, SEED);
@@ -198,6 +253,14 @@ public class DeclarerChoiceTest {
             assertEquals("one JSON object per option", one.scored().size(), line.split("\"heuristic\"", -1).length - 1);
             assertTrue("the shipped choice is written", line.contains("\"shipped\": {\"contract\": \""
                     + one.shipped().contract().name()));
+            assertTrue("the searched choice is written", line.contains("\"searched\": {\"contract\": \""
+                    + one.searched().choice().contract().name()));
+            assertTrue("and an option", DeclarerChoiceMain.indexOf(
+                    one.scored().stream().map(DeclarerChoiceMain.Scored::option).toList(), one.searched().choice()) >= 0);
+            assertTrue("what the declarer saw: ten and the skat", one.ten().size() == 10 && one.skat().size() == 2
+                    && line.contains("\"ten\": [") && line.contains("\"skat\": [") && line.contains("\"position\": \""));
+            assertEquals("the auction, every event", fixed.auction().size(),
+                    line.substring(line.indexOf("\"auction\": [")).split("hand\", ", -1).length - 1);
             for (DeclarerChoiceMain.Scored s : one.scored()) {
                 for (int d = 0; d < 2; d++) {
                     assertTrue("a win is a positive value", (s.wins()[d] == 1) == (s.value()[d] > 0));

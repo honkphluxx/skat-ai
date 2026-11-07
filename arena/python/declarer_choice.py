@@ -8,10 +8,17 @@ Reads DeclarerChoiceMain's lines: per declared board, every option (a contract
 covering the bid times the ten discards from its five least-wanted cards)
 played out k times on the true deal by the student. U per play-out is route
 1's: the game value from the declarer's side plus the win (1) and a hundredth
-of the card points. Two references per board:
+of the card points. The references per board:
 
-  shipped  what --shipped (belief-64-shipped) buries and announces in that seat
-  fixed    the auction's contract with the heuristic's discard for it (route 1's games)
+  shipped   what --shipped (belief-64-shipped) buries and announces in that seat
+  fixed     the auction's contract with the heuristic's discard for it (route 1's games)
+  searched  an honest re-chooser after the skat: every covering contract's discard
+            searched over worlds from the unseen cards, the contract worth most kept
+            (older files have no searched reference)
+
+The honest comparisons come first: one reference minus another by the labels
+on all k play-outs -- both choices made without seeing the deal, so nothing
+selects on the labels' noise or hindsight.
 
 For each reference, what choosing otherwise is worth, three ways:
 
@@ -39,6 +46,8 @@ import numpy as np
 
 CONTRACTS = ("DIAMONDS", "HEARTS", "SPADES", "CLUBS", "GRAND")
 WAYS = ("contract and discard", "discard only", "contract only")
+REFERENCES = ("shipped", "fixed", "searched")
+HONEST = (("shipped", "fixed"), ("searched", "shipped"), ("searched", "fixed"))
 
 
 def utility(option):
@@ -74,6 +83,8 @@ def board_numbers(line):
         "shipped": find(options, line["shipped"]["contract"], line["shipped"]["discard"]),
         "fixed": find(options, line["auction_contract"], heuristic=True),
     }
+    if "searched" in line:
+        refs["searched"] = find(options, line["searched"]["contract"], line["searched"]["discard"])
     out = {"refs": refs, "mean": mean, "contracts": contracts}
     for name, ref in refs.items():
         if ref < 0:
@@ -90,6 +101,9 @@ def board_numbers(line):
             best = np.flatnonzero(allowed)[np.argmax(mean[allowed])]
             out[(name, way)] = (cross, mean[best] - mean[ref], contracts[best] != contracts[ref])
     out["shipped_minus_fixed"] = mean[refs["shipped"]] - mean[refs["fixed"]]
+    for a, b in HONEST:
+        if a in refs and b in refs:
+            out[(a, "minus", b)] = mean[refs[a]] - mean[refs[b]]
     return out
 
 
@@ -110,12 +124,22 @@ def report(lines, boards=None):
           + f", k {k}, {np.mean([len(l['options']) for l in lines]):.1f} options a board")
     differ = np.mean([l["shipped"]["contract"] != l["auction_contract"] for l in lines])
     print(f"  the shipped player announces another contract than the auction's on {differ:.1%} of them")
-    m, h = interval([x["shipped_minus_fixed"] for x in numbers])
-    print(f"  shipped minus fixed, by the labels (all k): {m:+.2f} [{m - h:+.2f}, {m + h:+.2f}] a declared game")
+    print("\n  honest: one reference minus another by the labels (all k), U a declared game")
+    for a, b in HONEST:
+        rows = [x[(a, "minus", b)] for x in numbers if (a, "minus", b) in x]
+        if not rows:
+            continue
+        m, h = interval(rows)
+        game = f"   per game {m * per_game:+.2f} [{(m - h) * per_game:+.2f}, {(m + h) * per_game:+.2f}]" if per_game else ""
+        changed = np.mean([l[a]["contract"] != (l["auction_contract"] if b == "fixed" else l[b]["contract"])
+                           for l in lines if a in l and (b == "fixed" or b in l)])
+        print(f"    {a} minus {b}: {m:+.2f} [{m - h:+.2f}, {m + h:+.2f}]{game}   another contract on {changed:.1%}")
     print("\n  what choosing otherwise is worth, U a declared game (cross-fitted on halves; in-sample for scale)")
     print(f"  {'reference':9s} {'way':22s} {'cross-fitted [95%]':>24s}  {'per game':>8s}  {'in-sample':>9s}  "
           f"{'other contract':>14s}")
-    for name in ("shipped", "fixed"):
+    for name in REFERENCES:
+        if (name, WAYS[0]) not in numbers[0]:
+            continue
         for way in WAYS:
             cross = [x[(name, way)][0] for x in numbers]
             naive = [x[(name, way)][1] for x in numbers]
@@ -139,7 +163,7 @@ def report(lines, boards=None):
 
 
 def fake_line(board, rng, k=8, noise=0.0, better=None, gain=0.0, contracts=("CLUBS", "GRAND"),
-              shipped=("CLUBS", [0, 1]), auction="CLUBS"):
+              shipped=("CLUBS", [0, 1]), auction="CLUBS", searched=None):
     """Ten pairs per contract, the fourth the heuristic's; option ``better`` (contract, discard) gains ``gain``."""
     options = []
     for c in contracts:
@@ -151,8 +175,11 @@ def fake_line(board, rng, k=8, noise=0.0, better=None, gain=0.0, contracts=("CLU
             v = base + noise * rng.standard_normal(k)
             options.append({"contract": c, "discard": discard, "heuristic": j == 3,
                             "value": [float(x) for x in v], "wins": [0] * k, "points": [0] * k})
-    return {"board": board, "declarer": "HUMAN", "bid": 18, "auction_contract": auction,
+    line = {"board": board, "declarer": "HUMAN", "bid": 18, "auction_contract": auction,
             "shipped": {"contract": shipped[0], "discard": shipped[1]}, "options": options}
+    if searched is not None:
+        line["searched"] = {"contract": searched[0], "discard": searched[1], "chance": 0.5}
+    return line
 
 
 def self_test():
@@ -188,6 +215,14 @@ def self_test():
           float(utility({"value": [2], "wins": [1], "points": [50]})[0]) == 3.5)
     shipped_better = board_numbers(fake_line(4, rng, better=("CLUBS", [2, 3]), gain=5.0, shipped=("CLUBS", [2, 3])))
     check("shipped minus fixed by the labels", abs(shipped_better["shipped_minus_fixed"] - 5) < 1e-9)
+
+    honest = board_numbers(fake_line(6, rng, better=("GRAND", [5, 6]), gain=7.0, searched=("GRAND", [5, 6])))
+    check("searched minus shipped and minus fixed, by the labels",
+          abs(honest[("searched", "minus", "shipped")] - 7) < 1e-9 and abs(honest[("searched", "minus", "fixed")] - 7) < 1e-9
+          and abs(honest[("shipped", "minus", "fixed")]) < 1e-9)
+    check("the searched reference found by its pair", honest["refs"]["searched"] == 15)
+    check("an older file without it: no searched rows", ("searched", "minus", "shipped") not in other
+          and ("searched", WAYS[0]) not in other)
 
     noisy = [board_numbers(fake_line(b, rng, noise=10.0)) for b in range(3000)]
     cross, half = interval([x[("shipped", "contract and discard")][0] for x in noisy])

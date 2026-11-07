@@ -10,16 +10,23 @@
 # (the declarer by its top card, the defenders drawn): each suit and grand
 # contract whose guaranteed value covers the bid, times the ten discards
 # from its five least-wanted cards, k times on the true deal, common random
-# numbers across the options. Beside them the two references: what --shipped
-# (default belief-64-shipped) buries and announces in that seat, and the
-# auction's own contract with the heuristic's discard (what route 1 played).
-# Then arena/python/declarer_choice.py: what choosing otherwise is worth --
-# contract and discard, the discard alone, the contract alone -- chosen on
-# half the play-outs and scored on the other half, per declared game and per
-# game.
+# numbers across the options. Beside them three references: what --shipped
+# (default belief-64-shipped) buries and announces in that seat, the
+# auction's own contract with the heuristic's discard (what route 1 played),
+# and an honest re-chooser after the skat (every covering contract's discard
+# searched over 16 worlds from the unseen cards, the contract worth most
+# kept); and what the declarer could see (its ten, the skat, its place, the
+# auction), for a learned declarer later. Then arena/python/declarer_choice.py:
+# the honest comparisons (one reference minus another), and what choosing by
+# the labels is worth -- contract and discard, the discard alone, the
+# contract alone -- chosen on half the play-outs and scored on the other
+# half, per declared game and per game. The re-chooser's search is most of
+# the cost (DiscardSearch: about 160 full-game solves a contract at 16
+# worlds); --search-worlds=0 leaves it out, as for --boards=20000, the corpus
+# a learned declarer would need (about 1.5 hours that way).
 #
 # Options: --model (policy-oc3-ev), --shipped, --boards, --k (even), --seed
-# (9101; 1000 or more), --threads (24), --python. Writes
+# (9101; 1000 or more), --search-worlds (16; 0 off), --threads (24), --python. Writes
 # arena-logs/declarer-choice/<run>.jsonl and .txt, the summary in
 # arena-logs/summary-declarer-choice.txt (-quick). A finished run is reused:
 # the labels when the .jsonl exists, the report when the .txt does.
@@ -35,7 +42,7 @@ fi
 cd "$(dirname "$DC_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
-QUICK=false; BOARDS=2000; K=8; SEED=9101; THREADS=24; MODEL=policy-oc3-ev; SHIPPED=belief-64-shipped
+QUICK=false; BOARDS=2000; K=8; SEED=9101; THREADS=24; MODEL=policy-oc3-ev; SHIPPED=belief-64-shipped; SW=16
 PYTHON=${SKATKLAR_PYTHON:-}
 for arg in "$@"; do
     case "$arg" in
@@ -46,13 +53,14 @@ for arg in "$@"; do
         --threads=*)   THREADS="${arg#*=}" ;;
         --model=*)     MODEL="${arg#*=}" ;;
         --shipped=*)   SHIPPED="${arg#*=}" ;;
+        --search-worlds=*) SW="${arg#*=}" ;;
         --python=*)    PYTHON="${arg#*=}" ;;
-        -h|--help)     sed -n '2,26p' "$DC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)     sed -n '2,33p' "$DC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
 $QUICK && BOARDS=48
-for n in "$BOARDS" "$K" "$SEED" "$THREADS"; do
+for n in "$BOARDS" "$K" "$SEED" "$THREADS" "$SW"; do
     case "$n" in ''|*[!0-9]*) echo "not a whole number: $n" >&2; exit 2 ;; esac
 done
 [ "$BOARDS" -ge 1 ] || { echo "--boards is at least 1" >&2; exit 2; }
@@ -71,7 +79,7 @@ fi
 
 LOG=arena-logs/declarer-choice
 mkdir -p "$LOG"
-NAME="$(basename "$MODEL")-$SHIPPED-s$SEED-b$BOARDS-k$K"
+NAME="$(basename "$MODEL")-$SHIPPED-s$SEED-b$BOARDS-k$K-w$SW"
 $QUICK && NAME="$NAME-quick"
 # Not LINES: bash keeps LINES (and COLUMNS) as the terminal's size and resets
 # them after every external command (checkwinsize), so a label file named by
@@ -82,7 +90,7 @@ SUMMARY=arena-logs/summary-declarer-choice.txt
 $QUICK && SUMMARY=arena-logs/summary-declarer-choice-quick.txt
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
-say "declarer choice started $(date '+%Y-%m-%d %H:%M:%S')   student=$MODEL shipped=$SHIPPED boards=$BOARDS k=$K seed=$SEED threads=$THREADS"
+say "declarer choice started $(date '+%Y-%m-%d %H:%M:%S')   student=$MODEL shipped=$SHIPPED boards=$BOARDS k=$K seed=$SEED search-worlds=$SW threads=$THREADS"
 
 if [ -f "$LABELS" ]; then
     say "  [skip] labels -- $LABELS exists"
@@ -92,7 +100,7 @@ else
     start=$(date +%s)
     run_log="$LOG/$NAME-run.txt"
     ./gradlew --console=plain -q --no-daemon :arena:declarerChoice \
-        --args="--model=$MODEL --shipped=$SHIPPED --out=$ROOT/$LABELS --boards=$BOARDS --k=$K --seed=$SEED --threads=$THREADS" \
+        --args="--model=$MODEL --shipped=$SHIPPED --out=$ROOT/$LABELS --boards=$BOARDS --k=$K --seed=$SEED --threads=$THREADS --search-worlds=$SW" \
         > "$run_log.partial" 2>&1 || { mv "$run_log.partial" "$LOG/$NAME-run.failed.txt"; say "      FAILED -- see $LOG/$NAME-run.failed.txt"; exit 1; }
     mv "$run_log.partial" "$run_log"
     grep -E "declared boards labelled" "$run_log" | sed 's/^/    /' | tee -a "$SUMMARY"

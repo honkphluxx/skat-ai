@@ -8,6 +8,8 @@ import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.ai.SkatAiSession;
 import dev.skatklar.demo.belief.BeliefEncoding;
 import dev.skatklar.demo.belief.PolicyNet;
+import dev.skatklar.demo.SkatDeck;
+import dev.skatklar.demo.search.DiscardSearch;
 import dev.skatklar.demo.search.Discards;
 import dev.skatklar.training.arena.AuctionContractSource;
 import dev.skatklar.training.arena.Board;
@@ -30,6 +32,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Random;
 import java.util.Set;
 import java.util.SplittableRandom;
 import java.util.concurrent.ExecutorService;
@@ -58,7 +61,7 @@ import java.util.concurrent.Future;
  * declarer knowing its discard, as the all-cards labels are made. Draw d uses
  * the same random streams for every option of a board.
  *
- * <p>The two references:
+ * <p>The three references:
  * <ul>
  *   <li><b>shipped</b> -- what {@code --shipped} (default belief-64-shipped)
  *       does in the declarer's seat at this bid: it prices its ten at the deal,
@@ -68,7 +71,14 @@ import java.util.concurrent.Future;
  *       bid it is asked for, which a replayed auction does not ask.</li>
  *   <li><b>fixed</b> -- the auction's own contract with the heuristic's
  *       discard for it: what every route-1 game was played at.</li>
+ *   <li><b>searched</b> -- an honest re-chooser after the skat
+ *       ({@link #searchedChoice}): every covering contract's discard searched
+ *       over worlds from the unseen cards, the contract worth most kept.</li>
  * </ul>
+ *
+ * <p>Beside them, what the declarer could see -- its ten, the skat, its place
+ * and the auction (by place) -- so a learned declarer can be trained on these
+ * labels and scored on boards it never saw.
  *
  * <p>One JSON line a declared board: the board, the declarer, the bid, the
  * auction's contract, the shipped choice, and per option its contract, its
@@ -87,6 +97,8 @@ public final class DeclarerChoiceMain {
             Contract.GRAND};
     /** The discard's candidates: the five cards the heuristic wants least, ten pairs. */
     static final int POOL = 5;
+    /** Worlds the searched re-chooser samples for each contract's discard (DiscardSearch); --search-worlds. */
+    static final int SEARCH_WORLDS = 16;
 
     private DeclarerChoiceMain() {}
 
@@ -107,12 +119,16 @@ public final class DeclarerChoiceMain {
     /** What a player in the declarer's seat chose. */
     record Choice(Contract contract, List<Card> discard) {}
 
+    /** The searched re-chooser's pick, with the make chance its search gave the contract. */
+    record Searched(Choice choice, double chance) {}
+
     /** One option played out k times: per draw, from the declarer's side. */
     record Scored(Option option, int[] value, int[] wins, int[] points) {}
 
-    /** One declared board. */
+    /** One declared board, with what the declarer could see: its twelve, its place, the auction. */
     record Result(long board, SkatAi.Seat declarer, int bid, Contract auctionContract, Choice shipped,
-                  List<Scored> scored) {}
+                  Searched searched, List<Card> ten, List<Card> skat, String position,
+                  List<SkatAi.BidEvent> auction, SkatAi.RoundPosition round, List<Scored> scored) {}
 
     /** Two cards in card-index order, so a pair has one spelling. */
     static List<Card> pair(List<Card> cards) {
@@ -192,6 +208,43 @@ public final class DeclarerChoiceMain {
         }
     }
 
+    /**
+     * An honest re-chooser after the skat, from the declarer's own twelve
+     * alone: for every contract that covers the bid, {@link DiscardSearch}
+     * over {@code worlds} worlds dealt from the twenty unseen cards (the
+     * opponents' hands are never read) picks the pair to bury and says in how
+     * many worlds the contract then makes against double-dummy defence; the
+     * contract kept is the one worth most by the bidder's own reckoning,
+     * value times p less twice the value times (1 - p) -- the first of equals
+     * in the order diamonds, hearts, spades, clubs, grand.
+     */
+    static Searched searchedChoice(List<Card> twelve, int bid, SkatAi.Seat declarer, SkatAi.Seat forehand,
+                                   PolicyNet net, int worlds, long seed) {
+        List<Card> unseen = new ArrayList<>(SkatDeck.ordered());
+        unseen.removeAll(twelve);
+        Searched best = null;
+        double bestWorth = Double.NEGATIVE_INFINITY;
+        for (Contract c : TRUMP_GAMES) {
+            int value = SkatRules.guaranteedValue(c, twelve);
+            if (!net.covers(c) || value < bid) continue;
+            DiscardSearch.Choice found = DiscardSearch.choose(c, declarer, twelve, unseen, forehand, worlds, POOL, 0L,
+                    new Random(Seeds.mix(seed, c.ordinal(), 0x5EA4C4L)), Discards.buried(c, twelve));
+            if (found.worlds() == 0 || found.buried().size() != 2) continue;
+            double p = (double) found.wins() / found.worlds();
+            double worth = value * p - 2.0 * value * (1 - p);
+            if (worth > bestWorth) {
+                bestWorth = worth;
+                best = new Searched(new Choice(c, pair(found.buried())), p);
+            }
+        }
+        return best;
+    }
+
+    /** The declarer's place at the table: forehand, middlehand or rearhand. */
+    static String position(SkatAi.RoundPosition round, SkatAi.Seat seat) {
+        return seat == round.forehand ? "forehand" : seat == round.middlehand ? "middlehand" : "rearhand";
+    }
+
     /** The declarer's dealt ten, by the engine's seat order. */
     static List<Card> handOf(Board board, SkatAi.Seat seat) {
         return switch (seat) {
@@ -229,6 +282,12 @@ public final class DeclarerChoiceMain {
     /** One board: null when the auction passed in or the student does not play the shipped contract. */
     static Result board(PolicyNet net, Contestant shipped, ContractSource contracts, Board board, int k, long seed,
                         Stats stats) {
+        return board(net, shipped, contracts, board, k, seed, SEARCH_WORLDS, stats);
+    }
+
+    /** As above; {@code searchWorlds} 0 leaves the searched re-chooser out (null in the result). */
+    static Result board(PolicyNet net, Contestant shipped, ContractSource contracts, Board board, int k, long seed,
+                        int searchWorlds, Stats stats) {
         ContractSource.FixedContract fixed = contracts.contractFor(board);
         if (fixed == null || fixed.contract().isNull()) {
             stats.skipped++;
@@ -245,12 +304,21 @@ public final class DeclarerChoiceMain {
             return null;
         }
         Choice asFixed = new Choice(fixed.contract(), Discards.buried(fixed.contract(), twelve));
-        List<Option> options = options(twelve, fixed.bidValue(), net, List.of(choice, asFixed));
+        Searched searched = null;
+        if (searchWorlds > 0) {
+            searched = searchedChoice(twelve, fixed.bidValue(), fixed.declarer(), board.round().forehand, net,
+                    searchWorlds, Seeds.mix(seed, board.index(), 0x5EA7C4L));
+            if (searched == null) searched = new Searched(asFixed, Double.NaN);
+        }
+        List<Choice> required = searched == null ? List.of(choice, asFixed) : List.of(choice, asFixed, searched.choice());
+        List<Option> options = options(twelve, fixed.bidValue(), net, required);
         List<Scored> scored = new ArrayList<>(options.size());
         for (Option option : options) scored.add(playOut(net, board, fixed, option, k, seed));
         stats.boards++;
         stats.options += options.size();
-        return new Result(board.index(), fixed.declarer(), fixed.bidValue(), fixed.contract(), choice, scored);
+        return new Result(board.index(), fixed.declarer(), fixed.bidValue(), fixed.contract(), choice, searched,
+                List.copyOf(ten), List.copyOf(skat), position(board.round(), fixed.declarer()), fixed.auction(),
+                board.round(), scored);
     }
 
     static final class Stats {
@@ -273,7 +341,23 @@ public final class DeclarerChoiceMain {
                 .append("\", \"bid\": ").append(r.bid()).append(", \"auction_contract\": \"")
                 .append(r.auctionContract().name()).append("\", \"shipped\": {\"contract\": \"")
                 .append(r.shipped().contract().name()).append("\", \"discard\": ").append(cards(r.shipped().discard()))
-                .append("}, \"options\": [");
+                .append("}");
+        if (r.searched() != null) {
+            b.append(", \"searched\": {\"contract\": \"").append(r.searched().choice().contract().name())
+                    .append("\", \"discard\": ").append(cards(r.searched().choice().discard())).append(", \"chance\": ")
+                    .append(Double.isNaN(r.searched().chance()) ? "null"
+                            : String.format(Locale.ROOT, "%.4f", r.searched().chance()))
+                    .append('}');
+        }
+        b.append(", \"ten\": ").append(indices(r.ten())).append(", \"skat\": ").append(indices(r.skat()))
+                .append(", \"position\": \"").append(r.position()).append("\", \"auction\": [");
+        for (int i = 0; i < r.auction().size(); i++) {
+            SkatAi.BidEvent e = r.auction().get(i);
+            if (i > 0) b.append(", ");
+            b.append("[\"").append(position(r.round(), e.seat)).append("\", ").append(e.value).append(", ")
+                    .append(e.passed).append(']');
+        }
+        b.append("], \"options\": [");
         for (int i = 0; i < r.scored().size(); i++) {
             Scored s = r.scored().get(i);
             if (i > 0) b.append(", ");
@@ -287,6 +371,14 @@ public final class DeclarerChoiceMain {
 
     private static String cards(List<Card> cards) {
         return "[" + BeliefEncoding.index(cards.get(0)) + ", " + BeliefEncoding.index(cards.get(1)) + "]";
+    }
+
+    private static String indices(List<Card> cards) {
+        List<Card> sorted = new ArrayList<>(cards);
+        sorted.sort(Comparator.comparingInt(BeliefEncoding::index));
+        StringBuilder b = new StringBuilder("[");
+        for (int i = 0; i < sorted.size(); i++) b.append(i == 0 ? "" : ", ").append(BeliefEncoding.index(sorted.get(i)));
+        return b.append(']').toString();
     }
 
     private static String ints(int[] values) {
@@ -312,6 +404,8 @@ public final class DeclarerChoiceMain {
         int threads = Integer.parseInt(options.getOrDefault("threads",
                 String.valueOf(Runtime.getRuntime().availableProcessors())));
         String shippedId = options.getOrDefault("shipped", "belief-64-shipped");
+        int searchWorlds = Integer.parseInt(options.getOrDefault("search-worlds", String.valueOf(SEARCH_WORLDS)));
+        if (searchWorlds < 0) throw new IllegalArgumentException("--search-worlds is 0 (off) or more");
         if (k < 2 || k % 2 != 0) throw new IllegalArgumentException("k is even and at least 2 (it is split in halves)");
         if (seed < 1000) throw new IllegalArgumentException("seed " + seed + " is below 1000: those boards are the arena's");
 
@@ -321,37 +415,43 @@ public final class DeclarerChoiceMain {
         Contestant shipped = registry.resolve(shippedId);
         ContractSource contracts = new AuctionContractSource(greedy, seed);
         System.out.printf(Locale.ROOT, "declarer choice: student %s, shipped %s, k %d, seed %d, boards %,d-%,d, "
-                + "%d threads -> %s%n", model, shippedId, k, seed, first, first + boards - 1, threads, out);
+                + "searched re-chooser %s, %d threads -> %s%n", model, shippedId, k, seed, first, first + boards - 1,
+                searchWorlds > 0 ? searchWorlds + " worlds" : "off", threads, out);
 
         long started = System.nanoTime();
-        List<Result> results = new ArrayList<>();
         Stats total = new Stats();
+        if (out.getParent() != null) Files.createDirectories(out.getParent());
+        Path partial = out.resolveSibling(out.getFileName() + ".partial");
         ExecutorService pool = Executors.newFixedThreadPool(threads);
-        try {
+        // Written as the boards finish, in board order, so a long run that dies
+        // leaves what it did in the .partial; renamed only when complete.
+        try (BufferedWriter w = Files.newBufferedWriter(partial)) {
             List<Future<Object[]>> futures = new ArrayList<>();
             for (long i = first; i < first + boards; i++) {
                 Board board = Board.of(seed, i);
                 futures.add(pool.submit(() -> {
                     Stats stats = new Stats();
-                    Result r = board(net, shipped, contracts, board, k, seed, stats);
+                    Result r = board(net, shipped, contracts, board, k, seed, searchWorlds, stats);
                     return new Object[] {r, stats};
                 }));
             }
-            for (Future<Object[]> f : futures) {
-                Object[] done = f.get();
-                if (done[0] != null) results.add((Result) done[0]);
-                total.add((Stats) done[1]);
+            long done = 0;
+            for (int i = 0; i < futures.size(); i++) {
+                Object[] result = futures.get(i).get();
+                futures.set(i, null);
+                if (result[0] != null) {
+                    w.write(json((Result) result[0]));
+                    w.write('\n');
+                }
+                total.add((Stats) result[1]);
+                if (++done % 500 == 0) {
+                    w.flush();
+                    System.out.printf(Locale.ROOT, "  %,d of %,d boards, %.0f s%n", done, boards,
+                            (System.nanoTime() - started) / 1e9);
+                }
             }
         } finally {
             pool.shutdownNow();
-        }
-        if (out.getParent() != null) Files.createDirectories(out.getParent());
-        Path partial = out.resolveSibling(out.getFileName() + ".partial");
-        try (BufferedWriter w = Files.newBufferedWriter(partial)) {
-            for (Result r : results) {
-                w.write(json(r));
-                w.write('\n');
-            }
         }
         Files.move(partial, out, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         double seconds = (System.nanoTime() - started) / 1e9;
