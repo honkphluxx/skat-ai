@@ -2339,9 +2339,9 @@ cards, one heuristic pair each, the references among them, no Null, none
 twice; a play-out plays the option's contract with the declarer holding the
 twelve less its discard; a discard not in the hand is refused; the defenders
 are drawn; a board is the same bytes run twice, an option the same alone.
-Seven mutants fail. The report's self-test (known gains by way, the
+Six mutants fail. The report's self-test (known gains by way, the
 references found, U's weights, pure noise cross-fitted to zero while the
-in-sample maximum is inflated): nine mutants fail. A container smoke (pa40,
+in-sample maximum is inflated): six mutants fail. A container smoke (pa40,
 search-4 as shipped, 12 boards): 47 options a board, about 45 play-outs a
 second a thread.
 
