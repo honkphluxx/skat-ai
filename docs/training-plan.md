@@ -2280,6 +2280,47 @@ learns from the outcomes what the narrower does, and keeps the head start
 imitation gave it (+0.15 [-0.53, +0.83] in games). On one pass over the union,
 w512 gains as much (+0.62) as round 1 did on r1 alone (+0.64).
 
+*After route 1: the auction and the discard, read again (2026-11-07,
+diagnosis only).* Every route-1 game was played at fixed contracts from
+greedy's auction, so none of it measured bidding, the contract or (beyond the
+heuristic both sides share) the discard; in student-64 all three are still the
+search player's. What the code does (SearchAiProvider):
+
+- *Bidding*: the ten dealt cards are priced once at the deal -- the two
+  likeliest trump games and Null, each a make chance over `biddingWorlds()`
+  = clamp(worlds / 3, 2, 6) = 6 sampled worlds for every shipped level,
+  belief-64 included -- and re-priced on what the table says (adaptive).
+  The ceiling is the intended contract's guaranteed value on the ten; the
+  bid is declared-worth against the priced Ramsch. Phase A (2026-09-09)
+  closed how often to declare (more costs points, monotonically) and Null
+  (arithmetic); what it left open is which contract and how high, with
+  overbid 0.00% in every report.
+- *The contract*: chosen before the skat and never asked again. The discard
+  buries for `intended` (the ten-card choice), and `announceContract` takes
+  `intended` whenever it covers the bid; the twelve cards are never priced.
+  Unmeasured. A skat with a jack, or one that fills a suit, does not change
+  the game announced.
+- *The discard*: the `Discards.buried` heuristic for that contract. The
+  searched discard (Phase D, 2026-09-21) was +0.19 / +0.14 [-0.3, +0.6] at
+  16 / 32 worlds, closed at the heuristic; the omniscient ceiling was 6.3
+  points of makeability on declared boards, and the par split put the discard
+  at 1.14 [0.3, 1.9] of the 4.99.
+- *Hand games*: the engine's variant excludes them (GameEngine always picks
+  up), so they are outside this game.
+
+The instrument proposed: route 1's labels at the declarer's choice. After
+the auction (greedy's, as the arena's contracts), every contract that covers
+the bid (the four suits and Grand; Null left out, the student does not play
+it) times the ten discards from that contract's five least-wanted cards,
+each played out k = 8 times on the true deal by the student, common random
+numbers across the options; the shipped player's own choice beside them
+(its ten-card price, its discard, its announcement). Read: how often the
+labels' best contract differs from the announced one, and what the shipped
+choice gives up, split into the contract and the discard within it --
+measured by choosing on half the play-outs and scoring on the other half, so
+the noise does not inflate it. About 50 options x 8 play-outs a declared
+game, a few seconds a game a thread.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
