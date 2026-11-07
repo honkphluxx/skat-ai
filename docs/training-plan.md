@@ -2321,6 +2321,30 @@ measured by choosing on half the play-outs and scoring on the other half, so
 the noise does not inflate it. About 50 options x 8 play-outs a declared
 game, a few seconds a game a thread.
 
+*The declarer-choice labels, built (2026-11-07; DeclarerChoiceMain,
+`:arena:declarerChoice`, `arena/python/declarer_choice.py`,
+`tools/declarer-choice.sh`).* As proposed, with two references: *shipped*
+(belief-64-shipped in the declarer's seat, the engine's own calls in order --
+priced at the deal, the auction heard, the skat up, its discard and
+announcement; the price is the deal's, since a replayed auction asks it for
+no bids to re-price on) and *fixed* (the auction's contract with the
+heuristic's discard, what route 1 played). The student plays each option out
+as the all-cards labels do: the declarer by its top card, the defenders
+drawn, the auction heard, the declarer knowing its discard; draw d's streams
+depend on the board and d only. Three ways, cross-fitted on halves of the k
+play-outs: contract and discard, the discard alone, the contract alone (each
+with the heuristic's pair). Tests (DeclarerChoiceTest): the options are the
+contracts covering the bid with the ten pairs of their five least-wanted
+cards, one heuristic pair each, the references among them, no Null, none
+twice; a play-out plays the option's contract with the declarer holding the
+twelve less its discard; a discard not in the hand is refused; the defenders
+are drawn; a board is the same bytes run twice, an option the same alone.
+Seven mutants fail. The report's self-test (known gains by way, the
+references found, U's weights, pure noise cross-fitted to zero while the
+in-sample maximum is inflated): nine mutants fail. A container smoke (pa40,
+search-4 as shipped, 12 boards): 47 options a board, about 45 play-outs a
+second a thread.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

@@ -176,6 +176,21 @@ tasks.register<JavaExec>("allCardsExport") {
     forwardProperties()
 }
 
+/**
+ * After route 1: the declarer's choice after greedy's auction, every contract
+ * covering the bid times ten discards, played out on the true deal by the student.
+ *
+ * ./gradlew :arena:declarerChoice --args="--model=policy-oc3-ev --out=arena-logs/declarer-choice/x.jsonl --boards=2000"
+ */
+tasks.register<JavaExec>("declarerChoice") {
+    group = "application"
+    description = "Labels the declarer's contract and discard after the auction on the true deal"
+    mainClass.set("dev.skatklar.training.data.DeclarerChoiceMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:play --args="--level=club" */
 tasks.register<JavaExec>("play") {
     group = "application"
