@@ -73,7 +73,10 @@ LOG=arena-logs/declarer-choice
 mkdir -p "$LOG"
 NAME="$(basename "$MODEL")-$SHIPPED-s$SEED-b$BOARDS-k$K"
 $QUICK && NAME="$NAME-quick"
-LINES="$LOG/$NAME.jsonl"
+# Not LINES: bash keeps LINES (and COLUMNS) as the terminal's size and resets
+# them after every external command (checkwinsize), so a label file named by
+# LINES was written to "49" in the repository root.
+LABELS="$LOG/$NAME.jsonl"
 REPORT="$LOG/$NAME.txt"
 SUMMARY=arena-logs/summary-declarer-choice.txt
 $QUICK && SUMMARY=arena-logs/summary-declarer-choice-quick.txt
@@ -81,15 +84,15 @@ say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
 say "declarer choice started $(date '+%Y-%m-%d %H:%M:%S')   student=$MODEL shipped=$SHIPPED boards=$BOARDS k=$K seed=$SEED threads=$THREADS"
 
-if [ -f "$LINES" ]; then
-    say "  [skip] labels -- $LINES exists"
+if [ -f "$LABELS" ]; then
+    say "  [skip] labels -- $LABELS exists"
 else
     [ -f STOP ] && { say "STOP file found -- stopping."; exit 0; }
     say "  [$(date '+%H:%M:%S')] labels"
     start=$(date +%s)
     run_log="$LOG/$NAME-run.txt"
     ./gradlew --console=plain -q --no-daemon :arena:declarerChoice \
-        --args="--model=$MODEL --shipped=$SHIPPED --out=$ROOT/$LINES --boards=$BOARDS --k=$K --seed=$SEED --threads=$THREADS" \
+        --args="--model=$MODEL --shipped=$SHIPPED --out=$ROOT/$LABELS --boards=$BOARDS --k=$K --seed=$SEED --threads=$THREADS" \
         > "$run_log.partial" 2>&1 || { mv "$run_log.partial" "$LOG/$NAME-run.failed.txt"; say "      FAILED -- see $LOG/$NAME-run.failed.txt"; exit 1; }
     mv "$run_log.partial" "$run_log"
     grep -E "declared boards labelled" "$run_log" | sed 's/^/    /' | tee -a "$SUMMARY"
@@ -100,7 +103,7 @@ if [ -f "$REPORT" ]; then
     say "  [skip] report -- $REPORT exists"
 else
     # From the repository root, where a relative --python resolves.
-    if "$PYTHON" arena/python/declarer_choice.py "$LINES" --boards="$BOARDS" > "$REPORT.partial" 2>&1; then
+    if "$PYTHON" arena/python/declarer_choice.py "$LABELS" --boards="$BOARDS" > "$REPORT.partial" 2>&1; then
         mv "$REPORT.partial" "$REPORT"
     else
         mv "$REPORT.partial" "$LOG/$NAME-report.failed.txt"
