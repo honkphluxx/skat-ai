@@ -2463,6 +2463,17 @@ against XSkat, go-skat and JSkat, and a cheap choice that keeps the gain (the
 8-world re-chooser, Grand priced on the twelve, or a learned declarer trained
 on these labels and choices).
 
+*Against others (2026-11-08, `tools/rechoose.sh --vs`, `--defence`).* Two
+more pairings, measurement only. `--vs=<engine>` plays the re-chooser and the
+shipped player each against XSkat (or go-skat, JSkat) on the same boards and
+pools rechoose - engine, shipped - engine and their per-board difference.
+`--defence=skatzero` seats both sides as `roles:<ours>/skatzero`: ours bids,
+takes the skat, names and declares the game, SkatZero defends, so every
+declarer meets the strongest defence we have. SkatZero cannot bid, so this is
+the only way it can sit at an auction; it is a yardstick here, never a
+teacher. It also tests the labels' weak point -- the student's defence -- by
+replacing it with SkatZero's.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
