@@ -869,8 +869,12 @@ public final class SearchAiProvider implements SkatAiProvider {
      *        declared boards, gives up none of the ceiling
      * @param budgetNanos a ceiling on the whole decision, or zero for none
      */
-    public record DiscardSettings(int worlds, int candidateCards, long budgetNanos) {
-        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L);
+    public record DiscardSettings(int worlds, int candidateCards, long budgetNanos, int postSkatWorlds) {
+        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L, 0);
+
+        public DiscardSettings(int worlds, int candidateCards, long budgetNanos) {
+            this(worlds, candidateCards, budgetNanos, 0);
+        }
     }
 
     private final DiscardSettings discard;
@@ -886,7 +890,30 @@ public final class SearchAiProvider implements SkatAiProvider {
      * declared game in eight that could be won is lost before a card is played.
      */
     public SearchAiProvider withDiscardSearch(int worlds, int candidateCards, long budgetNanos) {
-        return withDiscard(new DiscardSettings(worlds, candidateCards, budgetNanos));
+        return withDiscard(new DiscardSettings(worlds, candidateCards, budgetNanos, discard.postSkatWorlds()));
+    }
+
+    /**
+     * The same player, choosing its game again once it has the skat.
+     *
+     * <p>Off by default, and off is what ships. Without it the game announced
+     * is the one priced on the ten dealt cards, whatever the skat brings; with
+     * it, after a real auction (never at a contract the table settled), every
+     * trump game that covers the winning bid on the twelve is searched with its
+     * discard over {@code worlds} worlds of the unseen cards and the one worth
+     * most is buried for and announced ({@link ContractSearch}). A measurement
+     * instrument: about 160 full-game solves a game at 16 worlds, seconds on the
+     * workstation, far beyond a phone. A Null intention is left alone.
+     */
+    public SearchAiProvider withPostSkatContract(int worlds) {
+        if (worlds < 0) throw new IllegalArgumentException("worlds is 0 (off) or more, not " + worlds);
+        return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
+                worlds));
+    }
+
+    /** Worlds the game is chosen again over after the skat; 0 when off. See {@link #withPostSkatContract}. */
+    public int postSkatWorlds() {
+        return discard.postSkatWorlds();
     }
 
     private SearchAiProvider withDiscard(DiscardSettings settings) {
@@ -1129,6 +1156,10 @@ public final class SearchAiProvider implements SkatAiProvider {
         /** The highest value the intended contract is certain to cover. */
         private int maxBid;
         private Contract intended;
+        /** The winning bid, told at the pick-up; 0 before it. */
+        private int winningBid;
+        /** The game chosen again after the skat, to be announced; null when not. */
+        private Contract rechosen;
         /** Make chance of {@link #intended}, measured on the dealt ten. */
         private double intendedChance;
         /** What a Ramsch on this hand is worth, in points. Negative, usually. */
@@ -1172,6 +1203,8 @@ public final class SearchAiProvider implements SkatAiProvider {
             rolledAlready.clear();
             maxBid = 0;
             intended = null;
+            winningBid = 0;
+            rechosen = null;
             intendedChance = 0;
             unevaluated = false;
             opponentsOut = 0;
@@ -1379,7 +1412,10 @@ public final class SearchAiProvider implements SkatAiProvider {
             blind.contraObserved(event);
         }
 
-        @Override public boolean pickUpSkat(SkatAi.SkatChoiceContext context) { return true; }
+        @Override public boolean pickUpSkat(SkatAi.SkatChoiceContext context) {
+            winningBid = context.winningBid;
+            return true;
+        }
 
         @Override public Set<Card> discardSkat(SkatAi.SkatExchangeContext context) {
             // Its own discard rather than the delegate's, because the right two
@@ -1397,6 +1433,30 @@ public final class SearchAiProvider implements SkatAiProvider {
                     : intended != null ? intended
                     : HandEvaluator.plausible(twelve, 1).get(0);
             Set<Card> discarded = new LinkedHashSet<>(Discards.buried(forContract, twelve));
+            rechosen = null;
+            // Asked for, and only after a real auction: the game chosen again on
+            // the twelve, its discard with it (ContractSearch). A Null intention
+            // and a contract the table settled are left alone.
+            if (discard.postSkatWorlds() > 0 && context.settledContract == null && winningBid > 0
+                    && (intended == null || !intended.isNull())) {
+                List<Contract> games = new ArrayList<>();
+                for (Contract c : Contract.DECLARED_GAMES) {
+                    if (c.isNull()) continue;
+                    if (dealtRules != null && !dealtRules.allowedTypes.contains(SkatAi.ContractType.valueOf(c.name()))) {
+                        continue;
+                    }
+                    games.add(c);
+                }
+                long[] seeds = new long[Contract.values().length];
+                for (int i = 0; i < seeds.length; i++) seeds[i] = random.nextLong();
+                ContractSearch.Pick pick = ContractSearch.choose(twelve, winningBid, context.mySeat,
+                        context.round.forehand, games, discard.postSkatWorlds(), ordinal -> new Random(seeds[ordinal]));
+                if (pick != null) {
+                    rechosen = pick.contract();
+                    buried = List.copyOf(pick.buried());
+                    return new LinkedHashSet<>(pick.buried());
+                }
+            }
             // And, when asked for, the same question the card play asks: play it
             // out in sampled worlds and keep what wins in the most. The
             // heuristic above is the fallback rather than the answer, which is
@@ -1424,6 +1484,13 @@ public final class SearchAiProvider implements SkatAiProvider {
             // Announcing below the bid is an automatic loss whatever the cards, so
             // the filter comes before the preference.
             List<Card> hand = new ArrayList<>(context.hand);
+            if (rechosen != null && context.rules.allowedTypes.contains(SkatAi.ContractType.valueOf(rechosen.name()))) {
+                List<Card> twelve = new ArrayList<>(hand);
+                if (buried != null) twelve.addAll(buried);
+                if (SkatRules.guaranteedValue(rechosen, twelve) >= context.winningBid) {
+                    return SkatAi.ContractAnnouncement.skatGame(SkatAi.ContractType.valueOf(rechosen.name()));
+                }
+            }
             List<Contract> order = new ArrayList<>();
             if (intended != null) order.add(intended);
             order.addAll(HandEvaluator.plausible(hand, Contract.DECLARED_GAMES.length));

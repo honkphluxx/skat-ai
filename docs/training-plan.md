@@ -2415,6 +2415,27 @@ with drawn defenders, not the shipped search, and the bid is greedy's; a
 Grand that only the student's defence lets through would show here and not at
 a table. The table is the next measurement.
 
+*The re-chooser at a table, built (2026-11-08; ContractSearch,
+`SearchAiProvider.withPostSkatContract`, `tools/rechoose.sh`).* The choice
+moved into the engine as ContractSearch, shared by the labels
+(DeclarerChoiceMain.searchedChoice now calls it, the same worlds from the same
+streams) and by the player: with `withPostSkatContract(worlds)`, after a real
+auction (never at a settled contract, never on a Null intention) the search
+player re-chooses its game and discard on the twelve and announces it, when
+it covers the winning bid on the twelve; off by default, and off ships. The
+bid comes from `pickUpSkat`, which until now ignored its context. Registered
+as `belief-64-shipped-rechoose-16` and `-8`. `tools/rechoose.sh` plays it
+against belief-64-shipped in the auction with passed-in boards void, seeds
+11-13 at 400 boards, and pools the per-board differences of every seed. Tests
+(PostSkatContractTest): one jack and six clubs intend Clubs at the deal; the
+skat's two jacks make Grand worth 96 against Clubs' 48, and the re-chooser
+announces Grand where the player without it announces Clubs; a settled
+contract and an exchange without a bid are left alone; the setting survives
+every builder, the discard search included; ContractSearch on that twelve
+keeps Grand, the only game above 48, none above 96. Six mutants fail. The
+engine suite passes but for ten belief tests whose binary resources the
+container copy lacks; the declarer-choice tests pass with the shared choice.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

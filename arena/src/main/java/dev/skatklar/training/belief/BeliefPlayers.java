@@ -258,6 +258,17 @@ public final class BeliefPlayers {
         // card play's solver work.
         registry.register(renamed(ladderVariant("belief-64-shipped", 64, loader),
                 "The shipped player with 64 worlds a card"));
+        // 2026-11-08, docs/training-plan.md: the same, choosing its game again
+        // once it has the skat (SearchAiProvider.withPostSkatContract,
+        // ContractSearch) -- the declarer-choice labels put it at +5.3 a
+        // declared game, four fifths of it suits turned into Grand. An
+        // instrument for the auction-mode arena, host only: the search is
+        // about 160 full-game solves a game at 16 worlds.
+        for (int worlds : new int[] {8, 16}) {
+            registry.register(renamed(postSkatVariant("belief-64-shipped-rechoose-" + worlds, 64, worlds, loader),
+                    "The shipped player with 64 worlds, its game chosen again after the skat over " + worlds
+                            + " worlds"));
+        }
         // 2026-09-27, plan 2.10 T1: 64 worlds is the teacher (+1.67 over 32,
         // six seeds). Whether 128 is better still, paired against 64. Host only.
         registry.register(renamed(ladderVariant("belief-128-shipped", 128, loader),
@@ -442,6 +453,20 @@ public final class BeliefPlayers {
                 SkatAiProvider player = shipped.newProvider(seed);
                 return player instanceof SearchAiProvider search
                         ? search.withOpening(student.get(), tricks) : player;
+            }
+            @Override public String toString() { return id; }
+        };
+    }
+
+    /** {@link #ladderVariant(String, int, Loader)}, choosing its game again after the skat over {@code rechoose} worlds. */
+    private static Contestant postSkatVariant(String id, int worlds, int rechoose, Loader loader) {
+        Contestant shipped = ladderVariant(id, worlds, loader);
+        return new Contestant() {
+            @Override public String id() { return id; }
+            @Override public String displayName() { return shipped.displayName(); }
+            @Override public SkatAiProvider newProvider(long seed) {
+                SkatAiProvider player = shipped.newProvider(seed);
+                return player instanceof SearchAiProvider search ? search.withPostSkatContract(rechoose) : player;
             }
             @Override public String toString() { return id; }
         };

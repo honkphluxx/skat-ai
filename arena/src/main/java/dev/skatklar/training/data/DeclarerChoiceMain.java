@@ -8,8 +8,7 @@ import dev.skatklar.demo.ai.SkatAiProvider;
 import dev.skatklar.demo.ai.SkatAiSession;
 import dev.skatklar.demo.belief.BeliefEncoding;
 import dev.skatklar.demo.belief.PolicyNet;
-import dev.skatklar.demo.SkatDeck;
-import dev.skatklar.demo.search.DiscardSearch;
+import dev.skatklar.demo.search.ContractSearch;
 import dev.skatklar.demo.search.Discards;
 import dev.skatklar.training.arena.AuctionContractSource;
 import dev.skatklar.training.arena.Board;
@@ -210,7 +209,7 @@ public final class DeclarerChoiceMain {
 
     /**
      * An honest re-chooser after the skat, from the declarer's own twelve
-     * alone: for every contract that covers the bid, {@link DiscardSearch}
+     * alone ({@link ContractSearch}): for every contract that covers the bid, DiscardSearch
      * over {@code worlds} worlds dealt from the twenty unseen cards (the
      * opponents' hands are never read) picks the pair to bury and says in how
      * many worlds the contract then makes against double-dummy defence; the
@@ -220,24 +219,13 @@ public final class DeclarerChoiceMain {
      */
     static Searched searchedChoice(List<Card> twelve, int bid, SkatAi.Seat declarer, SkatAi.Seat forehand,
                                    PolicyNet net, int worlds, long seed) {
-        List<Card> unseen = new ArrayList<>(SkatDeck.ordered());
-        unseen.removeAll(twelve);
-        Searched best = null;
-        double bestWorth = Double.NEGATIVE_INFINITY;
-        for (Contract c : TRUMP_GAMES) {
-            int value = SkatRules.guaranteedValue(c, twelve);
-            if (!net.covers(c) || value < bid) continue;
-            DiscardSearch.Choice found = DiscardSearch.choose(c, declarer, twelve, unseen, forehand, worlds, POOL, 0L,
-                    new Random(Seeds.mix(seed, c.ordinal(), 0x5EA4C4L)), Discards.buried(c, twelve));
-            if (found.worlds() == 0 || found.buried().size() != 2) continue;
-            double p = (double) found.wins() / found.worlds();
-            double worth = value * p - 2.0 * value * (1 - p);
-            if (worth > bestWorth) {
-                bestWorth = worth;
-                best = new Searched(new Choice(c, pair(found.buried())), p);
-            }
-        }
-        return best;
+        // The same choice the player's withPostSkatContract makes (ContractSearch),
+        // over the games the student plays, each contract's worlds from its own stream.
+        List<Contract> games = new ArrayList<>();
+        for (Contract c : TRUMP_GAMES) if (net.covers(c)) games.add(c);
+        ContractSearch.Pick pick = ContractSearch.choose(twelve, bid, declarer, forehand, games, worlds,
+                ordinal -> new Random(Seeds.mix(seed, ordinal, 0x5EA4C4L)));
+        return pick == null ? null : new Searched(new Choice(pick.contract(), pair(pick.buried())), pick.chance());
     }
 
     /** The declarer's place at the table: forehand, middlehand or rearhand. */
