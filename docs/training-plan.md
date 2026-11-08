@@ -2436,6 +2436,33 @@ keeps Grand, the only game above 48, none above 96. Six mutants fail. The
 engine suite passes but for ten belief tests whose binary resources the
 container copy lacks; the declarer-choice tests pass with the shared choice.
 
+*The re-chooser at a table: the answer (2026-11-08; `tools/rechoose.sh`,
+seeds 11-13, 400 boards each, auction, passed-in void, 5.9 hours).*
+belief-64-shipped-rechoose-16 against belief-64-shipped:
+
+| seed | rechoose - shipped | wins as declarer | Grand declared (won) |
+| --- | --- | --- | --- |
+| 11 | +2.81 [+1.58, +4.03] | 84.1% / 81.4% | 98 (96%) / 34 (88%) |
+| 12 | +3.26 [+2.06, +4.46] | 84.6% / 77.8% | 104 (96%) / 41 (93%) |
+| 13 | +3.10 [+1.81, +4.39] | 83.8% / 78.6% | 123 (96%) / 51 (98%) |
+
+**Pooled over the 1,200 boards: +3.06 [+2.34, +3.77] game points a game**,
+resolved on every seed -- the largest single change this plan has measured
+(the ladder was +1.30, route 1's whole card-play training +1.51). Both declare
+on the same boards (27.8-29.9%: the auction is unchanged), the re-chooser
+wins more of them (+2.7 to +6.8 points) and three times as many are Grand,
+made 96% of the time. The labels predicted about +1.6 a game (+5.3 on the
+roughly 30% of games declared); the table gives about twice that, so the
+student's play-outs undersold it rather than flattered it. The cheapest-game
+preference below two thirds shows: the re-chooser's Diamonds are won 62-70%
+against the shipped player's 70-78%, a part a better rule might keep.
+What it is not yet: measured against anyone but our own shipped player, and
+affordable -- about 160 full-game solves a game at 16 worlds, seconds on the
+workstation, far beyond a phone. Both are the next questions: the same pairing
+against XSkat, go-skat and JSkat, and a cheap choice that keeps the gain (the
+8-world re-chooser, Grand priced on the twelve, or a learned declarer trained
+on these labels and choices).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
