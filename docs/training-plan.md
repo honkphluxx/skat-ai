@@ -2496,6 +2496,28 @@ against the shipped player's 72-90%, where the formula takes the cheapest game
 because no game looks likely to make. What is left is cost: a learned
 declarer, trained on the labels, to make the same choice in milliseconds.
 
+*A learned declarer, built (2026-11-09; `arena/python/train_declarer.py`).*
+An MLP (3 x 256) scores one option from what the declarer can see -- the ten
+kept and the two buried, laid out relative to the option's game (the jacks,
+the trump suit, the side suits in a fixed order), the game, whether the pair
+is the heuristic's, its place, the bid and the auction's highest bids by
+place -- trained to predict the option's U centred within its board; the
+declarer takes the option scored highest. The test is honest: boards of
+another seed, the net's choice and the references scored on the same labels.
+Route 1's softmax objective was tried and fails here as in round 4: it learns
+"Grand loses" from the many boards where it does and then gives Grand no
+weight to learn from the few where it wins. Self-test: the layout, the
+features (no label reaches them), a made-up corpus where Grand pays exactly
+with three kept jacks (learned minus shipped +3.2 against the truth's +3.5,
+never a losing Grand), the choice and the heuristic-only choice; four mutants
+fail (the heuristic flag is not needed by the made-up corpus, so its mutant
+lives). A smoke on the seed-9101 file alone (1,300 boards to train, 447
+others to test, 12 seconds on the container's CPU): each game with its
+heuristic pair, **learned minus shipped +6.54 [+3.58, +9.49] a declared game,
+learned minus searched +0.85 [-2.48, +4.18]**; choosing the discard too it
+does worse (+1.91 over shipped, -3.78 under searched) -- ten discards a game
+are too many to learn from 1,300 boards.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
