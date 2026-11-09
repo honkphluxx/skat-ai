@@ -5,6 +5,7 @@ import dev.skatklar.demo.belief.BeliefModel;
 import dev.skatklar.demo.belief.PolicyNet;
 import dev.skatklar.demo.search.BeliefWorldSource;
 import dev.skatklar.demo.search.HandEvaluator.AuctionEvidence.PassRule;
+import dev.skatklar.demo.search.LearnedDeclarer;
 import dev.skatklar.demo.search.Personality;
 import dev.skatklar.demo.search.RuleTiebreak.NullOrder;
 import dev.skatklar.demo.search.SearchAiProvider;
@@ -268,6 +269,26 @@ public final class BeliefPlayers {
             registry.register(renamed(postSkatVariant("belief-64-shipped-rechoose-" + worlds, 64, worlds, loader),
                     "The shipped player with 64 worlds, its game chosen again after the skat over " + worlds
                             + " worlds"));
+        }
+        // 2026-11-09: the same choice made by a learned net instead of the
+        // search (LearnedDeclarer, arena/python/train_declarer.py), found as
+        // the student is: -D{@value #DECLARER_PROPERTY}, or declarer-net-v1/.
+        // Its parity file is checked on load; a net that scores otherwise in
+        // Java than in Python is refused rather than measured.
+        Path declarerDir = locateDeclarer();
+        if (declarerDir != null) {
+            LearnedDeclarer declarer = loadDeclarer(declarerDir);
+            Contestant shipped64 = ladderVariant("belief-64-shipped-declarer-net", 64, loader);
+            registry.register(renamed(new Contestant() {
+                @Override public String id() { return "belief-64-shipped-declarer-net"; }
+                @Override public String displayName() { return shipped64.displayName(); }
+                @Override public SkatAiProvider newProvider(long seed) {
+                    SkatAiProvider player = shipped64.newProvider(seed);
+                    return player instanceof SearchAiProvider search ? search.withLearnedDeclarer(declarer) : player;
+                }
+                @Override public String toString() { return id(); }
+            }, "The shipped player with 64 worlds, its game chosen after the skat by the learned declarer in "
+                    + declarerDir));
         }
         // 2026-09-27, plan 2.10 T1: 64 worlds is the teacher (+1.67 over 32,
         // six seeds). Whether 128 is better still, paired against 64. Host only.
@@ -701,6 +722,9 @@ public final class BeliefPlayers {
         return null;
     }
 
+    /** Names the learned declarer's directory (forwarded to the arena as every skat.* property). */
+    static final String DECLARER_PROPERTY = "skat.declarer.dir";
+
     private static Path locateCandidate() {
         String override = System.getProperty(CANDIDATE_PROPERTY);
         if (override != null && !override.isBlank()) {
@@ -712,6 +736,37 @@ public final class BeliefPlayers {
             if (holdsAModel(candidate)) return candidate;
         }
         return null;
+    }
+
+    /** Where the learned declarer lives: -D{@value #DECLARER_PROPERTY}, or declarer-net-v1/ found as the belief is. */
+    private static Path locateDeclarer() {
+        String override = System.getProperty(DECLARER_PROPERTY);
+        if (override != null && !override.isBlank()) {
+            Path named = Path.of(override);
+            return Files.isRegularFile(named.resolve("declarer.bin")) ? named : null;
+        }
+        for (Path candidate : List.of(Path.of("declarer-net-v1"), Path.of("..", "declarer-net-v1"),
+                Path.of("..", "..", "declarer-net-v1"))) {
+            if (Files.isRegularFile(candidate.resolve("declarer.bin"))) return candidate;
+        }
+        return null;
+    }
+
+    /** The net, its parity file checked when there is one: a mismatch is an error, not a warning. */
+    private static LearnedDeclarer loadDeclarer(Path directory) {
+        try (InputStream in = Files.newInputStream(directory.resolve("declarer.bin"))) {
+            LearnedDeclarer net = LearnedDeclarer.load(in);
+            Path parity = directory.resolve("declarer-parity.txt");
+            if (Files.isRegularFile(parity)) {
+                try (java.io.BufferedReader r = Files.newBufferedReader(parity)) {
+                    net.checkParity(r, 1e-4f);
+                }
+            }
+            return net;
+        } catch (IOException e) {
+            throw new UncheckedIOException("the learned declarer in " + directory + " does not load or match its "
+                    + "parity file", e);
+        }
     }
 
     /** Where the student lives: {@value #POLICY_PROPERTY}, or policy-model/ found as the belief is. */

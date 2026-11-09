@@ -869,11 +869,12 @@ public final class SearchAiProvider implements SkatAiProvider {
      *        declared boards, gives up none of the ceiling
      * @param budgetNanos a ceiling on the whole decision, or zero for none
      */
-    public record DiscardSettings(int worlds, int candidateCards, long budgetNanos, int postSkatWorlds) {
-        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L, 0);
+    public record DiscardSettings(int worlds, int candidateCards, long budgetNanos, int postSkatWorlds,
+                                  LearnedDeclarer declarer) {
+        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L, 0, null);
 
         public DiscardSettings(int worlds, int candidateCards, long budgetNanos) {
-            this(worlds, candidateCards, budgetNanos, 0);
+            this(worlds, candidateCards, budgetNanos, 0, null);
         }
     }
 
@@ -890,7 +891,8 @@ public final class SearchAiProvider implements SkatAiProvider {
      * declared game in eight that could be won is lost before a card is played.
      */
     public SearchAiProvider withDiscardSearch(int worlds, int candidateCards, long budgetNanos) {
-        return withDiscard(new DiscardSettings(worlds, candidateCards, budgetNanos, discard.postSkatWorlds()));
+        return withDiscard(new DiscardSettings(worlds, candidateCards, budgetNanos, discard.postSkatWorlds(),
+                discard.declarer()));
     }
 
     /**
@@ -908,7 +910,25 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withPostSkatContract(int worlds) {
         if (worlds < 0) throw new IllegalArgumentException("worlds is 0 (off) or more, not " + worlds);
         return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
-                worlds));
+                worlds, discard.declarer()));
+    }
+
+    /**
+     * The same player, choosing its game and discard after the skat by a
+     * learned net ({@link LearnedDeclarer}) instead of keeping the ten-card
+     * intention -- under the same conditions as {@link #withPostSkatContract}
+     * (after a real auction, never at a settled contract, never on a Null
+     * intention), and before it, should both be set. Microseconds a choice.
+     * Off by default (null), and off is what ships.
+     */
+    public SearchAiProvider withLearnedDeclarer(LearnedDeclarer net) {
+        return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
+                discard.postSkatWorlds(), net));
+    }
+
+    /** The learned declarer this player chooses its game by after the skat; null when none. */
+    public LearnedDeclarer learnedDeclarer() {
+        return discard.declarer();
     }
 
     /** Worlds the game is chosen again over after the skat; 0 when off. See {@link #withPostSkatContract}. */
@@ -1437,9 +1457,10 @@ public final class SearchAiProvider implements SkatAiProvider {
             // Asked for, and only after a real auction: the game chosen again on
             // the twelve, its discard with it (ContractSearch). A Null intention
             // and a contract the table settled are left alone.
-            if (discard.postSkatWorlds() > 0 && context.settledContract == null && winningBid > 0
-                    && (intended == null || !intended.isNull())) {
-                List<Contract> games = new ArrayList<>();
+            boolean rechoosing = (discard.postSkatWorlds() > 0 || discard.declarer() != null)
+                    && context.settledContract == null && winningBid > 0 && (intended == null || !intended.isNull());
+            List<Contract> games = new ArrayList<>();
+            if (rechoosing) {
                 for (Contract c : Contract.DECLARED_GAMES) {
                     if (c.isNull()) continue;
                     if (dealtRules != null && !dealtRules.allowedTypes.contains(SkatAi.ContractType.valueOf(c.name()))) {
@@ -1447,6 +1468,17 @@ public final class SearchAiProvider implements SkatAiProvider {
                     }
                     games.add(c);
                 }
+            }
+            if (rechoosing && discard.declarer() != null) {
+                LearnedDeclarer.Pick pick = discard.declarer().choose(twelve, winningBid, context.mySeat,
+                        context.round, games, new EnumMap<>(highestBids), passedAt.keySet());
+                if (pick != null) {
+                    rechosen = pick.contract();
+                    buried = List.copyOf(pick.buried());
+                    return new LinkedHashSet<>(pick.buried());
+                }
+            }
+            if (rechoosing && discard.postSkatWorlds() > 0) {
                 long[] seeds = new long[Contract.values().length];
                 for (int i = 0; i < seeds.length; i++) seeds[i] = random.nextLong();
                 ContractSearch.Pick pick = ContractSearch.choose(twelve, winningBid, context.mySeat,

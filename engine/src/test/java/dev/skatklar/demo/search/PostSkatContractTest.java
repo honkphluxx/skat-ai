@@ -37,6 +37,10 @@ public class PostSkatContractTest {
             SkatAi.ContractType.CLUBS, SkatAi.ContractType.GRAND), false, false, false);
     private static final SkatAi.RoundPosition ROUND = SkatAi.RoundPosition.at(0);
 
+    static SkatAi.ContractRules rules() {
+        return RULES;
+    }
+
     private static Card card(Card.Suit suit, Card.Rank rank) {
         return new Card(suit, rank);
     }

@@ -2518,6 +2518,43 @@ learned minus searched +0.85 [-2.48, +4.18]**; choosing the discard too it
 does worse (+1.91 over shipped, -3.78 under searched) -- ten discards a game
 are too many to learn from 1,300 boards.
 
+*The learned declarer: the first real training (2026-11-09; declarer-net-v1,
+17,414 boards of seed 9102 to train, the 1,747 of seed 9101 to test, a few
+minutes on the GPU, kept at epoch 25 of 30).* Learned minus shipped **+12.28
+[+10.62, +13.94] a declared game**, learned minus searched **+7.02 [+5.57,
++8.48]**; each game with its heuristic pair +9.63 and +4.37. The discard now
+pays (+2.65 a declared game over the heuristic's), and the net names Grand on
+562 of the 1,747 boards (searched about 440, shipped 250). Read with care:
+train and test labels both come from the student's play-outs, so the net may
+have learned what that student's play rewards -- contracts its drawn defence
+lets through -- which the search, scoring against double-dummy defence, does
+not chase. New boards rule out overfitting to boards, not to the play-outs;
+the table decides.
+
+*To the table (2026-11-09; LearnedDeclarer, `export_declarer.py`,
+`SearchAiProvider.withLearnedDeclarer`).* The net in Java (engine): the
+options are ContractSearch's without the search -- every trump game covering
+the bid, times the ten pairs of its five least-wanted cards -- each scored
+from the same features as in Python, the best buried and announced; about
+0.1 ms an option on the container's JVM, a few milliseconds a declared game.
+`export_declarer.py --model declarer-net-v1` writes declarer.bin and a parity
+file: for thirty test boards every option's inputs and Python's score, which
+Java rebuilds and must match (checked on load in the arena; a mismatch
+refuses the net). Registered as `belief-64-shipped-declarer-net`
+(declarer-net-v1/, or -Dskat.declarer.dir); `tools/rechoose.sh` takes
+`--player` and `--against`. One subtlety found by the parity check: the
+heuristic's ranking breaks ties by the order of the twelve, which the label
+files do not keep, so the parity file carries the flag rather than
+recomputing it; the engine hands the declarer its dealt ten and then the
+skat, as when the labels were made. Tests (LearnedDeclarerTest, PostSkatContractTest):
+a tiny random net's export scores all 570 options of twelve real boards as
+Python did, a changed score or flag is refused, a malformed file too; the
+layout; the choice among covering games and their pairs, none above every
+value; the places and the heard passes reach the net (an AND of two features
+through a ReLU), through the search player too; it announces what it picks,
+leaves a settled contract and an untold bid alone, survives the builders. The
+real net's parity holds on 930 options. Nine mutants fail.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
