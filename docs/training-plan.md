@@ -2474,6 +2474,28 @@ the only way it can sit at an auction; it is a yardstick here, never a
 teacher. It also tests the labels' weak point -- the student's defence -- by
 replacing it with SkatZero's.
 
+*Against others: the answer (2026-11-08/09; seeds 11-13, 400 boards each,
+auction, passed-in void).*
+
+| pairing (pooled over 1,200 boards) | game points a game |
+| --- | --- |
+| rechoose - XSkat | **+3.31 [+2.20, +4.42]**, resolved on every seed (+3.93, +3.82, +2.17) |
+| shipped - XSkat | +0.84 [-0.32, +2.00], none resolved (+1.47, +0.81, +0.25) |
+| the re-choice against XSkat, board by board | **+2.47 [+1.87, +3.06]** |
+| rechoose - shipped, SkatZero defending both | **+2.56 [+1.84, +3.27]**, resolved on every seed (+2.37, +3.33, +1.97) |
+
+The first time a player of ours is resolved ahead of XSkat in the full game
+(the shipped player has been level with it since September: -0.05, +0.72,
++0.84 now). Against XSkat we declare 23-25% of boards to its 35% and win
+89-94% of them; the re-chooser's Grands are won 94-99%. With SkatZero
+defending, the gain is 0.5 smaller than against our own defence (+3.06) and
+just as resolved, and the re-chooser's Grands are still made 93-97% -- so the
+labels' doubt, the student's defence letting Grands through, is answered. The
+weak spot recurs in all three runs: the re-chooser's Diamonds are won 57-81%
+against the shipped player's 72-90%, where the formula takes the cheapest game
+because no game looks likely to make. What is left is cost: a learned
+declarer, trained on the labels, to make the same choice in milliseconds.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
