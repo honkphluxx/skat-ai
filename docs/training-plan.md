@@ -2555,6 +2555,26 @@ through a ReLU), through the search player too; it announces what it picks,
 leaves a settled contract and an untold bid alone, survives the builders. The
 real net's parity holds on 930 options. Nine mutants fail.
 
+*The learned declarer at the table: the answer (2026-11-09/10; seeds 11-13,
+400 boards each, auction, passed-in void).*
+
+| pairing (pooled over 1,200 boards) | game points a game |
+| --- | --- |
+| declarer-net - shipped | **+3.14 [+2.23, +4.04]**, resolved on every seed (+2.75, +3.68, +2.98) |
+| declarer-net - rechoose-16 | **+0.08 [-0.70, +0.86]**, none resolved (-0.06, +0.42, -0.11) |
+| declarer-net - XSkat | **+3.86 [+2.66, +5.05]**, resolved on every seed (+3.96, +5.43, +2.18) |
+| the choice against XSkat, board by board | +3.01 [+2.31, +3.72] (the search's: +2.47) |
+
+The net is level with the 16-world search it was never shown -- trained only
+on outcome labels -- at about a thousandth of its cost (milliseconds against
+seconds a declared game). The labels' +7 over the search did not reach the
+table, as feared: what the student's play-outs reward beyond the search is
+not worth points against real defence; what both find is. The net declares
+more Grands than the search (154-173 a seed against 98-123) and wins fewer
+of them (86-91% against 94-96%), for the same points. A phone-sized player
+with the whole gain: the shipped player plus declarer-net-v1 is +3.1 over the
+shipped player and +3.9 over XSkat.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
