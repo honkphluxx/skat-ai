@@ -2575,6 +2575,30 @@ of them (86-91% against 94-96%), for the same points. A phone-sized player
 with the whole gain: the shipped player plus declarer-net-v1 is +3.1 over the
 shipped player and +3.9 over XSkat.
 
+*The bidding: the instrument (2026-11-10).* With the declaring settled (the
+shipped player plus declarer-net-v1), the auction is the next place points
+can leak. `BidLabelMain` (`:arena:bidLabels`, `tools/bid-labels.sh`) labels,
+for every board and every seat, what winning the auction is worth at every
+bid: the seat picks up the board's skat, the learned declarer chooses a game
+covering the bid and its discard (on the twelve, given that seat's bid and
+the other two passing), and each distinct choice is played out k times on the
+true deal by the student -- the declarer-choice labels' method, one level up.
+Beside that, what the shipped bidder does with the same ten: its ceiling (the
+LADDER scanned with hold requests until it refuses) and whether it opens 18
+when nobody has bid, each after the passes its place would have heard.
+`arena/python/bid_report.py` then plays the engine's auction out of those
+numbers (middlehand to forehand, the winner hears rearhand, a tie to the one
+who hears, forehand may open 18, else passed in at 0 as in void mode), every
+board from all three seats by both sides, and pairs a policy against the
+shipped bidder: an oracle (the highest bid whose label is positive -- a bound,
+it sees the deal), the shipped ceilings one, two and four rungs higher, and
+"no-ramsch" (opening 18 whenever the ceiling allows: the shipped bidder still
+weighs a Ramsch that the void mode never plays). It cannot see the shipped
+bidder's re-pricing on what the table says, and the labels are the student's
+play-outs: the table decides. Shipped against itself gives exactly 0; four
+Java tests (levels cover, distinct picks, the ceiling holds and the next rung
+is refused, determinism) and the report's self-test, mutation-checked.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

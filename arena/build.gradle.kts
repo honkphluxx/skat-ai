@@ -191,6 +191,18 @@ tasks.register<JavaExec>("declarerChoice") {
     forwardProperties()
 }
 
+/**
+ * ./gradlew :arena:bidLabels --args="--model=policy-oc3-ev --declarer=declarer-net-v1 --out=arena-logs/bid-labels/x.jsonl --boards=2000"
+ */
+tasks.register<JavaExec>("bidLabels") {
+    group = "application"
+    description = "Labels what winning the auction is worth at every bid, seat by seat, with the learned declarer"
+    mainClass.set("dev.skatklar.training.data.BidLabelMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:play --args="--level=club" */
 tasks.register<JavaExec>("play") {
     group = "application"
