@@ -24,8 +24,12 @@ boards. The policies:
   oracle         the highest bid whose value is positive, by these labels -- a
                  ceiling, it sees the deal
   shipped+r      the shipped ceiling r rungs higher (r = 1, 2, 4), its openings as they are
-  no-ramsch      the shipped ceilings, opening 18 whenever the ceiling allows:
-                 the shipped bidder still fears a Ramsch that void mode never plays
+  by-ceiling     says 18 into an empty auction only where it would hold 18: the
+                 shipped bidder says 18 there on seats whose ceiling is 0 (it
+                 weighs a Ramsch that a bid takes away) -- this takes those out
+  hold-18        the other way: where it would say 18, it also holds 18
+  always-open    says 18 into an empty auction on every seat, ceilings as shipped
+  always-18      says and holds 18 on every seat, above that the shipped ceilings
 
 What this cannot see: the shipped bidder re-prices on what the table says
 (adaptive bidding), here it keeps its deal-time ceiling; and the labels are
@@ -167,12 +171,24 @@ def raised(r):
     return policy
 
 
-def no_ramsch(seat):
+def by_ceiling(seat):
     return seat.ceiling, seat.ceiling >= 18
 
 
+def hold_18(seat):
+    return (max(seat.ceiling, 18) if seat.open18 else seat.ceiling), seat.open18
+
+
+def always_open(seat):
+    return seat.ceiling, True
+
+
+def always_18(seat):
+    return max(seat.ceiling, 18), True
+
+
 POLICIES = [("oracle", oracle), ("shipped+1", raised(1)), ("shipped+2", raised(2)), ("shipped+4", raised(4)),
-            ("no-ramsch", no_ramsch)]
+            ("by-ceiling", by_ceiling), ("hold-18", hold_18), ("always-open", always_open), ("always-18", always_18)]
 
 
 def report(lines):
@@ -190,6 +206,14 @@ def report(lines):
     above = [s for s in seats if s.ceiling > 0]
     lost = [max((v for b, v in s.values.items() if b > s.ceiling), default=np.nan) for s in above]
     print(f"  above its ceiling a positive value is left on {np.nanmean(np.array(lost) > 0):.1%} of the seats it bids")
+    unheld = (ceilings == 0) & opens
+    if unheld.any():
+        print(f"  says 18 into an empty auction but would not hold it: {np.mean(unheld):.1%} of seats, "
+              f"positive at 18 on {np.nanmean(v18[unheld] > 0):.1%}, mean {np.nanmean(v18[unheld]):+.1f}")
+    silent = (ceilings == 0) & ~opens
+    if silent.any():
+        print(f"  passes outright: {np.mean(silent):.1%} of seats, "
+              f"positive at 18 on {np.nanmean(v18[silent] > 0):.1%}, mean {np.nanmean(v18[silent]):+.1f}")
     base, rate = paired(lines, shipped, shipped)
     print(f"\n  shipped against itself: {base.mean():+.3f} (must be 0); boards declared {rate:.1%}")
     print("  policy minus shipped, game points a seat-game, every board from all three seats by both sides:")
@@ -238,6 +262,13 @@ def self_test():
     s = Seat(seats[2])
     check("value above every game covered is an overbid", s.value(24) == -48.0 and s.value(20) == 50.0)
     check("raising keeps a pass a pass", raised(2)(Seat(seats[0])) == (0, False) and raised(2)(Seat(seats[1]))[0] == 22)
+    fh = Seat(fake_seat("forehand", 0, True, {18: 5.0}))
+    check("by-ceiling drops an opening it would not hold", by_ceiling(fh) == (0, False))
+    check("hold-18 holds where it opens, and only there",
+          hold_18(fh) == (18, True) and hold_18(Seat(seats[0])) == (0, False))
+    check("always-open opens, always-18 also holds",
+          always_open(Seat(seats[0])) == (0, True) and always_18(Seat(seats[0])) == (18, True)
+          and always_18(Seat(seats[1])) == (18, True))
     print("self-test " + ("passed" if ok else "FAILED"))
     return ok
 

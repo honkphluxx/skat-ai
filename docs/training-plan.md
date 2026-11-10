@@ -2592,8 +2592,11 @@ who hears, forehand may open 18, else passed in at 0 as in void mode), every
 board from all three seats by both sides, and pairs a policy against the
 shipped bidder: an oracle (the highest bid whose label is positive -- a bound,
 it sees the deal), the shipped ceilings one, two and four rungs higher, and
-"no-ramsch" (opening 18 whenever the ceiling allows: the shipped bidder still
-weighs a Ramsch that the void mode never plays). It cannot see the shipped
+the openings: the shipped bidder says 18 into an empty auction on seats whose
+ceiling is 0 (it weighs a Ramsch that a bid takes away), so by-ceiling takes
+those openings out, hold-18 holds where it opens, always-open opens on every
+seat and always-18 also holds 18 everywhere. In the 48-board quick run taking
+the openings out cost -4.4 [-7.3, -1.4]: they are worth points. It cannot see the shipped
 bidder's re-pricing on what the table says, and the labels are the student's
 play-outs: the table decides. Shipped against itself gives exactly 0; four
 Java tests (levels cover, distinct picks, the ceiling holds and the next rung
