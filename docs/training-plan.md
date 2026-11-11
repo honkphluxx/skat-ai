@@ -2602,6 +2602,30 @@ play-outs: the table decides. Shipped against itself gives exactly 0; four
 Java tests (levels cover, distinct picks, the ceiling holds and the next rung
 is refused, determinism) and the report's self-test, mutation-checked.
 
+*The bidding: the first answer (2026-11-10/11; seed 9201, 2,000 boards, k 8).*
+
+| policy minus shipped (game points a seat-game) | |
+| --- | --- |
+| oracle (sees the deal: a bound) | +9.86 [+9.37, +10.35] |
+| shipped ceiling +1 / +2 / +4 rungs | +0.05 / +0.04 / -0.12, none resolved |
+| by-ceiling (drop the openings it would not hold) | **-3.13 [-3.54, -2.71]** |
+| hold-18 (hold 18 where it opens) | +0.33 [+0.18, +0.49] |
+| always-open / always-18 | -0.05 / -0.23, not resolved |
+
+The shipped bidder bids on 18% of seats; declaring at 18 is positive on 53%.
+Bidding higher is worth nothing (few boards have two bidders); bidding more
+often is where the points are, and no blanket rule finds them: the seats it
+passes outright (62%) are positive at 18 on 37% but -20.7 on average. The
+openings it would not hold (20% of seats, its Ramsch term) are good, +18.3
+on average and positive on 72% -- which is why dropping them costs 3. So the
+question is discrimination, seat by seat, from what a seat can know.
+`arena/python/train_bidder.py`: an MLP on the ten, the place and the shipped
+bidder's verdict predicting the value at every rung, the bid the highest rung
+predicted positive. Trained on the even boards of this file and tested on the
+odd (three init seeds): +1.38 [+0.85, +1.91]; the union with the shipped
+ceiling +1.91 [+1.39, +2.42], every seed resolved -- from 1,000 boards of
+training. The 20,000-board corpus on seed 9202 trains the real one.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

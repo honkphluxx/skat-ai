@@ -70,6 +70,7 @@ class Seat:
 
     def __init__(self, raw):
         self.place = raw["place"]
+        self.ten = tuple(raw.get("ten", ()))
         self.ceiling = raw["shipped"]["ceiling"]
         self.open18 = bool(raw["shipped"]["open18"])
         means = [float(np.mean(p["value"])) for p in raw["picks"]]
