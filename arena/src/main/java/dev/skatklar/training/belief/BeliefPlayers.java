@@ -5,6 +5,7 @@ import dev.skatklar.demo.belief.BeliefModel;
 import dev.skatklar.demo.belief.PolicyNet;
 import dev.skatklar.demo.search.BeliefWorldSource;
 import dev.skatklar.demo.search.HandEvaluator.AuctionEvidence.PassRule;
+import dev.skatklar.demo.search.LearnedBidder;
 import dev.skatklar.demo.search.LearnedDeclarer;
 import dev.skatklar.demo.search.Personality;
 import dev.skatklar.demo.search.RuleTiebreak.NullOrder;
@@ -289,6 +290,25 @@ public final class BeliefPlayers {
                 @Override public String toString() { return id(); }
             }, "The shipped player with 64 worlds, its game chosen after the skat by the learned declarer in "
                     + declarerDir));
+            // 2026-11-11: and bidding by the learned bidder beside its own price
+            // (LearnedBidder, arena/python/train_bidder.py): the higher of the
+            // two ceilings. -D{@value #BIDDER_PROPERTY}, or bidder-net-v1/;
+            // parity checked on load as the declarer's is.
+            Path bidderDir = locateNet(BIDDER_PROPERTY, "bidder-net-v1", "bidder.bin");
+            if (bidderDir != null) {
+                LearnedBidder bidder = loadBidder(bidderDir);
+                registry.register(renamed(new Contestant() {
+                    @Override public String id() { return "belief-64-shipped-declarer-bidder-net"; }
+                    @Override public String displayName() { return shipped64.displayName(); }
+                    @Override public SkatAiProvider newProvider(long seed) {
+                        SkatAiProvider player = shipped64.newProvider(seed);
+                        return player instanceof SearchAiProvider search
+                                ? search.withLearnedDeclarer(declarer).withLearnedBidder(bidder) : player;
+                    }
+                    @Override public String toString() { return id(); }
+                }, "The shipped player with 64 worlds, the learned declarer in " + declarerDir
+                        + " and the learned bidder in " + bidderDir));
+            }
         }
         // 2026-09-27, plan 2.10 T1: 64 worlds is the teacher (+1.67 over 32,
         // six seeds). Whether 128 is better still, paired against 64. Host only.
@@ -724,6 +744,39 @@ public final class BeliefPlayers {
 
     /** Names the learned declarer's directory (forwarded to the arena as every skat.* property). */
     static final String DECLARER_PROPERTY = "skat.declarer.dir";
+
+    /** Names the learned bidder's directory. */
+    static final String BIDDER_PROPERTY = "skat.bidder.dir";
+
+    /** A net's directory: -D{@code property}, or {@code name}/ found as the belief is; null when none holds {@code file}. */
+    private static Path locateNet(String property, String name, String file) {
+        String override = System.getProperty(property);
+        if (override != null && !override.isBlank()) {
+            Path named = Path.of(override);
+            return Files.isRegularFile(named.resolve(file)) ? named : null;
+        }
+        for (Path candidate : List.of(Path.of(name), Path.of("..", name), Path.of("..", "..", name))) {
+            if (Files.isRegularFile(candidate.resolve(file))) return candidate;
+        }
+        return null;
+    }
+
+    /** The bidder, its parity file checked when there is one: a mismatch is an error, not a warning. */
+    private static LearnedBidder loadBidder(Path directory) {
+        try (InputStream in = Files.newInputStream(directory.resolve("bidder.bin"))) {
+            LearnedBidder net = LearnedBidder.load(in);
+            Path parity = directory.resolve("bidder-parity.txt");
+            if (Files.isRegularFile(parity)) {
+                try (java.io.BufferedReader r = Files.newBufferedReader(parity)) {
+                    net.checkParity(r, 1e-4f);
+                }
+            }
+            return net;
+        } catch (IOException e) {
+            throw new UncheckedIOException("the learned bidder in " + directory + " does not load or match its "
+                    + "parity file", e);
+        }
+    }
 
     private static Path locateCandidate() {
         String override = System.getProperty(CANDIDATE_PROPERTY);

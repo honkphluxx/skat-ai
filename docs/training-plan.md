@@ -2626,6 +2626,37 @@ odd (three init seeds): +1.38 [+0.85, +1.91]; the union with the shipped
 ceiling +1.91 [+1.39, +2.42], every seed resolved -- from 1,000 boards of
 training. The 20,000-board corpus on seed 9202 trains the real one.
 
+*The learned bidder: the corpus, and to the table (2026-11-11).* Trained on
+seed 9202 (20,000 boards, 60,000 seats, three init seeds, 33 s), tested on
+the 2,000 boards of seed 9201:
+
+| policy minus shipped (game points a seat-game, labels) | | seeds |
+| --- | --- | --- |
+| learned t=0 | +2.90 [+2.49, +3.30] | +2.54, +3.22, +2.93 |
+| learned-first t=0 | +2.90 [+2.50, +3.30] | +2.56, +3.15, +2.99 |
+| union t=0 (the higher of it and the shipped ceiling) | **+3.06 [+2.66, +3.46]** | +2.82, +3.20, +3.16 |
+| union t=5 | +2.68 [+2.32, +3.05] | |
+| oracle (a bound) | +9.86 | |
+
+Twenty times the data doubled the gain (+1.4 from 1,000 boards); the union
+adds less now, the net having learned most of what the shipped price knew.
+On the 1,000-board split the three seeds' mean prediction (what the table
+plays) gave more than the seeds one by one (+2.15 against +1.91), so the
+exporter prints the ensemble's row too.
+
+To the table: `LearnedBidder` (engine; "SKBN" -- the ladder, every seed's
+net, their mean predicted; `checkParity` against the exporter's file),
+`arena/python/export_bidder.py`, `SearchAiProvider.withLearnedBidder` (union
+t=0: says or holds a bid when the shipped price would or when it is within
+the net's learned-first ceiling; the features priced once at the deal -- the
+shipped ceiling and its opening with the passes its place would have heard,
+less the re-price on them that BidLabelMain's opening saw; won past the
+shipped ceiling the learned declarer chooses after the skat even on a Null
+intention), and `belief-64-shipped-declarer-bidder-net` (-Dskat.bidder.dir or
+bidder-net-v1/). Six tests, six mutants killed. Asked of the table: against
+belief-64-shipped-declarer-net (the bidder alone differs), and both against
+XSkat.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

@@ -870,11 +870,11 @@ public final class SearchAiProvider implements SkatAiProvider {
      * @param budgetNanos a ceiling on the whole decision, or zero for none
      */
     public record DiscardSettings(int worlds, int candidateCards, long budgetNanos, int postSkatWorlds,
-                                  LearnedDeclarer declarer) {
-        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L, 0, null);
+                                  LearnedDeclarer declarer, LearnedBidder bidder) {
+        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L, 0, null, null);
 
         public DiscardSettings(int worlds, int candidateCards, long budgetNanos) {
-            this(worlds, candidateCards, budgetNanos, 0, null);
+            this(worlds, candidateCards, budgetNanos, 0, null, null);
         }
     }
 
@@ -892,7 +892,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withDiscardSearch(int worlds, int candidateCards, long budgetNanos) {
         return withDiscard(new DiscardSettings(worlds, candidateCards, budgetNanos, discard.postSkatWorlds(),
-                discard.declarer()));
+                discard.declarer(), discard.bidder()));
     }
 
     /**
@@ -910,7 +910,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withPostSkatContract(int worlds) {
         if (worlds < 0) throw new IllegalArgumentException("worlds is 0 (off) or more, not " + worlds);
         return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
-                worlds, discard.declarer()));
+                worlds, discard.declarer(), discard.bidder()));
     }
 
     /**
@@ -923,7 +923,30 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withLearnedDeclarer(LearnedDeclarer net) {
         return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
-                discard.postSkatWorlds(), net));
+                discard.postSkatWorlds(), net, discard.bidder()));
+    }
+
+    /**
+     * The same player, bidding also where a learned net ({@link LearnedBidder},
+     * arena/python/train_bidder.py) expects declaring to pay: it says or holds
+     * a bid when the shipped bidder would, or when the bid is within the net's
+     * ceiling -- the higher of the two. The net reads the ten, the place and the
+     * shipped verdict priced at the deal (the ceiling it would hold against a
+     * bid, whether it would say 18 into an empty auction at its place), once
+     * a deal. Won above the shipped ceiling, the game is chosen after the skat
+     * as {@link #withLearnedDeclarer} chooses it, even on a Null intention a
+     * bid has outgrown -- the labels the net learned from declared that way, so
+     * it belongs with a learned declarer. Off by default (null), and off is what
+     * ships.
+     */
+    public SearchAiProvider withLearnedBidder(LearnedBidder net) {
+        return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
+                discard.postSkatWorlds(), discard.declarer(), net));
+    }
+
+    /** The learned bidder this player bids by beside its own price; null when none. */
+    public LearnedBidder learnedBidder() {
+        return discard.bidder();
     }
 
     /** The learned declarer this player chooses its game by after the skat; null when none. */
@@ -1178,6 +1201,8 @@ public final class SearchAiProvider implements SkatAiProvider {
         private Contract intended;
         /** The winning bid, told at the pick-up; 0 before it. */
         private int winningBid;
+        /** The learned bidder's ceiling for this deal, 0 without one; see {@link #withLearnedBidder}. */
+        private int learnedCeiling;
         /** The game chosen again after the skat, to be announced; null when not. */
         private Contract rechosen;
         /** Make chance of {@link #intended}, measured on the dealt ten. */
@@ -1224,6 +1249,7 @@ public final class SearchAiProvider implements SkatAiProvider {
             maxBid = 0;
             intended = null;
             winningBid = 0;
+            learnedCeiling = 0;
             rechosen = null;
             intendedChance = 0;
             unevaluated = false;
@@ -1266,6 +1292,20 @@ public final class SearchAiProvider implements SkatAiProvider {
             // game, which are both the borderline bid and the likely loser.
             ramschValue = RamschEvaluator.expectedValue(context.mySeat,
                     context.initialHand, context.round.forehand, biddingWorlds(), random);
+
+            // The learned bidder's ceiling, from the verdict just priced: the
+            // ceiling the shipped bidder holds against a bid (no Ramsch behind a
+            // bid), and whether it says 18 into an empty auction with the
+            // opponents its place has heard pass by then -- as BidLabelMain
+            // asked it, less the re-price on those passes.
+            if (discard.bidder() != null) {
+                int place = LearnedDeclarer.place(context.round, context.mySeat);
+                boolean worth = intended != null && declaringIsWorth(maxBid, intendedChance) > 0;
+                int heardOut = place == 1 ? 0 : place == 2 ? 1 : 2;
+                boolean opens = intended != null && declaringIsWorth(maxBid, intendedChance)
+                        > ramschRisk(0, heardOut) * ramschValue;
+                learnedCeiling = discard.bidder().ceiling(hand, place, worth ? maxBid : 0, opens);
+            }
         }
 
         private SkatAi.Seat dealtForehand;
@@ -1383,6 +1423,12 @@ public final class SearchAiProvider implements SkatAiProvider {
             // and no expectation makes that worth saying.
             if (unevaluated) return blind.bid(request);
             reprice();
+            int shipped = shippedBid(request);
+            if (shipped > 0) return shipped;
+            return request.requestedBid <= learnedCeiling ? request.requestedBid : 0;
+        }
+
+        private int shippedBid(SkatAi.BidRequest request) {
             if (intended == null || request.requestedBid > maxBid) return 0;
             double declaring = declaringIsWorth(maxBid, intendedChance);
             double passing = ramschRisk(request.currentBid, opponentsOut) * ramschValue;
@@ -1456,9 +1502,12 @@ public final class SearchAiProvider implements SkatAiProvider {
             rechosen = null;
             // Asked for, and only after a real auction: the game chosen again on
             // the twelve, its discard with it (ContractSearch). A Null intention
-            // and a contract the table settled are left alone.
+            // and a contract the table settled are left alone -- unless the
+            // learned bidder took the bid past what the intention covers.
+            boolean outbid = discard.bidder() != null && winningBid > maxBid;
             boolean rechoosing = (discard.postSkatWorlds() > 0 || discard.declarer() != null)
-                    && context.settledContract == null && winningBid > 0 && (intended == null || !intended.isNull());
+                    && context.settledContract == null && winningBid > 0
+                    && (intended == null || !intended.isNull() || outbid);
             List<Contract> games = new ArrayList<>();
             if (rechoosing) {
                 for (Contract c : Contract.DECLARED_GAMES) {
