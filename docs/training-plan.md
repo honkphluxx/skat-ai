@@ -2657,6 +2657,28 @@ bidder-net-v1/). Six tests, six mutants killed. Asked of the table: against
 belief-64-shipped-declarer-net (the bidder alone differs), and both against
 XSkat.
 
+*The learned bidder at the table (2026-11-11/12; seeds 11-13, 400 boards
+each, auction, passed-in void).*
+
+| pairing (pooled over 1,200 boards) | game points a game |
+| --- | --- |
+| declarer-bidder-net - declarer-net (the bidder alone differs) | **+1.48 [+0.50, +2.47]**, no seed resolved alone (+1.34, +1.62, +1.49) |
+| declarer-bidder-net - XSkat | **+7.05 [+5.82, +8.27]**, resolved on every seed (+7.10, +8.52, +5.53) |
+| declarer-net - XSkat | +3.86 [+2.66, +5.05] |
+| the bidder against XSkat, board by board | **+3.19 [+2.12, +4.27]** |
+
+Head to head the bidder keeps about half of the labels' +3.06 (the labels'
+shipped side is this very player: the shipped bidder, the learned declarer);
+against XSkat all of it. The net declares on 45-48% of seats against 23-25%
+(16% head to head, where it is outbid), wins 73-86% of them against 87-94%,
+overbids never; XSkat, outbid, declares on 18% of seats instead of 35% and
+wins more of those it keeps. The labels' defenders are the student, and the
+student defends worse than our search does -- head to head the bolder
+bidder meets that search and loses more of its new games (73-75% won) than
+against XSkat (82-86%). In arena points (only the declarer scores): a bolder
+bidder is worth more there than under a list that pays the defenders for a
+lost game.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
