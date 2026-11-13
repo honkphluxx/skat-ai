@@ -25,15 +25,26 @@ public final class MatchResult {
     private final Tally a;
     private final Tally b;
     private final double[] perBoardDiff;
+    /** The same boards in Seeger-Fabian tournament points; null when the match did not keep them. */
+    private final double[] perBoardTournamentDiff;
     private final int gamesPerSideAndBoard;
     private final String contractSource;
     private final int skippedBoards;
 
     MatchResult(Tally a, Tally b, double[] perBoardDiff, int gamesPerSideAndBoard,
                 String contractSource, int skippedBoards) {
+        this(a, b, perBoardDiff, null, gamesPerSideAndBoard, contractSource, skippedBoards);
+    }
+
+    MatchResult(Tally a, Tally b, double[] perBoardDiff, double[] perBoardTournamentDiff, int gamesPerSideAndBoard,
+                String contractSource, int skippedBoards) {
+        if (perBoardTournamentDiff != null && perBoardTournamentDiff.length != perBoardDiff.length) {
+            throw new IllegalArgumentException("one tournament difference a board");
+        }
         this.a = a;
         this.b = b;
         this.perBoardDiff = perBoardDiff.clone();
+        this.perBoardTournamentDiff = perBoardTournamentDiff == null ? null : perBoardTournamentDiff.clone();
         this.gamesPerSideAndBoard = gamesPerSideAndBoard;
         this.contractSource = contractSource;
         this.skippedBoards = skippedBoards;
@@ -210,12 +221,19 @@ public final class MatchResult {
 
     /** One row per board, for offline analysis of where the difference comes from. */
     public String toCsv() {
-        StringBuilder out = new StringBuilder("board,diff_game_points\n");
+        // The tournament column third, so that every reader of the second
+        // (tools/rechoose.sh pools $2) reads what it always read.
+        StringBuilder out = new StringBuilder(perBoardTournamentDiff == null
+                ? "board,diff_game_points\n" : "board,diff_game_points,diff_tournament_points\n");
         for (int i = 0; i < perBoardDiff.length; i++) {
             out.append(i).append(',')
                     .append(String.format(Locale.ROOT, "%.4f",
-                            perBoardDiff[i] / gamesPerSideAndBoard))
-                    .append('\n');
+                            perBoardDiff[i] / gamesPerSideAndBoard));
+            if (perBoardTournamentDiff != null) {
+                out.append(',').append(String.format(Locale.ROOT, "%.4f",
+                        perBoardTournamentDiff[i] / gamesPerSideAndBoard));
+            }
+            out.append('\n');
         }
         return out.toString();
     }

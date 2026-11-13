@@ -125,6 +125,26 @@ public class ArenaTest {
         assertFalse(result.significant());
     }
 
+    @Test
+    public void theCsvCarriesTheTournamentDifferenceThirdAndItAddsUp() {
+        MatchResult result = DuplicateMatch.run(GREEDY, RANDOM, 25, 777L);
+        String[] rows = result.toCsv().split("\n");
+        assertEquals("board,diff_game_points,diff_tournament_points", rows[0]);
+        assertEquals(26, rows.length);
+        double game = 0;
+        double tournament = 0;
+        for (int i = 1; i < rows.length; i++) {
+            String[] f = rows[i].split(",");
+            assertEquals(3, f.length);
+            game += Double.parseDouble(f[1]);
+            tournament += Double.parseDouble(f[2]);
+        }
+        // The rows are per game of a side (six a board, three a side); their mean is the tallies' difference.
+        assertEquals(result.a().gamePointsPerGame() - result.b().gamePointsPerGame(), game / 25, 1e-3);
+        assertEquals(result.a().tournamentPointsPerGame() - result.b().tournamentPointsPerGame(), tournament / 25, 1e-3);
+        assertTrue("greedy and random do not score alike in tournament points", tournament != 0);
+    }
+
     @Test public void matchesAreReproducibleFromTheSeed() {
         MatchResult first = DuplicateMatch.run(GREEDY, RANDOM, 25, 777L);
         MatchResult second = DuplicateMatch.run(GREEDY, RANDOM, 25, 777L);

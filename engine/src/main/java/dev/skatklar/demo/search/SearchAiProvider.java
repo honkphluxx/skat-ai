@@ -870,11 +870,16 @@ public final class SearchAiProvider implements SkatAiProvider {
      * @param budgetNanos a ceiling on the whole decision, or zero for none
      */
     public record DiscardSettings(int worlds, int candidateCards, long budgetNanos, int postSkatWorlds,
-                                  LearnedDeclarer declarer, LearnedBidder bidder) {
-        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L, 0, null, null);
+                                  LearnedDeclarer declarer, LearnedBidder bidder, List<Card> forced) {
+        public static final DiscardSettings NONE = new DiscardSettings(0, 5, 0L, 0, null, null, null);
 
         public DiscardSettings(int worlds, int candidateCards, long budgetNanos) {
-            this(worlds, candidateCards, budgetNanos, 0, null, null);
+            this(worlds, candidateCards, budgetNanos, 0, null, null, null);
+        }
+
+        public DiscardSettings {
+            if (forced != null && forced.size() != 2) throw new IllegalArgumentException("two cards are buried");
+            forced = forced == null ? null : List.copyOf(forced);
         }
     }
 
@@ -892,7 +897,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withDiscardSearch(int worlds, int candidateCards, long budgetNanos) {
         return withDiscard(new DiscardSettings(worlds, candidateCards, budgetNanos, discard.postSkatWorlds(),
-                discard.declarer(), discard.bidder()));
+                discard.declarer(), discard.bidder(), discard.forced()));
     }
 
     /**
@@ -910,7 +915,7 @@ public final class SearchAiProvider implements SkatAiProvider {
     public SearchAiProvider withPostSkatContract(int worlds) {
         if (worlds < 0) throw new IllegalArgumentException("worlds is 0 (off) or more, not " + worlds);
         return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
-                worlds, discard.declarer(), discard.bidder()));
+                worlds, discard.declarer(), discard.bidder(), discard.forced()));
     }
 
     /**
@@ -923,7 +928,7 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withLearnedDeclarer(LearnedDeclarer net) {
         return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
-                discard.postSkatWorlds(), net, discard.bidder()));
+                discard.postSkatWorlds(), net, discard.bidder(), discard.forced()));
     }
 
     /**
@@ -941,7 +946,18 @@ public final class SearchAiProvider implements SkatAiProvider {
      */
     public SearchAiProvider withLearnedBidder(LearnedBidder net) {
         return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
-                discard.postSkatWorlds(), discard.declarer(), net));
+                discard.postSkatWorlds(), discard.declarer(), net, discard.forced()));
+    }
+
+    /**
+     * Measurement only (BidCheckMain): the same player, burying exactly these
+     * two cards whenever it declares and holds them -- so a play-out at a fixed
+     * contract can be played by this player's card play on another chooser's
+     * discard, the declarer knowing what it buried. Never in a shipped player.
+     */
+    public SearchAiProvider withForcedDiscard(List<Card> twoCards) {
+        return withDiscard(new DiscardSettings(discard.worlds(), discard.candidateCards(), discard.budgetNanos(),
+                discard.postSkatWorlds(), discard.declarer(), discard.bidder(), twoCards));
     }
 
     /** The learned bidder this player bids by beside its own price; null when none. */
@@ -1489,6 +1505,11 @@ public final class SearchAiProvider implements SkatAiProvider {
             // in a short suit, a Null buries the two highest cards. Nothing else
             // in this player would get Null right if this did not.
             List<Card> twelve = new ArrayList<>(context.hand);
+            if (discard.forced() != null && twelve.containsAll(discard.forced())) {
+                rechosen = null;
+                buried = discard.forced();
+                return new LinkedHashSet<>(discard.forced());
+            }
             // In order of how much it is worth trusting: a contract somebody has
             // already settled on, then this seat's own intention from the
             // auction, then a guess from the twelve cards. The guess is a poor

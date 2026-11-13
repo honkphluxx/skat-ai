@@ -2679,6 +2679,29 @@ against XSkat (82-86%). In arena points (only the declarer scores): a bolder
 bidder is worth more there than under a list that pays the defenders for a
 lost game.
 
+*The scoring, and the labels checked at the table (2026-11-13).* Tournament
+points from the same reports (the paired point estimate: both sides play the
+same boards; no interval): head to head the bidder is +2.37, +1.48, +1.02 by
+seed, +1.62 a game against +1.48 in game points; against XSkat it adds +5.82
+(game points +3.19). Each extra game won earns the 50 bonus, which outweighs
+the 40 a defender collects on the ones lost even at 73% won. The scoring does
+not change the picture; no tournament-points bidder. The arena's CSV now keeps
+the tournament difference as a third column (reported, never decided on), and
+tools/rechoose.sh pools it beside the game points when every CSV has it.
+
+Head to head the bidder kept half of the labels' +3.06. Before relabelling
+(a straight swap to search defenders would cost days), how far the student's
+play-outs are from the table's, where it matters: `arena/python/bid_check.py
+select` takes the seats where the learned ceiling is above the shipped one,
+at the first bid where the two part, with the learned declarer's game and
+discard there, plus 300 control seats both bidders declare; `BidCheckMain`
+(`:arena:bidCheck`) plays each k times with belief-64-shipped in all three
+seats at that contract (`SearchAiProvider.withForcedDiscard`, measurement
+only), the auction the labels assumed; `bid_check.py report` pairs table
+against student seat by seat, by predicted value, and shows what a higher
+threshold would drop. `tools/bid-check.sh` runs the three. Declarer and
+defence differ together: it measures the labels' whole bias.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

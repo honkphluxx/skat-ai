@@ -103,6 +103,7 @@ public final class DuplicateMatch {
         Tally tallyA = new Tally(a.id());
         Tally tallyB = new Tally(b.id());
         List<Double> diffs = new ArrayList<>(boards);
+        List<Double> tournament = new ArrayList<>(boards);
         int skipped = 0;
         for (BoardResult result : results) {
             if (result == null) { skipped++; continue; }
@@ -114,10 +115,17 @@ public final class DuplicateMatch {
             // Seeger-Fabian pays a defender 40 every time a declarer goes down,
             // which rewards abstaining, and it has no number at all for a Ramsch.
             diffs.add((double) (result.a().gamePoints() - result.b().gamePoints()));
+            // Kept beside it, never decided on: so that a question about the
+            // scoring can be answered with an interval from the same boards.
+            tournament.add((double) (result.a().tournamentPoints() - result.b().tournamentPoints()));
         }
         double[] flat = new double[diffs.size()];
-        for (int i = 0; i < flat.length; i++) flat[i] = diffs.get(i);
-        return new MatchResult(tallyA, tallyB, flat, GAMES_PER_SIDE_AND_BOARD,
+        double[] flatTournament = new double[tournament.size()];
+        for (int i = 0; i < flat.length; i++) {
+            flat[i] = diffs.get(i);
+            flatTournament[i] = tournament.get(i);
+        }
+        return new MatchResult(tallyA, tallyB, flat, flatTournament, GAMES_PER_SIDE_AND_BOARD,
                 contracts == null
                         ? "auction at every table" + (passedIn == PassedIn.VOID
                                 ? ", passed-in boards voided" : "")

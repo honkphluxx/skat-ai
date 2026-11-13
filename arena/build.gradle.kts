@@ -203,6 +203,18 @@ tasks.register<JavaExec>("bidLabels") {
     forwardProperties()
 }
 
+/**
+ * ./gradlew :arena:bidCheck --args="--tasks=t.txt --out=o.txt --seed=9201"
+ */
+tasks.register<JavaExec>("bidCheck") {
+    group = "application"
+    description = "Plays bid-label tasks at a fixed contract and discard with a table player in all three seats"
+    mainClass.set("dev.skatklar.training.data.BidCheckMain")
+    classpath = sourceSets["main"].runtimeClasspath
+    workingDir = runRoot
+    forwardProperties()
+}
+
 /** ./gradlew :arena:play --args="--level=club" */
 tasks.register<JavaExec>("play") {
     group = "application"

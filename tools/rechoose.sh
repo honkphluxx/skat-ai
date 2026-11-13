@@ -134,6 +134,14 @@ pool() {  # label files...
               m = s / n; sd = sqrt((ss - n * m * m) / (n - 1)); h = 1.96 * sd / sqrt(n)
               printf "  pooled over %d boards: %s %+.3f game pts/game, 95%% [%+.3f, %+.3f]\n", n, label, m, m - h, m + h }' \
         "$@" | tee -a "$SUMMARY"
+    # Seeger-Fabian beside it, where every CSV kept the column (the arena
+    # writes it from 2026-11-13): reported, never decided on.
+    awk -F, -v label="$label" 'FNR == 1 { if ($3 != "diff_tournament_points") bad = 1; next }
+        $3 != "" { n++; s += $3; ss += $3 * $3 }
+        END { if (bad || n < 2) exit
+              m = s / n; sd = sqrt((ss - n * m * m) / (n - 1)); h = 1.96 * sd / sqrt(n)
+              printf "  pooled over %d boards: %s %+.3f tournament pts/game, 95%% [%+.3f, %+.3f]\n", n, label, m, m - h, m + h }' \
+        "$@" | tee -a "$SUMMARY"
 }
 
 FIRST=(); SECOND=(); PAIRS=()
@@ -147,9 +155,11 @@ for SEED in $SEEDS; do
         FIRST+=("$one"); SECOND+=("$two")
         # The same seed, the same boards: (A - engine) - (B - engine), board by board.
         paired="$LOG/$(name_of "$A")-minus-$(name_of "$B")-vs-$VS-s$SEED-b$BOARDS.csv"
-        awk -F, 'NR == FNR { if (FNR > 1) a[$1] = $2; next }
-                 FNR == 1 { print "board,diff_game_points"; next }
-                 ($1 in a) { printf "%s,%.4f\n", $1, a[$1] - $2 }' "$one" "$two" > "$paired"
+        awk -F, 'NR == FNR { if (FNR == 1) ta = ($3 == "diff_tournament_points"); else { a[$1] = $2; t[$1] = $3 }; next }
+                 FNR == 1 { tp = ta && ($3 == "diff_tournament_points")
+                            print tp ? "board,diff_game_points,diff_tournament_points" : "board,diff_game_points"; next }
+                 ($1 in a) { if (tp) printf "%s,%.4f,%.4f\n", $1, a[$1] - $2, t[$1] - $3
+                             else printf "%s,%.4f\n", $1, a[$1] - $2 }' "$one" "$two" > "$paired"
         PAIRS+=("$paired")
     fi
 done
