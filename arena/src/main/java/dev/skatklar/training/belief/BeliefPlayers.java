@@ -296,18 +296,27 @@ public final class BeliefPlayers {
             // parity checked on load as the declarer's is.
             Path bidderDir = locateNet(BIDDER_PROPERTY, "bidder-net-v1", "bidder.bin");
             if (bidderDir != null) {
-                LearnedBidder bidder = loadBidder(bidderDir);
-                registry.register(renamed(new Contestant() {
-                    @Override public String id() { return "belief-64-shipped-declarer-bidder-net"; }
-                    @Override public String displayName() { return shipped64.displayName(); }
-                    @Override public SkatAiProvider newProvider(long seed) {
-                        SkatAiProvider player = shipped64.newProvider(seed);
-                        return player instanceof SearchAiProvider search
-                                ? search.withLearnedDeclarer(declarer).withLearnedBidder(bidder) : player;
-                    }
-                    @Override public String toString() { return id(); }
-                }, "The shipped player with 64 worlds, the learned declarer in " + declarerDir
-                        + " and the learned bidder in " + bidderDir));
+                LearnedBidder loaded = loadBidder(bidderDir);
+                // -t10: bidding a rung only where the net expects more than 10
+                // game points (the bid check, 2026-11-13: the labels sit about
+                // 11-13 above the table, and the extra games predicted at 10 or
+                // less lose there).
+                for (float threshold : new float[] {0f, 10f}) {
+                    LearnedBidder bidder = loaded.withThreshold(threshold);
+                    String id = "belief-64-shipped-declarer-bidder-net" + (threshold == 0f ? "" : "-t" + (int) threshold);
+                    registry.register(renamed(new Contestant() {
+                        @Override public String id() { return id; }
+                        @Override public String displayName() { return shipped64.displayName(); }
+                        @Override public SkatAiProvider newProvider(long seed) {
+                            SkatAiProvider player = shipped64.newProvider(seed);
+                            return player instanceof SearchAiProvider search
+                                    ? search.withLearnedDeclarer(declarer).withLearnedBidder(bidder) : player;
+                        }
+                        @Override public String toString() { return id(); }
+                    }, "The shipped player with 64 worlds, the learned declarer in " + declarerDir
+                            + " and the learned bidder in " + bidderDir
+                            + (threshold == 0f ? "" : ", bidding above " + (int) threshold + " game points")));
+                }
             }
         }
         // 2026-09-27, plan 2.10 T1: 64 worlds is the teacher (+1.67 over 32,

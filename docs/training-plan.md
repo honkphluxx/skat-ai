@@ -2702,6 +2702,34 @@ against student seat by seat, by predicted value, and shows what a higher
 threshold would drop. `tools/bid-check.sh` runs the three. Declarer and
 defence differ together: it measures the labels' whole bias.
 
+*The bid check (2026-11-13; seed 9201, the 2,000 boards' 6,000 seats; k 2
+with belief-64-shipped in all three seats, 137 min).*
+
+| seats | n | student | table | table - student | won (student / table) |
+| --- | --- | --- | --- | --- | --- |
+| the learned bidder's extra games, at the bid where it parts from the shipped | 2,580 (43%) | +22.8 | +9.4 | **-13.40 [-14.78, -12.03]** | 79% / 67% |
+| control: games both declare, at 18 | 300 | +50.9 | +40.0 | **-10.89 [-14.66, -7.13]** | 89% / 83% |
+
+| predicted at the bid | seats | predicted | student | table | won |
+| --- | --- | --- | --- | --- | --- |
+| below 10 | 729 | +5.0 | +6.8 | -6.7 | 55% |
+| 10 to 25 | 874 | +16.8 | +15.5 | +2.5 | 63% |
+| 25 to 50 | 746 | +35.0 | +34.2 | +21.2 | 77% |
+| 50 and over | 231 | +67.4 | +63.9 | +47.6 | 87% |
+
+The net is calibrated to its labels (student = predicted in every band); the
+labels are not to the table: the student's play-outs sit 11-13 game points a
+game above the table on every game declared, the control's as much as the
+bidder's own -- a shift, a little steeper at the top, not a defect of the
+marginal games. On average the extra games still pay at the table (+9.4,
++26.2 tournament points), which is the head-to-head +1.5; those predicted at
+10 or less do not: dropping them (t=10, 28% of the disputed seats) drops a
+table mean of -6.7 [-10.0, -3.5]; the band from 10 to 15 is +2.3 on its own,
+15 to 20 +2.0 -- 10 is where the bar goes. `LearnedBidder.withThreshold`
+(learned-first above t on every rung, the ceiling too), and
+`belief-64-shipped-declarer-bidder-net-t10`. Chosen on seed 9201's boards;
+the table test is on 11-13.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

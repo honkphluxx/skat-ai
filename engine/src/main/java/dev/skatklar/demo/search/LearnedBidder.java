@@ -43,11 +43,17 @@ public final class LearnedBidder {
 
     private final int[] ladder;
     private final float scale;
+    /** The expected game points a rung must beat to be bid; 0 unless {@link #withThreshold}. */
+    private final float threshold;
     /** [net][layer][out][in] and [net][layer][out]. */
     private final float[][][][] weights;
     private final float[][][] biases;
 
     public LearnedBidder(int[] ladder, float scale, float[][][][] weights, float[][][] biases) {
+        this(ladder, scale, weights, biases, 0f);
+    }
+
+    private LearnedBidder(int[] ladder, float scale, float[][][][] weights, float[][][] biases, float threshold) {
         if (weights.length == 0 || weights.length != biases.length) throw new IllegalArgumentException("nets");
         for (int n = 0; n < weights.length; n++) {
             if (weights[n].length == 0 || weights[n].length != biases[n].length) {
@@ -72,6 +78,8 @@ public final class LearnedBidder {
         this.scale = scale;
         this.weights = weights;
         this.biases = biases;
+        if (!Float.isFinite(threshold)) throw new IllegalArgumentException("threshold " + threshold);
+        this.threshold = threshold;
     }
 
     public static LearnedBidder load(InputStream in) throws IOException {
@@ -158,11 +166,31 @@ public final class LearnedBidder {
         return sum;
     }
 
-    /** The last rung of the first run predicted above zero; 0 when the first rung is not. */
+    /**
+     * The same nets, bidding a rung only when they expect it to beat
+     * {@code gamePoints}: the bid check (BidCheckMain, 2026-11-13) found the
+     * student's labels about 11-13 game points above the table on every game
+     * declared, and the learned bidder's extra games predicted at 10 or less
+     * losing at the table.
+     */
+    public LearnedBidder withThreshold(float gamePoints) {
+        return new LearnedBidder(ladder, scale, weights, biases, gamePoints);
+    }
+
+    /** The expected game points a rung must beat. */
+    public float threshold() {
+        return threshold;
+    }
+
+    /** The last rung of the first run predicted above the threshold; 0 when the first rung is not. */
     int ceiling(float[] values) {
+        return ceiling(values, threshold);
+    }
+
+    private int ceiling(float[] values, float t) {
         int c = 0;
         for (int r = 0; r < ladder.length; r++) {
-            if (values[r] > 0f) c = ladder[r];
+            if (values[r] > t) c = ladder[r];
             else break;
         }
         return c;
@@ -205,8 +233,10 @@ public final class LearnedBidder {
             }
             int expectedCeiling = Integer.parseInt(f[13 + ladder.length]);
             // A value within the tolerance of zero may fall either side; its ceiling is no test.
-            if (!nearZero && ceiling(got) != expectedCeiling) {
-                throw new IOException("ceiling " + ceiling(got) + ", the exporter's " + expectedCeiling + ": " + line);
+            // The exporter's ceiling is at 0, whatever this one bids at.
+            if (!nearZero && ceiling(got, 0f) != expectedCeiling) {
+                throw new IOException("ceiling " + ceiling(got, 0f) + ", the exporter's " + expectedCeiling + ": "
+                        + line);
             }
             checked++;
         }

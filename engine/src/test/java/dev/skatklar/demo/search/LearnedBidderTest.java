@@ -114,6 +114,22 @@ public class LearnedBidderTest {
                 constant(30, -5f).ceiling(constant(30, -5f).values(new float[LearnedBidder.FEATURES])));
     }
 
+    @Test public void aThresholdRaisesTheBarAndLeavesTheParityAlone() throws IOException {
+        float[] x = new float[LearnedBidder.FEATURES];
+        assertEquals(30, constant(30, 15f).ceiling(constant(30, 15f).values(x)));
+        LearnedBidder strict = constant(30, 15f).withThreshold(10f);
+        assertEquals(10f, strict.threshold(), 0f);
+        assertEquals("15 beats 10", 30, strict.ceiling(strict.values(x)));
+        LearnedBidder stricter = constant(30, 15f).withThreshold(15f);
+        assertEquals("15 does not beat 15", 0, stricter.ceiling(stricter.values(x)));
+        assertEquals("the base is untouched", 0f, constant(30, 15f).threshold(), 0f);
+        try (BufferedReader r = parity()) {
+            // At -10 every one of the fixture's ceilings would be another: the parity is checked at 0 all the same.
+            assertEquals("the parity file's ceilings are at 0", 36, tiny().withThreshold(-10f).checkParity(r, 1e-5f));
+        }
+        assertThrows(IllegalArgumentException.class, () -> constant(30, 1f).withThreshold(Float.NaN));
+    }
+
     // ------------------------------------------------------------ at the table
 
     private static final SkatAi.ContractRules WITH_NULL = new SkatAi.ContractRules(EnumSet.of(
