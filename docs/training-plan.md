@@ -2757,6 +2757,27 @@ how the bias reaches the auction. The bidder stays at t=0
 refuted variant. Lesson: a decision's counterfactual is the auction, not 0 --
 ask the simulator that plays it, then the table.
 
+**Phase P -- the play-outs at the source (2026-11-15).** Every learned
+choice so far (the declarer's, the bidder's) was labelled by the student
+playing all three seats -- the declarer by its top card, the defenders drawn
+at temperature 1 -- and the bid check puts those play-outs 11-13 game points
+a game above the table's. The declarer's +7 on the labels came to nothing
+beyond the search at the table; the bidder kept half. Before choosing a
+cheaper proxy for the table, which side of the student's play the optimism
+comes from. P1, the decomposition, on the bid check's own 2,880 tasks
+(seed 9201): BidCheckMain seats the declarer and the defence separately
+(--declarer, --defence: a table player, "student" as the labels play, or
+"student-greedy", a defender by its top card), and `bid_check.py compare`
+sets the runs against the all-search one task by task.
+
+- student / student (T=1): must reproduce the labels (the path's own check)
+- student-greedy everywhere: is it the temperature-1 defence alone?
+- search declarer / student defence, and student declarer / search defence
+- search declarer / student-greedy defence
+
+Then P2: the cheapest seating within a point or two of the table's, by
+cost and bias -- the label generator's new play-out.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

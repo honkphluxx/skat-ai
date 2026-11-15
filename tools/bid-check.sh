@@ -3,6 +3,8 @@
 #
 #   ./tools/bid-check.sh --quick      40 boards: the speed, and that it runs end to end
 #   ./tools/bid-check.sh              the 2,000 boards of the seed-9201 labels, k 2
+#   ./tools/bid-check.sh --defence=student --stride=2
+#                                     the table's declarer against the labels' defence, every second task
 #
 # arena/python/bid_check.py select: the seats where the learned bidder's ceiling
 # (--model, bidder-net-v1, as the table's player bids) is above the shipped one,
@@ -14,10 +16,15 @@
 # student seat by seat, by predicted value, and what a higher threshold drops.
 #
 # Options: --labels (a bid-labels .jsonl; the seed is read from its name, or
-# --seed), --model, --player, --k (2), --control (300), --threads (24),
-# --python. Writes arena-logs/bid-check/<run>.tasks, .checked, .txt and the
-# summary in arena-logs/summary-bid-check.txt (-quick). A finished step is
-# reused.
+# --seed), --model, --player, --declarer and --defence (a player, "student" --
+# the labels' student, a defender drawn at temperature 1 -- or
+# "student-greedy", a defender by its top card; both default to --player),
+# --student (the student's directory, policy-oc3-ev), --stride (1: every
+# task), --k (2), --control (300), --threads (24), --python. Writes
+# arena-logs/bid-check/<labels-bidder-control>.tasks (shared by every
+# seating), <run>.checked, .txt and the summary in
+# arena-logs/summary-bid-check.txt (-quick). A finished step is reused; set
+# runs side by side with bid_check.py compare.
 #
 # This file must keep LF line endings (.gitattributes pins *.sh).
 
@@ -31,6 +38,7 @@ cd "$(dirname "$BC_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
 QUICK=false; K=2; CONTROL=300; THREADS=24; MODEL=bidder-net-v1; PLAYER=belief-64-shipped; SEED=
+DECLARER=; DEFENCE=; STRIDE=1; STUDENT=policy-oc3-ev
 LABELS=arena-logs/bid-labels/policy-oc3-ev-declarer-net-v1-belief-64-shipped-s9201-b2000-k8.jsonl
 PYTHON=${SKATKLAR_PYTHON:-}
 for arg in "$@"; do
@@ -43,8 +51,12 @@ for arg in "$@"; do
         --threads=*)   THREADS="${arg#*=}" ;;
         --model=*)     MODEL="${arg#*=}" ;;
         --player=*)    PLAYER="${arg#*=}" ;;
+        --declarer=*)  DECLARER="${arg#*=}" ;;
+        --defence=*)   DEFENCE="${arg#*=}" ;;
+        --student=*)   STUDENT="${arg#*=}" ;;
+        --stride=*)    STRIDE="${arg#*=}" ;;
         --python=*)    PYTHON="${arg#*=}" ;;
-        -h|--help)     sed -n '2,23p' "$BC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)     sed -n '2,32p' "$BC_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -55,10 +67,17 @@ if [ -z "$SEED" ]; then
 fi
 BOARDS=0
 if $QUICK; then BOARDS=40; CONTROL=20; fi
-for n in "$K" "$CONTROL" "$THREADS" "$SEED"; do
+DECLARER=${DECLARER:-$PLAYER}; DEFENCE=${DEFENCE:-$PLAYER}
+for n in "$K" "$CONTROL" "$THREADS" "$SEED" "$STRIDE"; do
     case "$n" in ''|*[!0-9]*) echo "not a whole number: $n" >&2; exit 2 ;; esac
 done
 [ "$K" -ge 1 ] || { echo "--k is at least 1" >&2; exit 2; }
+[ "$STRIDE" -ge 1 ] || { echo "--stride is at least 1" >&2; exit 2; }
+case "$DECLARER $DEFENCE" in
+    *student*) for f in model.json policy.bin; do
+                   [ -f "$STUDENT/$f" ] || { echo "$STUDENT/$f is missing: the student seat needs it (--student=)" >&2; exit 2; }
+               done ;;
+esac
 for f in bidder.pt bidder.json; do
     [ -f "$MODEL/$f" ] || { echo "$MODEL/$f is missing (arena/python/train_bidder.py)" >&2; exit 2; }
 done
@@ -72,16 +91,24 @@ fi
 
 LOG=arena-logs/bid-check
 mkdir -p "$LOG"
-NAME="$(basename "$LABELS" .jsonl)-$(basename "$MODEL")-$PLAYER-k$K-c$CONTROL"
-$QUICK && NAME="$NAME-quick"
-TASKS="$LOG/$NAME.tasks"
+BASE="$(basename "$LABELS" .jsonl)-$(basename "$MODEL")-c$CONTROL"
+$QUICK && BASE="$BASE-quick"
+if [ "$DECLARER" = "$PLAYER" ] && [ "$DEFENCE" = "$PLAYER" ] && [ "$STRIDE" = 1 ]; then
+    # The first runs' name, so that they are found again.
+    NAME="$(basename "$LABELS" .jsonl)-$(basename "$MODEL")-$PLAYER-k$K-c$CONTROL"
+    $QUICK && NAME="$NAME-quick"
+else
+    NAME="$BASE-decl-$DECLARER-def-$DEFENCE-k$K-every$STRIDE"
+fi
+TASKS="$LOG/$BASE.tasks"
+[ -f "$TASKS" ] || { [ -f "$LOG/$NAME.tasks" ] && TASKS="$LOG/$NAME.tasks"; }
 CHECKED="$LOG/$NAME.checked"
 REPORT="$LOG/$NAME.txt"
 SUMMARY=arena-logs/summary-bid-check.txt
 $QUICK && SUMMARY=arena-logs/summary-bid-check-quick.txt
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
-say "bid check started $(date '+%Y-%m-%d %H:%M:%S')   labels=$LABELS seed=$SEED bidder=$MODEL player=$PLAYER k=$K control=$CONTROL threads=$THREADS"
+say "bid check started $(date '+%Y-%m-%d %H:%M:%S')   labels=$LABELS seed=$SEED bidder=$MODEL declarer=$DECLARER defence=$DEFENCE k=$K every=$STRIDE control=$CONTROL threads=$THREADS"
 
 if [ -f "$TASKS" ]; then
     say "  [skip] tasks -- $TASKS exists"
@@ -100,7 +127,7 @@ else
     start=$(date +%s)
     run_log="$LOG/$NAME-run.txt"
     ./gradlew --console=plain -q --no-daemon :arena:bidCheck \
-        --args="--tasks=$ROOT/$TASKS --out=$ROOT/$CHECKED --seed=$SEED --k=$K --threads=$THREADS --player=$PLAYER" \
+        --args="--tasks=$ROOT/$TASKS --out=$ROOT/$CHECKED --seed=$SEED --k=$K --threads=$THREADS --declarer=$DECLARER --defence=$DEFENCE --stride=$STRIDE --model=$STUDENT" \
         > "$run_log.partial" 2>&1 || { mv "$run_log.partial" "$LOG/$NAME-run.failed.txt"; say "      FAILED -- see $LOG/$NAME-run.failed.txt"; exit 1; }
     mv "$run_log.partial" "$run_log"
     grep -E "tasks, .* play-outs in" "$run_log" | sed 's/^/    /' | tee -a "$SUMMARY"

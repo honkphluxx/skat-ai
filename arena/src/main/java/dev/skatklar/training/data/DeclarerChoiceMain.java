@@ -462,14 +462,21 @@ public final class DeclarerChoiceMain {
         private final boolean declarer;
         private final List<Card> forced;
         private final SplittableRandom random;
+        /** A defender's temperature: 1 in the labels; 0 or less plays the top card, as the declarer does. */
+        private final double temperature;
         private final Map<SkatAi.Seat, Integer> highestBids = new EnumMap<>(SkatAi.Seat.class);
         private List<Card> buried;
 
         StudentSeat(PolicyNet net, boolean declarer, List<Card> forced, SplittableRandom random) {
+            this(net, declarer, forced, random, 1.0);
+        }
+
+        StudentSeat(PolicyNet net, boolean declarer, List<Card> forced, SplittableRandom random, double temperature) {
             this.net = net;
             this.declarer = declarer;
             this.forced = forced;
             this.random = random;
+            this.temperature = temperature;
         }
 
         @Override public SkatAi.AiDescriptor descriptor() { return DESCRIPTOR; }
@@ -494,8 +501,8 @@ public final class DeclarerChoiceMain {
                     legal.sort(Comparator.comparingInt(BeliefEncoding::index));
                     float[] scores = net.logits(new float[][] {PolicyNet.features(
                             SelfPlayExportMain.perfectMemory(context, highestBids, declarer ? buried : null))})[0];
-                    return declarer ? TrueDealLabeller.topCard(scores, legal)
-                            : TrueDealLabeller.drawCard(scores, legal, 1.0, random);
+                    return declarer || temperature <= 0 ? TrueDealLabeller.topCard(scores, legal)
+                            : TrueDealLabeller.drawCard(scores, legal, temperature, random);
                 }
             };
         }

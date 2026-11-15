@@ -142,6 +142,39 @@ def report(rows, out=print):
                 f"[{m - h:+.1f}, {m + h:+.1f}]")
 
 
+def key(r):
+    return (r["kind"], r["board"], r["place"], r["bid"])
+
+
+def compare(named, out=print):
+    """named: [(name, rows)], the first the reference. Each run on the tasks all of them played."""
+    common = set.intersection(*({key(r) for r in rows} for _, rows in named))
+    if not common:
+        raise SystemExit("the runs share no task")
+    by = [(name, {key(r): r for r in rows if key(r) in common}) for name, rows in named]
+    ref_name, ref = by[0]
+    keys = sorted(common)
+    out(f"  {len(keys):,} tasks every run played ({sum(k[0] == 'disputed' for k in keys):,} disputed, "
+        f"{sum(k[0] == 'control' for k in keys):,} control)")
+    for kind in ("disputed", "control", None):
+        ks = [k for k in keys if kind is None or k[0] == kind]
+        if not ks:
+            continue
+        out(f"\n  {kind or 'all'}: {len(ks):,} tasks; labels (the student, T=1) "
+            f"{np.mean([np.mean(ref[k]['student']) for k in ks]):+.1f}")
+        for name, rows in by:
+            t = np.array([np.mean(rows[k]["table"]) for k in ks])
+            st = np.array([np.mean(rows[k]["student"]) for k in ks])
+            m, h = br.interval(t - st)
+            line = (f"    {name:44s} {t.mean():+6.1f}  won {np.mean([np.mean(rows[k]['wins']) for k in ks]):.0%}  "
+                    f"minus labels {m:+6.2f} [{m - h:+.2f}, {m + h:+.2f}]")
+            if name != ref_name:
+                r = np.array([np.mean(ref[k]["table"]) for k in ks])
+                m2, h2 = br.interval(t - r)
+                line += f"  minus {ref_name} {m2:+6.2f} [{m2 - h2:+.2f}, {m2 + h2:+.2f}]"
+            out(line)
+
+
 def ensemble_predictor(model_dir):
     import torch
     from train_bidder import features, make_net
@@ -208,6 +241,13 @@ def self_test():
     text = "\n".join(lines_out)
     check("the report names both groups and the thresholds",
           "2 seats" in text and "control" in text and "t=5 " in text and "t=0 " in text)
+    other = [dict(r, table=[v + 10 for v in r["table"]]) for r in rows]
+    other.append(dict(rows[0], board=99))
+    cmp_lines = []
+    compare([("ref", rows), ("plus10", other)], out=cmp_lines.append)
+    text = "\n".join(cmp_lines)
+    check("compare: the shared tasks only, and the paired difference", "3 tasks every run played" in text
+          and "minus ref +10.00" in text)
     print("self-test " + ("passed" if ok else "FAILED"))
     return ok
 
@@ -226,6 +266,8 @@ def main(argv):
     sel.add_argument("--sample-seed", type=int, default=1)
     rep = sub.add_parser("report")
     rep.add_argument("checked")
+    cmp_ = sub.add_parser("compare", help="name=checked-file ..., the first the reference")
+    cmp_.add_argument("runs", nargs="+")
     args = parser.parse_args(argv)
     if args.command == "select":
         with open(args.labels) as f:
@@ -237,6 +279,14 @@ def main(argv):
             f.write("\n".join(tasks) + "\n")
         print(f"  {counts['seats']:,} seats: {counts['disputed']:,} disputed ({counts['disputed'] / counts['seats']:.1%}), "
               f"{counts['uncovered']:,} at a bid no game covers, {counts['control']:,} control -> {args.out}")
+        return 0
+    if args.command == "compare":
+        named = []
+        for run in args.runs:
+            name, _, path = run.partition("=")
+            with open(path) as f:
+                named.append((name, [parse(row) for row in f if row.strip()]))
+        compare(named)
         return 0
     with open(args.checked) as f:
         rows = [parse(row) for row in f if row.strip()]

@@ -15,6 +15,7 @@ import dev.skatklar.training.arena.GameRunner;
 import dev.skatklar.training.arena.PlayerRegistry;
 import dev.skatklar.training.arena.Scoring;
 import dev.skatklar.training.arena.Seeds;
+import dev.skatklar.demo.belief.PolicyNet;
 import java.io.BufferedWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,6 +26,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.SplittableRandom;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -48,6 +50,11 @@ import java.util.concurrent.Future;
  * joined by commas, the bid, the contract, the discard, then whatever the
  * Python side wants back (passed through). Output: the task line, then a tab
  * and four comma lists -- values, wins, points, tournament points.
+ *
+ * <p>--declarer and --defence seat another player, or the student, in that
+ * role alone (bid_check.py compare sets the runs side by side): which side of
+ * the student's play-outs the labels' optimism comes from. --stride=N plays
+ * every N-th task.
  *
  * <pre>
  * ./gradlew :arena:bidCheck --args="--tasks=t.txt --out=o.txt --seed=9201"
@@ -80,8 +87,42 @@ public final class BidCheckMain {
         return out;
     }
 
+    /**
+     * Who sits where: the declarer and the two defenders, each a table player
+     * or the student ("student": the labels' student, the declarer by its top
+     * card and a defender drawn at temperature 1; "student-greedy": a defender
+     * by its top card too).
+     */
+    record Seats(Contestant declarer, Contestant defence, PolicyNet student, double defenceTemperature) {
+        static Seats of(Contestant player) {
+            return new Seats(player, player, null, 1.0);
+        }
+
+        boolean studentDeclares() { return declarer == null; }
+        boolean studentDefends() { return defence == null; }
+    }
+
+    /** "student", "student-greedy" or a registered player. */
+    static Seats seats(String declarerId, String defenceId, PolicyNet student, PlayerRegistry registry) {
+        Contestant declarer = isStudent(declarerId) ? null : registry.resolve(declarerId);
+        Contestant defence = isStudent(defenceId) ? null : registry.resolve(defenceId);
+        if ((declarer == null || defence == null) && student == null) {
+            throw new IllegalArgumentException("a student seat needs --model");
+        }
+        double temperature = "student-greedy".equals(defenceId) ? 0.0 : 1.0;
+        return new Seats(declarer, defence, student, temperature);
+    }
+
+    static boolean isStudent(String id) {
+        return "student".equals(id) || "student-greedy".equals(id);
+    }
+
     /** The k play-outs of one task: values, wins, points, tournament points. */
     static int[][] play(Contestant player, Task task, long seed, int k) {
+        return play(Seats.of(player), task, seed, k);
+    }
+
+    static int[][] play(Seats seats, Task task, long seed, int k) {
         Board board = Board.of(seed, task.board());
         SkatAi.RoundPosition round = board.round();
         SkatAi.Seat declarer = BidLabelMain.seatAt(round, task.place());
@@ -99,14 +140,22 @@ public final class BidCheckMain {
         for (int d = 0; d < k; d++) {
             Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
             for (SkatAi.Seat seat : SkatAi.Seat.values()) {
-                SkatAiProvider p = player.newProvider(Seeds.mix(seed, task.board(), task.place(), d, seat.ordinal(),
-                        0xB1C4L));
-                if (seat == declarer) {
-                    if (!(p instanceof SearchAiProvider search)) {
-                        throw new IllegalArgumentException(player.id() + " is not a search player: its discard "
-                                + "cannot be forced");
+                long s = Seeds.mix(seed, task.board(), task.place(), d, seat.ordinal(), 0xB1C4L);
+                boolean declares = seat == declarer;
+                SkatAiProvider p;
+                if (declares ? seats.studentDeclares() : seats.studentDefends()) {
+                    p = new DeclarerChoiceMain.StudentSeat(seats.student(), declares, task.discard(),
+                            new SplittableRandom(s), declares ? 0.0 : seats.defenceTemperature());
+                } else {
+                    Contestant player = declares ? seats.declarer() : seats.defence();
+                    p = player.newProvider(s);
+                    if (declares) {
+                        if (!(p instanceof SearchAiProvider search)) {
+                            throw new IllegalArgumentException(player.id() + " is not a search player: its discard "
+                                    + "cannot be forced");
+                        }
+                        p = search.withForcedDiscard(task.discard());
                     }
-                    p = search.withForcedDiscard(task.discard());
                 }
                 seating.put(seat, p);
             }
@@ -147,21 +196,29 @@ public final class BidCheckMain {
         int threads = Integer.parseInt(options.getOrDefault("threads",
                 String.valueOf(Runtime.getRuntime().availableProcessors())));
         String playerId = options.getOrDefault("player", "belief-64-shipped");
+        String declarerId = options.getOrDefault("declarer", playerId);
+        String defenceId = options.getOrDefault("defence", playerId);
+        int stride = Integer.parseInt(options.getOrDefault("stride", "1"));
         if (k < 1) throw new IllegalArgumentException("k is at least 1");
+        if (stride < 1) throw new IllegalArgumentException("stride is at least 1");
         List<Task> tasks = new ArrayList<>();
+        int read = 0;
         for (String l : Files.readAllLines(tasksPath)) {
-            if (!l.isBlank() && !l.startsWith("#")) tasks.add(parse(l));
+            if (l.isBlank() || l.startsWith("#")) continue;
+            if (read++ % stride == 0) tasks.add(parse(l));
         }
-        Contestant player = PlayerRegistry.withDefaults().resolve(playerId);
-        System.out.printf(Locale.ROOT, "bid check: %,d tasks, %s in all three seats, k %d, seed %d, %d threads -> %s%n",
-                tasks.size(), playerId, k, seed, threads, out);
+        PolicyNet student = isStudent(declarerId) || isStudent(defenceId)
+                ? AllCardsExportMain.load(Path.of(options.getOrDefault("model", "policy-oc3-ev"))) : null;
+        Seats seats = seats(declarerId, defenceId, student, PlayerRegistry.withDefaults());
+        System.out.printf(Locale.ROOT, "bid check: %,d tasks (every %d), declarer %s, defence %s, k %d, seed %d, "
+                + "%d threads -> %s%n", tasks.size(), stride, declarerId, defenceId, k, seed, threads, out);
         long started = System.nanoTime();
         if (out.getParent() != null) Files.createDirectories(out.getParent());
         Path partial = out.resolveSibling(out.getFileName() + ".partial");
         ExecutorService pool = Executors.newFixedThreadPool(threads);
         try (BufferedWriter w = Files.newBufferedWriter(partial)) {
             List<Future<int[][]>> futures = new ArrayList<>();
-            for (Task t : tasks) futures.add(pool.submit(() -> play(player, t, seed, k)));
+            for (Task t : tasks) futures.add(pool.submit(() -> play(seats, t, seed, k)));
             for (int i = 0; i < futures.size(); i++) {
                 w.write(line(tasks.get(i), futures.get(i).get()));
                 w.write('\n');

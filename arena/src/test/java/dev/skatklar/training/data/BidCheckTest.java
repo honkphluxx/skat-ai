@@ -9,6 +9,7 @@ import dev.skatklar.demo.Card;
 import dev.skatklar.demo.Contract;
 import dev.skatklar.demo.ai.SkatAi;
 import dev.skatklar.demo.belief.BeliefEncoding;
+import dev.skatklar.demo.belief.PolicyNet;
 import dev.skatklar.training.arena.Board;
 import dev.skatklar.training.arena.Contestant;
 import dev.skatklar.training.arena.PlayerRegistry;
@@ -68,5 +69,30 @@ public class BidCheckTest {
         }
         int[][] again = BidCheckMain.play(player, BidCheckMain.parse(task()), 9201, 2);
         for (int i = 0; i < 4; i++) assertArrayEquals(r[i], again[i]);
+    }
+
+    @Test public void theStudentSitsInEitherRole() throws java.io.IOException {
+        PlayerRegistry registry = PlayerRegistry.withDefaults();
+        PolicyNet net = dev.skatklar.training.players.RolloutRescueTest.randomNet(81);
+        assertThrows("a student seat needs the student", IllegalArgumentException.class,
+                () -> BidCheckMain.seats("student", "search-4", null, registry));
+        BidCheckMain.Seats greedy = BidCheckMain.seats("search-4", "student-greedy", net, registry);
+        assertTrue(greedy.studentDefends() && !greedy.studentDeclares());
+        assertEquals(0.0, greedy.defenceTemperature(), 0.0);
+        assertEquals(1.0, BidCheckMain.seats("student", "student", net, registry).defenceTemperature(), 0.0);
+        BidCheckMain.Task task = BidCheckMain.parse(task());
+        // The student by its top card on every seat plays one game however often it is asked.
+        int[][] same = BidCheckMain.play(BidCheckMain.seats("student-greedy", "student-greedy", net, registry), task,
+                9201, 6);
+        for (int i = 0; i < 4; i++) for (int d = 1; d < 6; d++) assertEquals(same[i][0], same[i][d]);
+        // Drawn at temperature 1 the defence varies: over a few seeds, some play-out differs.
+        boolean varied = false;
+        int[][] drawn = BidCheckMain.play(BidCheckMain.seats("student", "student", net, registry), task, 9201, 6);
+        for (int d = 1; d < 6; d++) varied |= drawn[2][d] != drawn[2][0];
+        assertTrue("the drawn defence plays more than one game", varied);
+        int[][] mixed = BidCheckMain.play(BidCheckMain.seats("search-4", "student", net, registry), task, 9201, 2);
+        for (int d = 0; d < 2; d++) assertTrue((mixed[1][d] == 1) == (mixed[0][d] > 0));
+        int[][] other = BidCheckMain.play(BidCheckMain.seats("student", "search-4", net, registry), task, 9201, 2);
+        for (int d = 0; d < 2; d++) assertTrue((other[1][d] == 1) == (other[0][d] > 0));
     }
 }
