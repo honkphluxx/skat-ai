@@ -2730,6 +2730,33 @@ table mean of -6.7 [-10.0, -3.5]; the band from 10 to 15 is +2.3 on its own,
 `belief-64-shipped-declarer-bidder-net-t10`. Chosen on seed 9201's boards;
 the table test is on 11-13.
 
+*The threshold at the table: refuted (2026-11-14; seeds 11-13, 400 boards
+each).* t10 - t0 head to head **-1.01 [-1.70, -0.31]** game points
+(-1.01, -1.81, -0.20 by seed), -1.26 [-2.66, +0.13] tournament points. It
+declares on 28% of seats against 36%, wins a little more of them, and loses
+the points. My reading of the bid check was wrong: "the seats predicted at
+10 or less lose -6.7 at the table" priced dropping them at 0, as if nobody
+declared instead, and ignored the rungs above, where t10 also gives way in a
+contested auction. The labels' own auction simulation (bid_report, which
+plays both) had said so before the check: union t=5 below t=0 on the labels.
+Re-run with the real ensemble on seed 9201 (the test seed):
+
+| union t, minus t=0 | labels as they are | labels shifted -13 (the check's table ~ 0.99 x student - 12.9) |
+| --- | --- | --- |
+| t=-10 | +0.31 [+0.03, +0.58] | -0.79 |
+| t=-5 | +0.25 [+0.06, +0.45] | -0.29 |
+| t=5 | -0.47 [-0.65, -0.29] | +0.07 |
+| t=10 | **-0.84 [-1.09, -0.59]** | +0.23 [-0.01, +0.46] |
+| union t=0 minus shipped | +3.11 | +0.51 |
+
+The table (t10 - t0 -1.01; t0 - shipped +1.48 head to head) sits nearer the
+labels as they are for the threshold and between the two for the level: the
+check's -13 is real for the games it replayed, but a uniform shift is not
+how the bias reaches the auction. The bidder stays at t=0
+(belief-64-shipped-declarer-bidder-net); -t10 stays registered as the
+refuted variant. Lesson: a decision's counterfactual is the auction, not 0 --
+ask the simulator that plays it, then the table.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
