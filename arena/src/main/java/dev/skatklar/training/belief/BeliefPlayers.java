@@ -260,6 +260,13 @@ public final class BeliefPlayers {
         // card play's solver work.
         registry.register(renamed(ladderVariant("belief-64-shipped", 64, loader),
                 "The shipped player with 64 worlds a card"));
+        // Phase P2 (2026-11-15): the shipped player with fewer worlds, as a
+        // cheaper defence for the label play-outs -- the bid check found the
+        // labels' optimism all in the student's defence, none in its declaring.
+        for (int worlds : new int[] {4, 8, 16}) {
+            registry.register(renamed(ladderVariant("belief-" + worlds + "-shipped", worlds, loader),
+                    "The shipped player with " + worlds + " worlds a card"));
+        }
         // 2026-11-08, docs/training-plan.md: the same, choosing its game again
         // once it has the skat (SearchAiProvider.withPostSkatContract,
         // ContractSearch) -- the declarer-choice labels put it at +5.3 a
@@ -385,6 +392,14 @@ public final class BeliefPlayers {
             }
             registry.register(opening("hybrid-32-t2", 32, 2, student, loader,
                     "The student for 2 tricks, then the 32-world search"));
+            // Phase P2: the student's opening, a small search's endgame -- the
+            // cheap defences the label play-outs might use.
+            for (int worlds : new int[] {8, 16}) {
+                for (int tricks : new int[] {2, 4}) {
+                    registry.register(opening("hybrid-" + worlds + "-t" + tricks, worlds, tricks, student, loader,
+                            "The student for " + tricks + " tricks, then the " + worlds + "-world search"));
+                }
+            }
             registry.register(opening("student-64", 64, 10, student, loader,
                     "The student for every trick of a suit or grand game"));
         }

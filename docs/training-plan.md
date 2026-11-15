@@ -2778,6 +2778,31 @@ sets the runs against the all-search one task by task.
 Then P2: the cheapest seating within a point or two of the table's, by
 cost and bias -- the label generator's new play-out.
 
+*P1, the decomposition (2026-11-15; the 1,440 tasks every seating played,
+every second of the bid check's, k 2).*
+
+| seating (declarer / defence) | all | minus labels | minus the table (search / search) |
+| --- | --- | --- | --- |
+| search / search (the table) | +13.6 | -12.69 [-14.53, -10.85] | |
+| student / student T=1 (the labels' own) | +25.9 | -0.35 [-1.74, +1.04] | +12.34 |
+| student / student greedy | +19.7 | -6.57 | +6.12 [+3.65, +8.59] |
+| search / student T=1 | +24.6 | -1.65 | +11.04 [+8.96, +13.13] |
+| search / student greedy | +19.3 | -6.94 | +5.75 [+3.64, +7.86] |
+| student / search | +12.3 | -13.91 | **-1.22 [-3.32, +0.88]** |
+
+The student/student path reproduces the labels (-0.35), so the instrument
+is sound. The optimism is the student's defence, all of it: the student
+declaring against the search's defence is the table's game (-1.2, not
+resolved), the search declaring against the student's defence is the
+labels' (+11.0 above the table). Half of it is the temperature-1 draw (a
+greedy defence +6 above the table instead of +12); half is the student's
+defence itself. Its declaring is good enough -- the cheap seat can stay.
+
+P2: a cheaper defence that lands near the table, by cost and bias, with the
+student declaring: belief-4/8/16-shipped (new: the shipped player with fewer
+worlds), belief-32-shipped, search-8 (uniform worlds), hybrid-8/16-t2/t4
+(new: the student's opening, a small search after trick 2 or 4).
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:

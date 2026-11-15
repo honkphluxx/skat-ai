@@ -85,6 +85,14 @@ public class BeliefPlayersTwinTest {
         assertTrue("belief-128-shipped keeps the ladder", ladder(wider));
         assertEquals(128, worlds(wider));
         assertFalse(bands(wider));
+        // Phase P2's cheaper defences: the shipped player with fewer worlds and nothing else.
+        for (int w : new int[] {4, 8, 16}) {
+            SkatAiProvider narrow = registry.resolve("belief-" + w + "-shipped").newProvider(1);
+            assertTrue("belief-" + w + "-shipped keeps the ladder", ladder(narrow));
+            assertEquals(w, worlds(narrow));
+            assertEquals("OFF", trap(narrow));
+            assertFalse(bands(narrow));
+        }
 
         // The bands variant is the shipped player plus the bands.
         SkatAiProvider banded = registry.resolve("belief-32-shipped-bands").newProvider(1);
