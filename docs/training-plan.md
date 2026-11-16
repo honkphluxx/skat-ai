@@ -2803,6 +2803,31 @@ student declaring: belief-4/8/16-shipped (new: the shipped player with fewer
 worlds), belief-32-shipped, search-8 (uniform worlds), hybrid-8/16-t2/t4
 (new: the student's opening, a small search after trick 2 or 4).
 
+*P2, the cheaper defences (2026-11-15; every fourth task, 720, k 2; the
+student declaring; thread-seconds a play-out on bigbox's 24 threads).*
+
+| defence | minus the table (search / search) | cost |
+| --- | --- | --- |
+| belief-64-shipped (stdecl-sdef) | -0.83 [-3.75, +2.08] | 17.8 |
+| belief-32-shipped | **+1.06 [-2.00, +4.11]** | 10.3 |
+| belief-16-shipped | **+2.80 [+0.02, +5.58]** | 5.5 |
+| belief-8-shipped | +10.44 [+7.49, +13.38] | 2.9 |
+| belief-4-shipped | +14.25 | 1.6 |
+| search-8 (uniform worlds) | +19.84 [+16.55, +23.13] | 0.5 |
+| hybrid-8-t2 / -t4 | +9.00 / +10.67 | 0.1 / 0.03 |
+| hybrid-16-t2 / -t4 | +7.87 / +8.09 | 0.17 / 0.03 |
+| (student greedy, from P1) | +6.12 | ~0.1 |
+| (student T=1, the labels) | +12.34 | ~0.1 |
+
+The defence needs the belief and 16 worlds or more; below that it is worse
+than the student playing its top card, and uniform worlds are worse than the
+labels. The hybrids are as cheap as the student and as optimistic as it:
+the student's first two tricks of defence alone cost about five points
+(hybrid-16-t2 against belief-16), so the opening leads are where its defence
+is weakest. The saving over the table's own defence is 1.7x (belief-32) to
+3.2x (belief-16), not the 5-10x hoped for: relabelling the bidder's 20,000
+boards at k 8 with either would take days.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
