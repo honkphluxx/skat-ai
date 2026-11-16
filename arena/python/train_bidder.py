@@ -82,9 +82,11 @@ def make_net(torch, hidden):
                          nn.Linear(hidden, RUNGS))
 
 
-def train(torch, x, y, seed, epochs, hidden, batch=256, lr=1e-3, decay=1e-3):
+def train(torch, x, y, seed, epochs, hidden, batch=256, lr=1e-3, decay=1e-3, init=None):
     torch.manual_seed(seed)
     net = make_net(torch, hidden)
+    if init is not None:
+        net.load_state_dict(init)
     opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=decay)
     xt, yt = torch.tensor(x), torch.tensor(y)
     gen = torch.Generator().manual_seed(seed)
@@ -160,13 +162,24 @@ def run(args):
     if os.path.abspath(args.train) == os.path.abspath(args.test):
         raise SystemExit("the test file is the training file")
     train_lines, test_lines = load(args.train), load(args.test)
+    inits = None
+    if args.init:
+        with open(os.path.join(args.init, "bidder.json")) as f:
+            meta = json.load(f)
+        if meta["hidden"] != args.hidden or meta["features"] != FEATURES or meta["ladder"] != br.LADDER:
+            raise SystemExit(f"{args.init} is another shape (hidden {meta['hidden']}): pass --hidden to match")
+        inits = torch.load(os.path.join(args.init, "bidder.pt"))
+        print(f"  starting from {args.init} ({len(inits)} nets), {args.epochs} epochs at lr {args.lr:g}")
     x, y = table(train_lines)
     xt, yt = table(test_lines)
     print(f"train {len(train_lines):,} boards ({len(x):,} seats), test {len(test_lines):,} boards ({len(xt):,} seats)")
     base = float(((y.mean(0) - yt) ** 2).mean())
     nets, preds = [], []
     for seed in args.seeds:
-        net = train(torch, x, y, seed, args.epochs, args.hidden)
+        start_from = None
+        if args.init:
+            start_from = inits[args.seeds.index(seed) % len(inits)]
+        net = train(torch, x, y, seed, args.epochs, args.hidden, lr=args.lr, init=start_from)
         p = predict(torch, net, xt)
         mse = float(((p / SCALE - yt) ** 2).mean())
         print(f"  seed {seed}: test error {mse:.4f} (the training mean's: {base:.4f})")
@@ -186,7 +199,7 @@ def run(args):
         with open(os.path.join(args.out, "bidder.json"), "w") as f:
             json.dump({"features": FEATURES, "hidden": args.hidden, "rungs": RUNGS, "ladder": br.LADDER,
                        "scale": SCALE, "seeds": args.seeds, "epochs": args.epochs, "train": args.train,
-                       "test": args.test}, f, indent=1)
+                       "test": args.test, "init": args.init, "lr": args.lr}, f, indent=1)
         print(f"\nwrote {args.out}/bidder.pt and bidder.json")
 
 
@@ -246,6 +259,10 @@ def self_test():
     seats = [s for line in test_lines for s in br.board_seats(line)]
     right = np.mean([(p[0] > 0) == (4 in s.ten) for s, p in zip(seats, pred)])
     check(f"it finds the jack of clubs ({right:.1%} of test seats right)", right > 0.95)
+    same = predict(torch, train(torch, xs, ys, 5, 0, 64, init=net.state_dict()), xt)
+    check("a start from a trained net, no epochs, is that net", np.allclose(same, pred))
+    moved = predict(torch, train(torch, xs, ys, 5, 2, 64, init=net.state_dict(), lr=1e-2), xt)
+    check("and with epochs it moves from there", not np.allclose(moved, pred) and right > 0.95)
     rows = {name: m for name, m, *_ in evaluate(test_lines, [pred], thresholds=(0,))}
     check(f"and beats a bidder that passes everything ({rows['learned-first t=0']:+.2f})",
           rows["learned-first t=0"] > 5)
@@ -260,6 +277,9 @@ def main(argv):
     parser.add_argument("--out")
     parser.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3])
     parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--init", help="a trained bidder's directory to start every seed from (fine-tuning); "
+                                       "--epochs 0 evaluates it as it is")
     parser.add_argument("--hidden", type=int, default=256)
     parser.add_argument("--threads", type=int, default=8)
     parser.add_argument("--self-test", action="store_true")

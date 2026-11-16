@@ -122,6 +122,38 @@ public class BidLabelTest {
                 && one.contains("\"ceiling\": ") && one.contains("\"open18\": "));
     }
 
+    @Test public void anotherDefenceSitsInTheTwoDefendersSeatsOnly() throws Exception {
+        PolicyNet net = RolloutRescueTest.randomNet(73);
+        Board board = Board.of(SEED, 9);
+        java.util.concurrent.atomic.AtomicInteger made = new java.util.concurrent.atomic.AtomicInteger();
+        dev.skatklar.training.arena.Contestant counted = new dev.skatklar.training.arena.Contestant() {
+            @Override public String id() { return "counted-search-4"; }
+            @Override public String displayName() { return id(); }
+            @Override public dev.skatklar.demo.ai.SkatAiProvider newProvider(long seed) {
+                made.incrementAndGet();
+                return SEARCH.newProvider(seed);
+            }
+        };
+        DeclarerChoiceMain.Stats stats = new DeclarerChoiceMain.Stats();
+        String student = BidLabelMain.json(BidLabelMain.board(net, ordered(), SEARCH, board, 2, SEED,
+                new DeclarerChoiceMain.Stats()));
+        String searched = BidLabelMain.json(BidLabelMain.board(net, ordered(), SEARCH, board, 2, SEED, stats, counted));
+        assertEquals("two defenders a play-out, k 2 a choice", 2 * 2 * stats.options, made.get());
+        assertTrue("the same choices at the same bids", levels(student).equals(levels(searched)));
+        assertTrue("another defence plays other games", !student.equals(searched));
+        assertEquals("and the same ones again",
+                searched, BidLabelMain.json(BidLabelMain.board(net, ordered(), SEARCH, board, 2, SEED,
+                        new DeclarerChoiceMain.Stats(), counted)));
+    }
+
+    private static String levels(String json) {
+        StringBuilder out = new StringBuilder();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\"levels\": \\[[^\"]*\\]\\]|\"contract\": \"[A-Z]+\"|\"discard\": \\[[0-9, ]*\\]")
+                .matcher(json);
+        while (m.find()) out.append(m.group()).append('|');
+        return out.toString();
+    }
+
     @Test public void theWinnersAuctionIsItsBidAndTwoPasses() {
         SkatAi.RoundPosition round = SkatAi.RoundPosition.at(1);
         List<SkatAi.BidEvent> events = BidLabelMain.wonAt(round, round.middlehand, 27);

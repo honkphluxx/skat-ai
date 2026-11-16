@@ -49,7 +49,9 @@ import java.util.concurrent.Future;
  * the ladder up to the most any game is worth on the twelve is played out k
  * times on the true deal by the student, as the declarer-choice labels are --
  * the declarer by its top card, the defenders drawn -- so the line gives the
- * seat's value of declaring at every bid. Beside it, what the shipped bidder
+ * seat's value of declaring at every bid ({@code --defence}: a registered
+ * player for the two defenders instead, the student still declaring -- phase
+ * P found the labels' optimism all in the student's defence). Beside it, what the shipped bidder
  * ({@code --shipped}, belief-64-shipped) does with the seat's ten: its
  * ceiling (the highest bid it says or holds once something has been bid)
  * and whether it opens at 18 when nothing has been, after the passes that
@@ -117,6 +119,12 @@ public final class BidLabelMain {
 
     static Result board(PolicyNet net, LearnedDeclarer declarer, Contestant shipped, Board board, int k, long seed,
                         DeclarerChoiceMain.Stats stats) {
+        return board(net, declarer, shipped, board, k, seed, stats, null);
+    }
+
+    /** As above, the play-outs' defenders played by {@code defence} (null: the student, as the first labels). */
+    static Result board(PolicyNet net, LearnedDeclarer declarer, Contestant shipped, Board board, int k, long seed,
+                        DeclarerChoiceMain.Stats stats, Contestant defence) {
         SkatAi.RoundPosition round = board.round();
         List<Card> skat = board.deal().skat;
         List<SeatLabels> seats = new ArrayList<>(3);
@@ -154,7 +162,7 @@ public final class BidLabelMain {
                     ContractSource.FixedContract fixed = new ContractSource.FixedContract(seat, option.contract(), b,
                             wonAt(round, seat, b));
                     picks.add(DeclarerChoiceMain.playOut(net, board, fixed, option, k,
-                            Seeds.mix(seed, place, 0xB1DL)));
+                            Seeds.mix(seed, place, 0xB1DL), defence));
                 }
                 levels.add(new int[] {b, index});
             }
@@ -240,15 +248,17 @@ public final class BidLabelMain {
         int threads = Integer.parseInt(options.getOrDefault("threads",
                 String.valueOf(Runtime.getRuntime().availableProcessors())));
         String shippedId = options.getOrDefault("shipped", "belief-64-shipped");
+        String defenceId = options.getOrDefault("defence", "student");
         if (k < 2 || k % 2 != 0) throw new IllegalArgumentException("k is even and at least 2");
         if (seed < 1000) throw new IllegalArgumentException("seed " + seed + " is below 1000: those boards are the arena's");
 
         PolicyNet net = AllCardsExportMain.load(model);
         LearnedDeclarer declarer = loadDeclarer(declarerDir);
         Contestant shipped = PlayerRegistry.withDefaults().resolve(shippedId);
-        System.out.printf(Locale.ROOT, "bid labels: student %s, declarer %s, shipped bidder %s, k %d, seed %d, boards "
-                + "%,d-%,d, %d threads -> %s%n", model, declarerDir, shippedId, k, seed, first, first + boards - 1,
-                threads, out);
+        Contestant defence = "student".equals(defenceId) ? null : PlayerRegistry.withDefaults().resolve(defenceId);
+        System.out.printf(Locale.ROOT, "bid labels: student %s, declarer %s, shipped bidder %s, defence %s, k %d, seed "
+                + "%d, boards %,d-%,d, %d threads -> %s%n", model, declarerDir, shippedId, defenceId, k, seed, first,
+                first + boards - 1, threads, out);
         long started = System.nanoTime();
         DeclarerChoiceMain.Stats total = new DeclarerChoiceMain.Stats();
         if (out.getParent() != null) Files.createDirectories(out.getParent());
@@ -260,7 +270,7 @@ public final class BidLabelMain {
                 Board board = Board.of(seed, i);
                 futures.add(pool.submit(() -> {
                     DeclarerChoiceMain.Stats stats = new DeclarerChoiceMain.Stats();
-                    return new Object[] {board(net, declarer, shipped, board, k, seed, stats), stats};
+                    return new Object[] {board(net, declarer, shipped, board, k, seed, stats, defence), stats};
                 }));
             }
             for (int i = 0; i < futures.size(); i++) {

@@ -4,6 +4,8 @@
 #   ./tools/bid-labels.sh --quick              48 boards: the speed, and that it runs end to end
 #   ./tools/bid-labels.sh                      2,000 boards, k 8, seed 9201
 #   ./tools/bid-labels.sh --boards=20000 --seed=9202   a corpus for a learned bidder
+#   ./tools/bid-labels.sh --defence=belief-16-shipped --k=2
+#                                              phase P: the defenders a 16-world search, not the student
 #
 # BidLabelMain: for every board and every seat, the value of declaring at
 # every bid -- the seat picks up the board's skat and the learned declarer
@@ -17,8 +19,9 @@
 # without the Ramsch the void mode never plays -- every board from all three
 # seats by both sides, as the arena pairs them.
 #
-# Options: --model, --declarer, --shipped, --boards, --k (even), --seed (9201;
-# 1000 or more), --threads (24), --python. Writes arena-logs/bid-labels/<run>.jsonl
+# Options: --model, --declarer, --shipped, --defence (student; or a registered
+# player for the two defenders, the student still declaring), --boards, --k
+# (even), --seed (9201; 1000 or more), --threads (24), --python. Writes arena-logs/bid-labels/<run>.jsonl
 # and .txt, the summary in arena-logs/summary-bid-labels.txt (-quick). A
 # finished run is reused: the labels when the .jsonl exists, the report when
 # the .txt does.
@@ -35,7 +38,7 @@ cd "$(dirname "$BL_ORIGINAL")/.." || exit 1
 ROOT=$(pwd -W 2>/dev/null || pwd)
 
 QUICK=false; BOARDS=2000; K=8; SEED=9201; THREADS=24; MODEL=policy-oc3-ev; DECLARER=declarer-net-v1
-SHIPPED=belief-64-shipped; PYTHON=${SKATKLAR_PYTHON:-}
+SHIPPED=belief-64-shipped; DEFENCE=student; PYTHON=${SKATKLAR_PYTHON:-}
 for arg in "$@"; do
     case "$arg" in
         --quick)       QUICK=true ;;
@@ -46,8 +49,9 @@ for arg in "$@"; do
         --model=*)     MODEL="${arg#*=}" ;;
         --declarer=*)  DECLARER="${arg#*=}" ;;
         --shipped=*)   SHIPPED="${arg#*=}" ;;
+        --defence=*)   DEFENCE="${arg#*=}" ;;
         --python=*)    PYTHON="${arg#*=}" ;;
-        -h|--help)     sed -n '2,25p' "$BL_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help)     sed -n '2,28p' "$BL_ORIGINAL" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -73,6 +77,7 @@ fi
 LOG=arena-logs/bid-labels
 mkdir -p "$LOG"
 NAME="$(basename "$MODEL")-$(basename "$DECLARER")-$SHIPPED-s$SEED-b$BOARDS-k$K"
+[ "$DEFENCE" = student ] || NAME="$NAME-def-$DEFENCE"
 $QUICK && NAME="$NAME-quick"
 # Not LINES: bash resets LINES and COLUMNS to the terminal's size (checkwinsize).
 LABELS="$LOG/$NAME.jsonl"
@@ -81,7 +86,7 @@ SUMMARY=arena-logs/summary-bid-labels.txt
 $QUICK && SUMMARY=arena-logs/summary-bid-labels-quick.txt
 say() { printf '%s\n' "$*" | tee -a "$SUMMARY"; }
 say "============================================================"
-say "bid labels started $(date '+%Y-%m-%d %H:%M:%S')   student=$MODEL declarer=$DECLARER shipped=$SHIPPED boards=$BOARDS k=$K seed=$SEED threads=$THREADS"
+say "bid labels started $(date '+%Y-%m-%d %H:%M:%S')   student=$MODEL declarer=$DECLARER shipped=$SHIPPED defence=$DEFENCE boards=$BOARDS k=$K seed=$SEED threads=$THREADS"
 
 if [ -f "$LABELS" ]; then
     say "  [skip] labels -- $LABELS exists"
@@ -91,7 +96,7 @@ else
     start=$(date +%s)
     run_log="$LOG/$NAME-run.txt"
     ./gradlew --console=plain -q --no-daemon :arena:bidLabels \
-        --args="--model=$MODEL --declarer=$DECLARER --shipped=$SHIPPED --out=$ROOT/$LABELS --boards=$BOARDS --k=$K --seed=$SEED --threads=$THREADS" \
+        --args="--model=$MODEL --declarer=$DECLARER --shipped=$SHIPPED --defence=$DEFENCE --out=$ROOT/$LABELS --boards=$BOARDS --k=$K --seed=$SEED --threads=$THREADS" \
         > "$run_log.partial" 2>&1 || { mv "$run_log.partial" "$LOG/$NAME-run.failed.txt"; say "      FAILED -- see $LOG/$NAME-run.failed.txt"; exit 1; }
     mv "$run_log.partial" "$run_log"
     grep -E "boards, 3 seats each" "$run_log" | sed 's/^/    /' | tee -a "$SUMMARY"

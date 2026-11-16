@@ -245,6 +245,16 @@ public final class DeclarerChoiceMain {
     /** One option, k times, the student in every seat; draw d's streams depend on the board and d only. */
     static Scored playOut(PolicyNet net, Board board, ContractSource.FixedContract fixed, Option option, int k,
                           long seed) {
+        return playOut(net, board, fixed, option, k, seed, null);
+    }
+
+    /**
+     * As above, the two defenders played by {@code defence} instead of the
+     * student when it is not null (phase P: the labels' optimism is all in
+     * the student's defence, none in its declaring).
+     */
+    static Scored playOut(PolicyNet net, Board board, ContractSource.FixedContract fixed, Option option, int k,
+                          long seed, Contestant defence) {
         int[] value = new int[k];
         int[] wins = new int[k];
         int[] points = new int[k];
@@ -253,8 +263,9 @@ public final class DeclarerChoiceMain {
         for (int d = 0; d < k; d++) {
             Map<SkatAi.Seat, SkatAiProvider> seating = new EnumMap<>(SkatAi.Seat.class);
             for (SkatAi.Seat seat : SkatAi.Seat.values()) {
-                seating.put(seat, new StudentSeat(net, seat == fixed.declarer(), option.discard(),
-                        new SplittableRandom(Seeds.mix(seed, board.index(), d, seat.ordinal(), 0xDC5EA7L))));
+                long s = Seeds.mix(seed, board.index(), d, seat.ordinal(), 0xDC5EA7L);
+                seating.put(seat, defence != null && seat != fixed.declarer() ? defence.newProvider(s)
+                        : new StudentSeat(net, seat == fixed.declarer(), option.discard(), new SplittableRandom(s)));
             }
             GameOutcome outcome = GameRunner.playFixed(board, seating, game, Seeds.mix(seed, board.index(), d, 0xE7L));
             if (!outcome.ruleViolations().isEmpty() && outcome.ruleViolations().values().stream().anyMatch(n -> n > 0)) {

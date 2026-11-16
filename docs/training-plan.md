@@ -2828,6 +2828,17 @@ is weakest. The saving over the table's own defence is 1.7x (belief-32) to
 3.2x (belief-16), not the 5-10x hoped for: relabelling the bidder's 20,000
 boards at k 8 with either would take days.
 
+*P3, the bidder on better labels (2026-11-16).* The label play-outs keep the
+student declaring and seat a 16-world belief search in the two defenders'
+seats (BidLabelMain and tools/bid-labels.sh --defence; the P2 bias +2.8
+above the table instead of the student's +12, 5.5 thread-seconds a play-out)
+at k 2. Seed 9201's 2,000 boards relabelled as the test set, 8,000 of seed
+9202 as the training set. train_bidder.py --init starts every seed from a
+trained bidder (fine-tuning; --epochs 0 evaluates it as it is). The three
+candidates on the new test labels, in the auction simulation against the
+shipped bidder: bidder-net-v1 as it is, bidder-net-v1 fine-tuned on the
+8,000, a bidder trained on the 8,000 alone; the best of them to the table.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
