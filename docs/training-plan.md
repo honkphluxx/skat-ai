@@ -2862,6 +2862,48 @@ the seats the shipped bidder opens but would not hold are +9.2 a game (the
 old labels +18.3), always-open -2.2 and always-18 -3.1 (the old -0.05 and
 -0.23) -- a stronger defence makes boldness cost.
 
+*Phase P paused (2026-11-17). Where it stands, and the two ways on.* The
+player stays belief-64-shipped-declarer-bidder-net (shipped card play,
+declarer-net-v1, bidder-net-v1 at t=0). Known: every student-labelled corpus
+is optimistic by about 13 game points a declared game, all of it from the
+student's defence (half the temperature-1 draw, half the defence itself,
+the opening leads worst); the student's declaring is good enough; the
+cheapest defence near the table is belief-16-shipped (+2.8, 5.5
+thread-seconds a play-out) or belief-32-shipped (+1.1, 10.3). Relabelling
+the bidder with belief-16 defending confirmed v1 and did not improve on it.
+The instruments are in place: BidLabelMain --defence, tools/bid-check.sh
+(--declarer, --defence, --stride), bid_check.py report/compare,
+train_bidder.py --init, the tournament-points column in every arena CSV.
+
+Way 1 -- the declarer on better labels, as a diagnosis first. The learned
+declarer's labels were the most optimistic (learned - searched +7.0 on the
+labels, +0.08 at the table). DeclarerChoiceMain needs what BidLabelMain got:
+--defence (the two defenders a registered player, the student declaring) and
+an option cap -- the full 45 options a board at k 2 with belief-16 is about
+11 h per 2,000 boards; capped to declarer-net-v1's top 8 plus the searched
+and the shipped choice it is about 2-3 h. Step one: seed 9101's 2,000
+boards relabelled so, then declarer_choice.py's honest differences on them
+-- does learned - searched fall to about 0, as at the table? If it does, the
+new labels are believable for the declarer: 8,000 boards of a training seed
+(about 10 h), a declarer trained or fine-tuned on them (train_declarer.py
+would need --init as train_bidder.py has), tested on 9101's new labels, then
+at the table against belief-64-shipped-declarer-bidder-net. If it does not,
+stop there: the labels' order was already right, as for the bidder.
+
+Way 2 -- a student that defends well. The one route to labels both cheap and
+right everywhere: a defence policy at the student's cost (about 0.1
+thread-seconds a play-out) within about 2 game points of the table's defence
+(the greedy student is +6.1, at temperature 1 +12.3). Imitation of
+belief-64-shipped's own defence decisions -- the teacher export already
+exists (TeacherExportMain, phase I) -- with the opening leads weighted, since
+P2 put about 5 of the student's points in its first two tricks of defence
+(hybrid-16-t2 against belief-16-shipped). Measured with the P2 instrument as
+it is: bid-check.sh --declarer=student --defence=<the new student> --stride=4
+against the table's run; a few minutes a candidate. If it lands within 2,
+both corpora (declarer, bidder) relabel overnight at the old k 8 and both
+nets retrain. A project of its own: the current student was trained on this
+teacher and still defends this way.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
