@@ -2839,6 +2839,29 @@ candidates on the new test labels, in the auction simulation against the
 shipped bidder: bidder-net-v1 as it is, bidder-net-v1 fine-tuned on the
 8,000, a bidder trained on the 8,000 alone; the best of them to the table.
 
+*P3's answer (2026-11-17; the labels with belief-16-shipped defending, k 2:
+seed 9201's 2,000 boards in 124 min, seed 9202's 8,000 in 496 min).* Union
+t=0 minus the shipped bidder in the auction simulation, on the new 9201
+labels (three init seeds pooled):
+
+| bidder | union t=0 | t=5 | boards declared |
+| --- | --- | --- | --- |
+| bidder-net-v1 as it is (trained on the student's labels) | **+1.25 [+0.75, +1.74]** | +1.31 | 93.1% |
+| v1 fine-tuned on the 8,000 (10 epochs, lr 3e-4) | +1.11 [+0.74, +1.48] | +0.93 | 89.6% |
+| trained on the 8,000 alone | +0.88 [+0.54, +1.21] | +0.68 | 88.8% |
+
+The new labels put v1 where the table did (+1.48 [+0.50, +2.47] head to
+head; the old labels said +3.1). Retraining on them does not help: the
+fine-tuned and the fresh bidder are more cautious and worth less, on the
+labels that taught them -- 8,000 boards at k 2 carry less than 20,000 at k 8,
+and the old labels' bias was mostly a level, not an order of the seats. v1
+stays; nothing goes to the table. The new labels are no full stand-in for
+the table either: with v1's ensemble they put t10 - t0 at -0.06 [-0.36,
++0.24], the table at -1.01 (the old labels -0.84). The bid report on them:
+the seats the shipped bidder opens but would not hold are +9.2 a game (the
+old labels +18.3), always-open -2.2 and always-18 -3.1 (the old -0.05 and
+-0.23) -- a stronger defence makes boldness cost.
+
 **Phase I -- imitation.**
 
 - **I1, the exporter.** Every card decision, every seat and contract:
